@@ -1,5 +1,7 @@
+import { router } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import CustomButton from "../components/CustomButton";
 
 export default function App() {
   return (
@@ -11,6 +13,12 @@ export default function App() {
             <Text className="mt-6 w-[280px] font-osemibold600 text-[32px] leading-[48px] text-white">
               Let's start your health journey today with us gai ghuy!
             </Text>
+            <CustomButton
+            title="Continue"
+            handlePress={() => router.push("/sign-in")}
+            containerStyles="bg-white mt-11 mx-[21px]"
+            textStyles="text-primary"
+          />
           </View>
         </View>
       </ScrollView>
