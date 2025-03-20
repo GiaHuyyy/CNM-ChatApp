@@ -10,8 +10,8 @@ import {
   faFilePen,
   faGear,
   faMagnifyingGlass,
-  faPlus,
   faUserPlus,
+  faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useSelector } from "react-redux";
@@ -20,6 +20,7 @@ import EditUserDetails from "./EditUserDetails";
 import DropdownAvatar from "./DropdownAvatar";
 import DropdownSetting from "./DropdownSetting";
 import AddFriend from "./AddFriend";
+import GroupChatModal from "./GroupChatModal";
 import axios from "axios";
 import { NavLink } from "react-router-dom";
 import commingSoon from "../helpers/commingSoon";
@@ -42,6 +43,7 @@ export default function Sidebar() {
 
   const [editUserDetails, setEditUserDetails] = useState(false);
   const [addFriend, setAddFriend] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchFriendUserInput, setSearchFriendUserInput] = useState("");
@@ -133,21 +135,17 @@ export default function Sidebar() {
           console.log("Conversation: ", data);
 
           if (data) {
-            const conversationUserData = data.map((conversationUser) => {
-              if (conversationUser?.sender?._id === conversationUser?.receiver?._id) {
-                return { ...conversationUser, userDetails: conversationUser?.sender };
-              } else if (conversationUser?.receiver?._id !== user?._id) {
-                return { ...conversationUser, userDetails: conversationUser?.receiver };
-              } else {
-                return { ...conversationUser, userDetails: conversationUser?.sender };
-              }
-            });
-            setAllUsers(conversationUserData);
+            setAllUsers(data);
           }
         });
       }
     }, 100);
   }, [socketConnection, user?._id]);
+
+  const handleGroupCreated = (conversationId) => {
+    // Navigate to the newly created group chat
+    window.location.href = `/${conversationId}`;
+  };
 
   return (
     <nav className="flex h-full">
@@ -237,9 +235,9 @@ export default function Sidebar() {
                 <button
                   title="Tạo nhóm chat"
                   className="flex h-8 w-8 items-center justify-center rounded hover:bg-[#ebecf0]"
-                  onClick={commingSoon}
+                  onClick={() => setShowGroupModal(true)}
                 >
-                  <FontAwesomeIcon icon={faPlus} width={18} className="text-[#555454]" />
+                  <FontAwesomeIcon icon={faUsers} width={18} className="text-[#555454]" />
                 </button>
               </>
             ) : (
@@ -292,44 +290,83 @@ export default function Sidebar() {
                     <p className="mt-3 text-sm text-[#5a6981]">Không có tin nhắn nào</p>
                   </div>
                 ) : (
-                  allUsers.map((user) => (
+                  allUsers.map((chatItem) => (
                     <NavLink
-                      to={"/" + user?.userDetails?._id}
-                      key={user?._id}
+                      to={"/" + chatItem?.userDetails?._id}
+                      key={chatItem?._id}
                       className="flex h-[74px] items-center px-4 hover:bg-[#f1f2f4]"
-                      onClick={() => user?.unseenMessages > 0 && setSeenMessage(true)}
+                      onClick={() => {
+                        // Immediately update the UI to show 0 unseen messages
+                        setAllUsers((prev) =>
+                          prev.map((item) => (item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item)),
+                        );
+                        setSeenMessage(true);
+                      }}
                     >
-                      <img
-                        src={user?.userDetails?.profilePic}
-                        alt={user?.userDetails?.name}
-                        className="h-12 w-12 rounded-full object-cover"
-                      />
+                      {/* User or group avatar */}
+                      <div className="relative">
+                        <img
+                          src={chatItem?.userDetails?.profilePic}
+                          alt={chatItem?.userDetails?.name}
+                          className={`h-12 w-12 object-cover ${chatItem?.isGroup ? "rounded-lg" : "rounded-full"}`}
+                        />
+                        {/* {chatItem?.isGroup && (
+                          <div className="absolute -bottom-1 -right-1 rounded-full bg-blue-500 p-1">
+                            <FontAwesomeIcon icon={faUsers} size="xs" className="text-white" />
+                          </div>
+                        )} */}
+                      </div>
                       <div className="ml-3 flex-1 overflow-hidden">
-                        <p className="text-[15px] font-semibold">{user?.userDetails?.name}</p>
+                        <p className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</p>
                         <p className="max-w-48 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#5a6981]">
-                          {user?.latestMessage?.msgByUserId !== user?.userDetails?._id ? "Bạn: " : ""}
-                          {user?.latestMessage?.text && user?.latestMessage?.text}
-                          {user?.latestMessage?.imageUrl && (
+                          {/* Group chat message with sender name */}
+                          {chatItem?.isGroup ? (
+                            <>
+                              {/* If it's your message, show "Bạn: " */}
+                              {chatItem?.latestMessage?.msgByUserId === user._id ? (
+                                <>Bạn: </>
+                              ) : (
+                                /* Otherwise show sender's name - find the sender from members array */
+                                <>
+                                  {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
+                                    ?.name || "Unknown"}
+                                  :
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            /* For direct chats, keep existing behavior */
+                            <>{chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? "Bạn: " : ""}</>
+                          )}
+                          {/* The actual message content - unchanged */}
+                          {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
+                          {chatItem?.latestMessage?.imageUrl && (
                             <>
                               <FontAwesomeIcon icon={faImage} width={15} className="text-[#ccc]" />
-                              {user?.latestMessage?.fileName}
+                              {chatItem?.latestMessage?.fileName
+                                ? ` ${chatItem?.latestMessage?.fileName}`
+                                : " Hình ảnh"}
                             </>
                           )}
-                          {user?.latestMessage?.fileUrl && (
+                          {chatItem?.latestMessage?.fileUrl && (
                             <>
                               <FontAwesomeIcon icon={faFilePen} width={15} className="text-[#ccc]" />
-                              {user?.latestMessage?.fileName}
+                              {chatItem?.latestMessage?.fileName}
                             </>
                           )}
                         </p>
                       </div>
                       <div className="flex flex-col items-center gap-y-1">
                         <p className="text-xs text-[#5a6981]">
-                          {new Date(user?.latestMessage?.createdAt).toLocaleTimeString()}
+                          {chatItem?.latestMessage?.createdAt &&
+                            new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                         </p>
-                        {user?.unseenMessages > 0 && (
+                        {chatItem?.unseenMessages > 0 && (
                           <div className="flex h-4 w-4 items-center justify-center rounded-full bg-red-700">
-                            <span className="mr-[1px] mt-[1px] text-[10px] text-white">{user?.unseenMessages}</span>
+                            <span className="mr-[1px] mt-[1px] text-[10px] text-white">{chatItem?.unseenMessages}</span>
                           </div>
                         )}
                       </div>
@@ -367,6 +404,15 @@ export default function Sidebar() {
 
       {/* AddFriend */}
       {addFriend && <AddFriend onClose={() => setAddFriend(false)} />}
+
+      {/* GroupChatModal */}
+      {showGroupModal && (
+        <GroupChatModal
+          isOpen={showGroupModal}
+          onClose={() => setShowGroupModal(false)}
+          onGroupCreated={handleGroupCreated}
+        />
+      )}
     </nav>
   );
 }
