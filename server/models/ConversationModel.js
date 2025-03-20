@@ -22,6 +22,12 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    seenBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     msgByUserId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
@@ -51,6 +57,24 @@ const conversationSchema = new mongoose.Schema(
         ref: "Message",
       },
     ],
+    isGroup: {
+      type: Boolean,
+      default: false,
+    },
+    name: {
+      type: String,
+      default: "",
+    },
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    groupAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
