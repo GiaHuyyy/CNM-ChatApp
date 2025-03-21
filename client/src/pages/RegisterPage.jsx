@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   faEye,
   faEyeSlash,
@@ -13,6 +13,7 @@ import uploadFileToCloud from "../helpers/uploadFileToClound";
 import axios from "axios";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
+import firebase from "../helpers/firebase";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -112,6 +113,130 @@ export default function RegisterPage() {
     }
   };
 
+  // Send OTP Firebase
+  const [phoneNumber, setPhoneNumber] = useState("+1 650-555-1234");
+  const [otp, setOtp] = useState("123456");
+  const [loading, setLoading] = useState(false);
+  const [recaptchaVerified, setRecaptchaVerified] = useState(false);
+
+  const setupRecaptcha = () => {
+    if (window.recaptchaVerifier) {
+      window.recaptchaVerifier.clear();
+    }
+
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptcha-container", {
+      size: "normal", // Changed from "invisible" to "normal" to make it visible
+      callback: () => {
+        // This will be called when user successfully solves the captcha
+        setRecaptchaVerified(true);
+        console.log("reCAPTCHA verified by user");
+      },
+      "expired-callback": () => {
+        // Reset when expired
+        setRecaptchaVerified(false);
+        console.log("reCAPTCHA expired");
+      },
+    });
+
+    // Render the reCAPTCHA widget
+    window.recaptchaVerifier.render();
+  };
+
+  useEffect(() => {
+    try {
+      setupRecaptcha();
+    } catch (error) {
+      console.error("Error setting up reCAPTCHA:", error);
+    }
+
+    return () => {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (error) {
+          console.error("Error clearing reCAPTCHA:", error);
+        }
+      }
+    };
+  }, []);
+
+  const handleSendOtp = async () => {
+    if (!phoneNumber) {
+      alert("Vui lòng nhập số điện thoại");
+      return;
+    }
+
+    if (!recaptchaVerified) {
+      alert("Vui lòng xác nhận reCAPTCHA trước khi gửi OTP");
+      return;
+    }
+
+    setLoading(true);
+
+    // Format phone number to E.164 format if needed
+    // let formattedPhone = phoneNumber;
+    // if (!phoneNumber.startsWith("+")) {
+    //   formattedPhone = `+84${phoneNumber.replace(/^0/, "")}`;
+    // }
+
+    const appVerifier = window.recaptchaVerifier;
+
+    try {
+      const confirmationResult = await firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier);
+      window.confirmationResult = confirmationResult;
+      // alert("OTP đã được gửi");
+      toast.success("OTP đã được gửi");
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+
+      // Special handling for billing-not-enabled error
+      if (error.code === "auth/billing-not-enabled") {
+        alert(
+          `Lỗi: Tính năng xác thực qua SMS chưa được kích hoạt. Cần kích hoạt thanh toán trên Firebase Console để sử dụng tính năng này.`,
+        );
+      } else {
+        // alert(`Có lỗi xảy ra: ${error.message}`);
+        toast.error(`Có lỗi xảy ra: ${error.message}`);
+      }
+
+      // Reset reCAPTCHA on error
+      setupRecaptcha();
+      setRecaptchaVerified(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    if (!otp) {
+      // alert("Vui lòng nhập mã OTP");
+      toast.error("Vui lòng nhập mã OTP");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const confirmationResult = window.confirmationResult;
+      if (!confirmationResult) {
+        alert("Vui lòng gửi OTP trước");
+        setLoading(false);
+        return;
+      }
+
+      await confirmationResult.confirm(otp);
+      await handleRegister(e);
+      // alert("Xác thực thành công");
+      toast.success("Xác thực thành công");
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      // alert(`Có lỗi xảy ra: ${error.message}`);
+      toast.error(`Có lỗi xảy ra: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center">
       <form className="w-[310px]" onSubmit={handleRegister}>
@@ -206,7 +331,66 @@ export default function RegisterPage() {
           />
         </div>
 
-        <button className="h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white">Đăng ký</button>
+        {/* Firebase OPT*/}
+        <div className="flex flex-col items-center justify-center gap-3 py-4">
+          {/* <h2 className="text-xl font-bold">Xác thực OTP</h2>
+        <input
+          type="text"
+          placeholder="Nhập số điện thoại"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          disabled={loading}
+          className="w-full max-w-xs rounded border p-2"
+        /> */}
+
+          {/* reCAPTCHA container with clear styling */}
+          <div className="my-3 flex justify-center">
+            <div id="recaptcha-container" className="rounded border border-gray-200 p-1"></div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {recaptchaVerified && <span className="text-sm text-green-500">✓ Đã xác thực reCAPTCHA</span>}
+          </div>
+
+          {/* Information about Firebase phone auth requirement */}
+          <div className="mb-2 w-full max-w-xs text-center text-xs text-orange-600">
+            <p>Lưu ý: Xác thực qua SMS yêu cầu kích hoạt thanh toán trên Firebase.</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSendOtp}
+            disabled={loading || !recaptchaVerified}
+            className={`w-full max-w-xs rounded p-2 text-white ${recaptchaVerified ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-400"}`}
+          >
+            {loading ? "Đang xử lý..." : "Gửi OTP"}
+          </button>
+
+          <input
+            type="text"
+            placeholder="Xác thực OTP"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            disabled={loading}
+            className="w-full max-w-xs rounded border p-2"
+          />
+
+          <button
+            type="button"
+            onClick={handleVerifyOtp}
+            disabled={loading}
+            className="w-full max-w-xs rounded bg-green-500 p-2 text-white hover:bg-green-600"
+          >
+            {loading ? "Đang xử lý..." : "Đăng ký"}
+          </button>
+        </div>
+
+        <button
+          className="h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white"
+          disabled={loading || !recaptchaVerified}
+        >
+          {loading ? "Đang xử lý..." : "Đăng ký"}
+        </button>
       </form>
     </div>
   );
