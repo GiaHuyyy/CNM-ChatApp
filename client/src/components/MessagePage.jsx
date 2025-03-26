@@ -4,25 +4,32 @@ import { useGlobalContext } from "../context/GlobalProvider";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faAddressCard,
+  faBell,
   faBookmark,
+  faEdit,
   faFaceLaughSquint,
   faFaceSmile,
   faFolderClosed,
   faImage,
   faThumbsUp,
+  faUser,
 } from "@fortawesome/free-regular-svg-icons";
 import {
   faBars,
   faBolt,
   faCamera,
+  faCaretDown,
+  faChevronLeft,
   faEllipsis,
   faFilePen,
+  faGear,
   faMagnifyingGlass,
   faPaperPlane,
   faPhone,
   faPlus,
   faQuoteRight,
   faShare,
+  faThumbTack,
   faTrash,
   faUsers,
   faVideo,
@@ -73,7 +80,10 @@ export default function MessagePage() {
   const [hoveredMessage, setHoveredMessage] = useState(null);
 
   // State to track if members panel is open
-  const [showMembers, setShowMembers] = useState(false);
+
+  const [showRightSideBar, setShowRightSideBar] = useState(false);
+
+  const [showContextMenu, setShowContextMenu] = useState("main");
 
   useEffect(() => {
     if (socketConnection) {
@@ -301,319 +311,411 @@ export default function MessagePage() {
     setSeenMessage(true);
   };
 
-  return (
-    <main className="flex h-full flex-col">
-      {/* Header chat */}
-      <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
-        <div className="flex w-full items-center space-x-4">
-          <div className="relative">
-            <img
-              src={dataUser?.profilePic}
-              alt={dataUser.name}
-              className={`h-12 w-12 border border-[rgba(0,0,0,0.15)] object-cover ${dataUser.isGroup ? "rounded-lg" : "rounded-full"}`}
-            />
-            {/* {dataUser.isGroup && (
-              <div className="absolute -bottom-1 -right-1 rounded-full bg-blue-500 p-1">
-                <FontAwesomeIcon icon={faUsers} size="xs" className="text-white" />
-              </div>
-            )} */}
-            {!dataUser.isGroup && dataUser.online && (
-              <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
-            )}
-          </div>
-          <div className="flex flex-col gap-y-1">
-            <span className="text-base font-semibold">{dataUser?.name}</span>
-            {dataUser.isGroup && (
-              <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
-            )}
-            {!dataUser.isGroup && (
-              <button className="flex">
-                <FontAwesomeIcon
-                  icon={faBookmark}
-                  width={16}
-                  className="rotate-90 text-sm text-[#555454] hover:text-[#005ae0]"
-                />
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center space-x-[3px]">
-          {dataUser.isGroup && (
-            <Button
-              title="Xem thành viên nhóm"
-              icon={faUsers}
-              width={20}
-              handleOnClick={() => setShowMembers(!showMembers)}
-              styleIcon={showMembers ? "text-blue-500" : ""}
-            />
-          )}
-          <Button title="Thêm bạn vào nhóm" icon={faPlus} width={20} handleOnClick={commingSoon} />
-          <Button title="Cuộc gọi thoại" icon={faPhone} width={20} handleOnClick={commingSoon} />
-          <Button title="Cuộc gọi video" icon={faVideo} width={20} handleOnClick={commingSoon} />
-          <Button title="Tìm kiếm tin nhắn" icon={faMagnifyingGlass} width={18} handleOnClick={commingSoon} />
-          <Button title="Thông tin hội thoại" icon={faBars} width={18} handleOnClick={commingSoon} />
-        </div>
-      </header>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Show all message chat */}
-        <section
-          className={`scrollbar relative ${showMembers ? "w-3/4" : "w-full"} flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+  const ActionGroupButton = ({ icon, title, handleOnClick }) => {
+    return (
+      <div className="flex flex-col items-center justify-center gap-y-1">
+        <button
+          onClick={handleOnClick}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ebe7eb] hover:bg-[#e0dde0]"
         >
-          {/* All message chat */}
-          <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
-            {allMessages.map((message) => {
-              const isCurrentUser = message.msgByUserId === user._id;
-              let sender = null;
+          <FontAwesomeIcon icon={icon} width={20} />
+        </button>
+        <span className="w-16 text-center text-xs">{title}</span>
+      </div>
+    );
+  };
 
-              // For group chats, get the sender's info
-              if (dataUser.isGroup && !isCurrentUser) {
-                sender = getSenderInfo(message.msgByUserId);
-              }
+  return (
+    <main className="flex h-full">
+      <div className="flex h-full flex-1 flex-col">
+        {/* Header chat */}
+        <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
+          <div className="flex w-full items-center space-x-4">
+            <div className="relative">
+              <img
+                src={dataUser?.profilePic}
+                alt={dataUser.name}
+                className="h-12 w-12 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
+              />
+              {/* {dataUser.isGroup && (
+                <div className="absolute -bottom-1 -right-1 rounded-full bg-blue-500 p-1">
+                  <FontAwesomeIcon icon={faUsers} size="xs" className="text-white" />
+                </div>
+              )} */}
+              {!dataUser.isGroup && dataUser.online && (
+                <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
+              )}
+            </div>
+            <div className="flex flex-col gap-y-1">
+              <span className="text-base font-semibold">{dataUser?.name}</span>
+              {dataUser.isGroup && (
+                <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
+              )}
+              {!dataUser.isGroup && (
+                <button className="flex">
+                  <FontAwesomeIcon
+                    icon={faBookmark}
+                    width={16}
+                    className="rotate-90 text-sm text-[#555454] hover:text-[#005ae0]"
+                  />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center space-x-[3px]">
+            <Button title="Thêm bạn vào nhóm" icon={faPlus} width={20} handleOnClick={commingSoon} />
+            <Button title="Cuộc gọi thoại" icon={faPhone} width={20} handleOnClick={commingSoon} />
+            <Button title="Cuộc gọi video" icon={faVideo} width={20} handleOnClick={commingSoon} />
+            <Button title="Tìm kiếm tin nhắn" icon={faMagnifyingGlass} width={18} handleOnClick={commingSoon} />
+            <Button
+              title="Thông tin hội thoại"
+              icon={faBars}
+              width={18}
+              handleOnClick={() => setShowRightSideBar(!showRightSideBar)}
+            />
+          </div>
+        </header>
 
-              return (
-                <div
-                  key={message._id}
-                  className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"}`}
-                  onMouseEnter={() => setHoveredMessage(message._id)}
-                  onMouseLeave={() => setHoveredMessage(null)}
-                >
-                  {!isCurrentUser && (
-                    <button className="flex">
-                      <img
-                        src={dataUser.isGroup && sender ? sender.profilePic : dataUser.profilePic}
-                        alt="avatar"
-                        className="h-9 w-9 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
-                      />
-                    </button>
-                  )}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Show all message chat */}
+          <section
+            className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+          >
+            {/* All message chat */}
+            <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
+              {allMessages.map((message) => {
+                const isCurrentUser = message.msgByUserId === user._id;
+                let sender = null;
 
+                // For group chats, get the sender's info
+                if (dataUser.isGroup && !isCurrentUser) {
+                  sender = getSenderInfo(message.msgByUserId);
+                }
+
+                return (
                   <div
-                    className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 ${
-                      isCurrentUser ? "bg-[#dbebff] text-[#081b3a]" : "bg-white text-[#081b3a]"
-                    }`}
+                    key={message._id}
+                    className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"}`}
+                    onMouseEnter={() => setHoveredMessage(message._id)}
+                    onMouseLeave={() => setHoveredMessage(null)}
                   >
-                    {/* Show sender name in group chats */}
-                    {dataUser.isGroup && !isCurrentUser && (
-                      <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
+                    {!isCurrentUser && (
+                      <button className="flex">
+                        <img
+                          src={dataUser.isGroup && sender ? sender.profilePic : dataUser.profilePic}
+                          alt="avatar"
+                          className="h-9 w-9 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
+                        />
+                      </button>
                     )}
-
-                    {message.imageUrl && (
-                      <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
-                    )}
-                    {message.fileUrl && (
-                      <div className="flex items-center gap-x-1">
-                        {message.fileUrl.endsWith(".mp4") ||
-                        message.fileUrl.endsWith(".webm") ||
-                        message.fileUrl.endsWith(".ogg") ? (
-                          <video controls className="rounded-[3px] object-contain">
-                            <source src={message.fileUrl} type="video/mp4" />
-                            Your browser does not support the video tag.
-                          </video>
-                        ) : (
-                          <>
-                            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
-                            <a href={message.fileUrl} className="break-words text-sm" target="_blank" rel="noreferrer">
-                              {message.fileName}
-                            </a>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    <div>
-                      <p className="break-words text-sm">{message.text}</p>
-                      <p className="mt-1 text-[11px] text-[#00000080]">
-                        {format(new Date(message.createdAt), "HH:mm")}
-                      </p>
-                    </div>
 
                     <div
-                      className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
-                      onMouseEnter={() => {
-                        setHoveredLikeMessage(message._id), setHoveredMessage(null);
-                      }}
-                      onMouseLeave={() => setHoveredLikeMessage(null)}
+                      className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 ${
+                        isCurrentUser ? "bg-[#dbebff] text-[#081b3a]" : "bg-white text-[#081b3a]"
+                      }`}
                     >
-                      <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
+                      {/* Show sender name in group chats */}
+                      {dataUser.isGroup && !isCurrentUser && (
+                        <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
+                      )}
 
-                      {hoveredLikeMessage === message._id && (
-                        <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-8" : "left-8"}`}>
-                          <EmojiPicker
-                            emojiStyle="apple"
-                            reactionsDefaultOpen={true}
-                            onEmojiClick={(emojiData) => {
-                              console.log("Chọn emoji:", emojiData.emoji);
-                              // Add emoji reaction functionality here
-                            }}
-                          />
+                      {message.imageUrl && (
+                        <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
+                      )}
+                      {message.fileUrl && (
+                        <div className="flex items-center gap-x-1">
+                          {message.fileUrl.endsWith(".mp4") ||
+                          message.fileUrl.endsWith(".webm") ||
+                          message.fileUrl.endsWith(".ogg") ? (
+                            <video controls className="rounded-[3px] object-contain">
+                              <source src={message.fileUrl} type="video/mp4" />
+                              Your browser does not support the video tag.
+                            </video>
+                          ) : (
+                            <>
+                              <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+                              <a
+                                href={message.fileUrl}
+                                className="break-words text-sm"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {message.fileName}
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <p className="break-words text-sm">{message.text}</p>
+                        <p className="mt-1 text-[11px] text-[#00000080]">
+                          {format(new Date(message.createdAt), "HH:mm")}
+                        </p>
+                      </div>
+
+                      <div
+                        className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
+                        onMouseEnter={() => {
+                          setHoveredLikeMessage(message._id), setHoveredMessage(null);
+                        }}
+                        onMouseLeave={() => setHoveredLikeMessage(null)}
+                      >
+                        <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
+
+                        {hoveredLikeMessage === message._id && (
+                          <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-8" : "left-8"}`}>
+                            <EmojiPicker
+                              emojiStyle="apple"
+                              reactionsDefaultOpen={true}
+                              onEmojiClick={(emojiData) => {
+                                console.log("Chọn emoji:", emojiData.emoji);
+                                // Add emoji reaction functionality here
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {hoveredMessage === message._id && (
+                        <div
+                          className={`absolute bottom-3 ${isCurrentUser ? "-left-20" : "-right-20"} flex items-center gap-x-1`}
+                        >
+                          <button
+                            className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
+                            onClick={commingSoon}
+                          >
+                            <FontAwesomeIcon
+                              icon={faQuoteRight}
+                              width={10}
+                              className="text-[#5a5a5a] group-hover:text-[#005ae0]"
+                            />
+                          </button>
+                          <button
+                            className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
+                            onClick={commingSoon}
+                          >
+                            <FontAwesomeIcon
+                              icon={faShare}
+                              width={10}
+                              className="text-[#5a5a5a] group-hover:text-[#005ae0]"
+                            />
+                          </button>
+                          <button
+                            className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
+                            onClick={commingSoon}
+                          >
+                            <FontAwesomeIcon
+                              icon={faTrash}
+                              width={10}
+                              className="text-[#5a5a5a] group-hover:text-red-600"
+                            />
+                          </button>
                         </div>
                       )}
                     </div>
-
-                    {hoveredMessage === message._id && (
-                      <div
-                        className={`absolute bottom-3 ${isCurrentUser ? "-left-20" : "-right-20"} flex items-center gap-x-1`}
-                      >
-                        <button
-                          className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                          onClick={commingSoon}
-                        >
-                          <FontAwesomeIcon
-                            icon={faQuoteRight}
-                            width={10}
-                            className="text-[#5a5a5a] group-hover:text-[#005ae0]"
-                          />
-                        </button>
-                        <button
-                          className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                          onClick={commingSoon}
-                        >
-                          <FontAwesomeIcon
-                            icon={faShare}
-                            width={10}
-                            className="text-[#5a5a5a] group-hover:text-[#005ae0]"
-                          />
-                        </button>
-                        <button
-                          className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                          onClick={commingSoon}
-                        >
-                          <FontAwesomeIcon
-                            icon={faTrash}
-                            width={10}
-                            className="text-[#5a5a5a] group-hover:text-red-600"
-                          />
-                        </button>
-                      </div>
-                    )}
                   </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Render file preview */}
+            {selectedFile && (
+              <div className="sticky top-0 z-50 flex h-full items-center justify-center bg-gray-400 bg-opacity-40">
+                <div
+                  className="relative rounded bg-[#fffefe] p-4"
+                  onMouseEnter={() => setOpenTrash(true)}
+                  onMouseLeave={() => setOpenTrash(false)}
+                >
+                  {renderFilePreview()}
+                  {openTrash && (
+                    <button
+                      onClick={handleClearUploadFile}
+                      className="group absolute right-0 top-0 mr-1 mt-1 h-7 w-7 rounded hover:bg-[#f0f0f0]"
+                    >
+                      <FontAwesomeIcon icon={faTrash} width={12} className="text-[#ccc] group-hover:text-red-400" />
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Sent message */}
+        <footer className="relative">
+          <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
+            <Button title="Gửi Sticker" icon={faFaceLaughSquint} width={20} handleOnClick={() => setOpenEmoji(true)} />
+            <Button title="Gửi hình ảnh" icon={faImage} width={20} isUpload id="image" />
+            <Button title="Gửi kèm File" icon={faFolderClosed} width={20} isUpload id="file" />
+            <Button title="Gửi danh thiếp" icon={faAddressCard} width={20} handleOnClick={commingSoon} />
+            <Button title="Chụp kèm với cửa sổ Z" icon={faCamera} width={20} handleOnClick={commingSoon} />
+            <Button title="Định dạng tin nhắn" icon={faFilePen} width={20} handleOnClick={commingSoon} />
+            <Button title="Chèn tin nhắn nhanh" icon={faBolt} width={20} handleOnClick={commingSoon} />
+            <Button title="Tùy chọn thêm" icon={faEllipsis} width={20} handleOnClick={commingSoon} />
           </div>
 
-          {/* Render file preview */}
-          {selectedFile && (
-            <div className="sticky top-0 z-50 flex h-full items-center justify-center bg-gray-400 bg-opacity-40">
-              <div
-                className="relative rounded bg-[#fffefe] p-4"
-                onMouseEnter={() => setOpenTrash(true)}
-                onMouseLeave={() => setOpenTrash(false)}
-              >
-                {renderFilePreview()}
-                {openTrash && (
-                  <button
-                    onClick={handleClearUploadFile}
-                    className="group absolute right-0 top-0 mr-1 mt-1 h-7 w-7 rounded hover:bg-[#f0f0f0]"
-                  >
-                    <FontAwesomeIcon icon={faTrash} width={12} className="text-[#ccc] group-hover:text-red-400" />
-                  </button>
-                )}
-              </div>
+          {/* Emoji Picker React*/}
+          {openEmoji && (
+            <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
+              <EmojiPicker
+                disableSearchBar
+                disableSkinTonePicker
+                emojiStyle="apple"
+                height={400}
+                width={300}
+                searchDisabled
+                onEmojiClick={(emojiData) => {
+                  setMessages({ ...messages, text: messages.text + emojiData.emoji });
+                }}
+              />
             </div>
           )}
-        </section>
+          {/* Input file*/}
+          <input
+            type="file"
+            name="image"
+            id="image"
+            accept="image/*"
+            hidden
+            onChange={handleUploadFile}
+            ref={imageInputRef}
+          />
+          <input type="file" name="file" id="file" hidden onChange={handleUploadFile} ref={fileInputRef} />
 
-        {/* Group members panel */}
-        {showMembers && dataUser.isGroup && (
-          <aside className="w-1/4 border-l border-gray-300 bg-white">
-            <div className="p-4">
-              <h3 className="mb-3 font-semibold">Thành viên nhóm ({dataUser.members?.length || 0})</h3>
-              <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                {dataUser.members?.map((member) => (
-                  <div key={member._id} className="mb-3 flex items-center">
-                    <img src={member.profilePic} alt={member.name} className="h-10 w-10 rounded-full object-cover" />
-                    <div className="ml-3">
-                      <p className="font-medium">{member.name}</p>
-                      <p className="text-xs text-gray-500">{member.phone}</p>
-                    </div>
-                    {dataUser.groupAdmin === member._id && (
-                      <span className="ml-auto text-xs text-blue-500">Quản trị viên</span>
-                    )}
-                    {member._id === user._id && <span className="ml-auto text-xs text-green-500">Bạn</span>}
-                  </div>
-                ))}
-              </div>
+          <div className="flex h-[50px] items-center px-3 py-[10px]">
+            <input
+              type="text"
+              placeholder={`Nhập tin nhắn với ${dataUser.name}`}
+              className="h-full flex-1 rounded-[3px] text-sm"
+              value={messages.text}
+              onChange={(e) => setMessages({ ...messages, text: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              onFocus={handleInputFocus}
+              onBlur={() => setSeenMessage(false)}
+              ref={inputRef}
+            />
+            <div className="flex items-center gap-x-1">
+              <Button title="Biểu cảm" icon={faFaceSmile} width={20} handleOnClick={() => setOpenEmoji(true)} />
+              {messages.text === "" && !selectedFile ? (
+                <Button
+                  title="Gửi nhanh biểu tưởng cảm xúc"
+                  icon={faThumbsUp}
+                  width={20}
+                  handleOnClick={handleSendEmojiLike}
+                />
+              ) : (
+                <Button
+                  title="Gửi tin nhắn"
+                  icon={faPaperPlane}
+                  width={20}
+                  styleIcon="text-[#005ae0]"
+                  handleOnClick={handleSendMessage}
+                />
+              )}
             </div>
-          </aside>
-        )}
+          </div>
+        </footer>
       </div>
 
-      {/* Sent message */}
-      <footer className="relative">
-        <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
-          <Button title="Gửi Sticker" icon={faFaceLaughSquint} width={20} handleOnClick={() => setOpenEmoji(true)} />
-          <Button title="Gửi hình ảnh" icon={faImage} width={20} isUpload id="image" />
-          <Button title="Gửi kèm File" icon={faFolderClosed} width={20} isUpload id="file" />
-          <Button title="Gửi danh thiếp" icon={faAddressCard} width={20} handleOnClick={commingSoon} />
-          <Button title="Chụp kèm với cửa sổ Z" icon={faCamera} width={20} handleOnClick={commingSoon} />
-          <Button title="Định dạng tin nhắn" icon={faFilePen} width={20} handleOnClick={commingSoon} />
-          <Button title="Chèn tin nhắn nhanh" icon={faBolt} width={20} handleOnClick={commingSoon} />
-          <Button title="Tùy chọn thêm" icon={faEllipsis} width={20} handleOnClick={commingSoon} />
-        </div>
-
-        {/* Emoji Picker React*/}
-        {openEmoji && (
-          <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
-            <EmojiPicker
-              disableSearchBar
-              disableSkinTonePicker
-              emojiStyle="apple"
-              height={400}
-              width={300}
-              searchDisabled
-              onEmojiClick={(emojiData) => {
-                setMessages({ ...messages, text: messages.text + emojiData.emoji });
-              }}
-            />
-          </div>
-        )}
-        {/* Input file*/}
-        <input
-          type="file"
-          name="image"
-          id="image"
-          accept="image/*"
-          hidden
-          onChange={handleUploadFile}
-          ref={imageInputRef}
-        />
-        <input type="file" name="file" id="file" hidden onChange={handleUploadFile} ref={fileInputRef} />
-
-        <div className="flex h-[50px] items-center px-3 py-[10px]">
-          <input
-            type="text"
-            placeholder={`Nhập tin nhắn với ${dataUser.name}`}
-            className="h-full flex-1 rounded-[3px] text-sm"
-            value={messages.text}
-            onChange={(e) => setMessages({ ...messages, text: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-            onFocus={handleInputFocus}
-            onBlur={() => setSeenMessage(false)}
-            ref={inputRef}
-          />
-          <div className="flex items-center gap-x-1">
-            <Button title="Biểu cảm" icon={faFaceSmile} width={20} handleOnClick={() => setOpenEmoji(true)} />
-            {messages.text === "" && !selectedFile ? (
-              <Button
-                title="Gửi nhanh biểu tưởng cảm xúc"
-                icon={faThumbsUp}
-                width={20}
-                handleOnClick={handleSendEmojiLike}
-              />
-            ) : (
-              <Button
-                title="Gửi tin nhắn"
-                icon={faPaperPlane}
-                width={20}
-                styleIcon="text-[#005ae0]"
-                handleOnClick={handleSendMessage}
-              />
+      {/* Right side bar */}
+      {showRightSideBar && (
+        <div className="w-[344px] border-l border-[#c8c9cc] bg-[#ebecf0]">
+          {/* Header */}
+          <div className="relative flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
+            {showContextMenu !== "main" && (
+              <button
+                className="absolute left-2 flex h-8 w-8 items-center justify-center rounded-full object-cover hover:bg-[#ebe7eb]"
+                onClick={() => setShowContextMenu("main")}
+              >
+                <FontAwesomeIcon icon={faChevronLeft} width={20} />
+              </button>
             )}
+            <span className="text-lg font-bold">
+              {showContextMenu === "main" ? "Thông tin hội thoại" : "Thành viên"}
+            </span>
           </div>
+
+          {/* Context main */}
+          {showContextMenu === "main" && (
+            <div>
+              {/* Information conversation*/}
+              <div className="flex flex-col items-center bg-white px-4 py-3">
+                <button className="my-3">
+                  <img
+                    src={dataUser?.profilePic}
+                    alt={dataUser.name}
+                    className="h-12 w-12 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
+                  />
+                </button>
+                <div className="flex items-center space-x-1">
+                  <span className="text-base font-semibold">{dataUser.name}</span>
+                  <button>
+                    <FontAwesomeIcon icon={faEdit} width={20} />
+                  </button>
+                </div>
+                <div className="mt-3 flex w-full items-center justify-between">
+                  <ActionGroupButton icon={faBell} title="Tăt thông báo" handleOnClick={commingSoon} />
+                  <ActionGroupButton icon={faThumbTack} title="Ghim hội thoại" handleOnClick={commingSoon} />
+                  <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={commingSoon} />
+                  <ActionGroupButton icon={faGear} title="Quản lý nhóm" handleOnClick={commingSoon} />
+                </div>
+              </div>
+
+              {/* Member group chat */}
+              {dataUser.isGroup && (
+                <div className="mt-2 flex flex-col items-center bg-white">
+                  <button className="flex h-12 w-full items-center justify-between px-4">
+                    <span className="text-base font-semibold">Thành viên nhóm</span>
+                    <FontAwesomeIcon icon={faCaretDown} width={20} />
+                  </button>
+                  <button
+                    className="flex h-12 w-full items-center justify-start px-4 text-sm hover:bg-[#f1f2f4]"
+                    onClick={() => setShowContextMenu("showMember")}
+                  >
+                    <FontAwesomeIcon icon={faUser} width={20} />
+                    {dataUser.members?.length || 0} thành viên
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show member group panel */}
+          {showContextMenu === "showMember" && (
+            <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white pt-4">
+              <div className="mx-4">
+                <button className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm hover:bg-[#e0dde0]">
+                  <FontAwesomeIcon icon={faUsers} width={20} />
+                  Thêm thành viên
+                </button>
+              </div>
+              <span className="mb-3 mt-4 block px-4 text-sm">
+                Danh sách thành viên ({dataUser.members?.length || 0})
+              </span>
+              {dataUser.members?.map((member) => (
+                <button
+                  key={member._id}
+                  title={member.name}
+                  className="flex h-16 w-full items-center px-4 hover:bg-[#ebe7eb]"
+                >
+                  <img src={member.profilePic} alt={member.name} className="h-10 w-10 rounded-full object-cover" />
+                  <div className="flex flex-col items-start pl-3">
+                    {member._id === user._id ? (
+                      <span className="text-[15px] text-pink-600">Bạn</span>
+                    ) : (
+                      <p className="text-[15px]">{member.name}</p>
+                    )}
+                    {dataUser.groupAdmin._id === member._id && (
+                      <span className="text-xs text-blue-500">Quản trị viên</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      </footer>
+      )}
     </main>
   );
 }
