@@ -23,12 +23,14 @@ import {
   faEllipsis,
   faFilePen,
   faGear,
+  faLink,
   faMagnifyingGlass,
   faPaperPlane,
   faPhone,
   faPlus,
   faQuoteRight,
   faShare,
+  faSignOut,
   faThumbTack,
   faTrash,
   faUsers,
@@ -81,9 +83,11 @@ export default function MessagePage() {
 
   // State to track if members panel is open
 
-  const [showRightSideBar, setShowRightSideBar] = useState(false);
+  const [showRightSideBar, setShowRightSideBar] = useState(true);
 
-  const [showContextMenu, setShowContextMenu] = useState("main");
+  const [showContextMenu, setShowContextMenu] = useState("Thông tin hội thoại");
+
+  const [activeTab, setActiveTab] = useState("Anh/Video");
 
   useEffect(() => {
     if (socketConnection) {
@@ -378,9 +382,7 @@ export default function MessagePage() {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Show all message chat */}
-          <section
-            className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
-          >
+          <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
             {/* All message chat */}
             <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
               {allMessages.map((message) => {
@@ -447,7 +449,18 @@ export default function MessagePage() {
                         </div>
                       )}
                       <div>
-                        <p className="break-words text-sm">{message.text}</p>
+                        {message.text.startsWith("https") ? (
+                          <a
+                            href={message.text}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm text-blue-500 underline"
+                          >
+                            {message.text}
+                          </a>
+                        ) : (
+                          <p className="break-words text-sm">{message.text}</p>
+                        )}
                         <p className="mt-1 text-[11px] text-[#00000080]">
                           {format(new Date(message.createdAt), "HH:mm")}
                         </p>
@@ -620,25 +633,23 @@ export default function MessagePage() {
 
       {/* Right side bar */}
       {showRightSideBar && (
-        <div className="w-[344px] border-l border-[#c8c9cc] bg-[#ebecf0]">
+        <div className="w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
           {/* Header */}
-          <div className="relative flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
-            {showContextMenu !== "main" && (
+          <div className="sticky top-0 flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
+            {showContextMenu !== "Thông tin hội thoại" && (
               <button
                 className="absolute left-2 flex h-8 w-8 items-center justify-center rounded-full object-cover hover:bg-[#ebe7eb]"
-                onClick={() => setShowContextMenu("main")}
+                onClick={() => setShowContextMenu("Thông tin hội thoại")}
               >
                 <FontAwesomeIcon icon={faChevronLeft} width={20} />
               </button>
             )}
-            <span className="text-lg font-bold">
-              {showContextMenu === "main" ? "Thông tin hội thoại" : "Thành viên"}
-            </span>
+            <span className="text-lg font-bold">{showContextMenu}</span>
           </div>
 
           {/* Context main */}
-          {showContextMenu === "main" && (
-            <div>
+          {showContextMenu === "Thông tin hội thoại" && (
+            <div className="">
               {/* Information conversation*/}
               <div className="flex flex-col items-center bg-white px-4 py-3">
                 <button className="my-3">
@@ -671,10 +682,163 @@ export default function MessagePage() {
                   </button>
                   <button
                     className="flex h-12 w-full items-center justify-start px-4 text-sm hover:bg-[#f1f2f4]"
-                    onClick={() => setShowContextMenu("showMember")}
+                    onClick={() => setShowContextMenu("Thành viên")}
                   >
                     <FontAwesomeIcon icon={faUser} width={20} />
                     {dataUser.members?.length || 0} thành viên
+                  </button>
+                </div>
+              )}
+
+              {/* Photo & Video */}
+              <div className="mt-2 flex flex-col items-center bg-white">
+                <button className="flex h-12 w-full items-center justify-between px-4">
+                  <span className="text-base font-semibold">Ảnh/Video</span>
+                  <FontAwesomeIcon icon={faCaretDown} width={20} />
+                </button>
+                {/*  Show 8 photo and video lastest from conversation*/}
+                <div className="grid w-full grid-cols-4 gap-2 px-4">
+                  {allMessages
+                    .filter((message) => message.imageUrl || message.fileUrl)
+                    .slice(0, 9)
+                    .map(
+                      (message) =>
+                        !(message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
+                          <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
+                            {message.imageUrl && (
+                              <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
+                            )}
+                            {message.fileUrl &&
+                              (message.fileUrl.endsWith(".mp4") ||
+                              message.fileUrl.endsWith(".webm") ||
+                              message.fileUrl.endsWith(".ogg") ? (
+                                <video controls className="rounded-[3px] object-contain">
+                                  <source src={message.fileUrl} type="video/mp4" />
+                                  Your browser does not support the video tag.
+                                </video>
+                              ) : (
+                                <></>
+                              ))}
+                          </button>
+                        ),
+                    )}
+                </div>
+
+                <div className="w-full p-4">
+                  <button
+                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
+                    onClick={() => {
+                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Anh/Video");
+                    }}
+                  >
+                    Xem tất cả
+                  </button>
+                </div>
+              </div>
+
+              {/* File */}
+              <div className="mt-2 flex flex-col items-center bg-white">
+                <button className="flex h-12 w-full items-center justify-between px-4">
+                  <span className="text-base font-semibold">File</span>
+                  <FontAwesomeIcon icon={faCaretDown} width={20} />
+                </button>
+                {/*  Show 3 file lastest from conversation*/}
+                <div className="flex w-full flex-col">
+                  {allMessages
+                    .filter((message) => message.fileUrl)
+                    .slice(0, 4)
+                    .map(
+                      (message) =>
+                        (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
+                          <a
+                            href={message.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            key={message._id}
+                            className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+                          >
+                            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+
+                            <div className="flex flex-1 flex-col items-start pl-3">
+                              <span className="break-words text-sm">{message.fileName}</span>
+                              <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+                                {/* Number kb */}
+                                {/* {Math.round(message.fileSize / 1024)} KB */}
+                                <span>100.00 KB</span>
+                                <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+                              </div>
+                            </div>
+                          </a>
+                        ),
+                    )}
+                </div>
+
+                <div className="w-full p-4">
+                  <button
+                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
+                    onClick={() => {
+                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Files");
+                    }}
+                  >
+                    Xem tất cả
+                  </button>
+                </div>
+              </div>
+
+              {/* Link */}
+              <div className="mt-2 flex flex-col items-center bg-white">
+                <button className="flex h-12 w-full items-center justify-between px-4">
+                  <span className="text-base font-semibold">Link</span>
+                  <FontAwesomeIcon icon={faCaretDown} width={20} />
+                </button>
+                {/*  Show 3 Link lastest from conversation */}
+                <div className="flex w-full flex-col">
+                  {allMessages
+                    .filter((message) => message.text.startsWith("https"))
+                    .slice(0, 4)
+                    .map((message) => (
+                      <a
+                        href={message.text}
+                        target="_blank"
+                        rel="noreferrer"
+                        key={message._id}
+                        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+                      >
+                        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
+
+                        <div className="flex flex-1 flex-col items-start pl-3">
+                          <span className="break-words text-sm">{message.text}</span>
+                          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+                            {/* slice https:// , result: facebook.com */}
+                            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
+                            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                </div>
+
+                <div className="w-full p-4">
+                  <button
+                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
+                    onClick={() => {
+                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Link");
+                    }}
+                  >
+                    Xem tất cả
+                  </button>
+                </div>
+              </div>
+
+              {/* OutGroup */}
+              {dataUser.isGroup && (
+                <div className="mt-2 flex flex-col items-center bg-white">
+                  <button
+                    className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
+                    onClick={commingSoon}
+                  >
+                    <FontAwesomeIcon icon={faSignOut} width={20} />
+                    Rời nhóm
                   </button>
                 </div>
               )}
@@ -682,7 +846,7 @@ export default function MessagePage() {
           )}
 
           {/* Show member group panel */}
-          {showContextMenu === "showMember" && (
+          {showContextMenu === "Thành viên" && (
             <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white pt-4">
               <div className="mx-4">
                 <button className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm hover:bg-[#e0dde0]">
@@ -712,6 +876,121 @@ export default function MessagePage() {
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Show 2 tab : Show all Ảnh/Video && Show all File*/}
+          {showContextMenu === "Kho lưu trữ" && (
+            <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white">
+              <div className="flex w-full items-center justify-between px-4">
+                <button
+                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Anh/Video" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
+                  onClick={() => setActiveTab("Anh/Video")}
+                >
+                  Ảnh/video
+                </button>
+                <button
+                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Files" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
+                  onClick={() => setActiveTab("Files")}
+                >
+                  Files
+                </button>
+                <button
+                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Link" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
+                  onClick={() => setActiveTab("Link")}
+                >
+                  Link
+                </button>
+              </div>
+
+              {/* Show context Anh/Video follow activetab */}
+              {activeTab === "Anh/Video" && (
+                <div className="grid grid-cols-4 gap-2 px-4">
+                  {allMessages
+                    .filter((message) => message.imageUrl || message.fileUrl)
+                    .map(
+                      (message) =>
+                        !(message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
+                          <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
+                            {message.imageUrl && (
+                              <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
+                            )}
+                            {message.fileUrl &&
+                              (message.fileUrl.endsWith(".mp4") ||
+                              message.fileUrl.endsWith(".webm") ||
+                              message.fileUrl.endsWith(".ogg") ? (
+                                <video controls className="rounded-[3px] object-contain">
+                                  <source src={message.fileUrl} type="video/mp4" />
+                                  Your browser does not support the video tag.
+                                </video>
+                              ) : (
+                                <></>
+                              ))}
+                          </button>
+                        ),
+                    )}
+                </div>
+              )}
+
+              {/* Show context Files follow activetab */}
+              {activeTab === "Files" && (
+                <div className="flex flex-col">
+                  {allMessages
+                    .filter((message) => message.fileUrl)
+                    .map(
+                      (message) =>
+                        (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
+                          <a
+                            href={message.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            key={message._id}
+                            className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+                          >
+                            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+
+                            <div className="flex flex-1 flex-col items-start pl-3">
+                              <span className="break-words text-sm">{message.fileName}</span>
+                              <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+                                {/* Number kb */}
+                                {/* {Math.round(message.fileSize / 1024)} KB */}
+                                <span>100.00 KB</span>
+                                <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+                              </div>
+                            </div>
+                          </a>
+                        ),
+                    )}
+                </div>
+              )}
+
+              {/* Show context Link follow activetab */}
+              {activeTab === "Link" && (
+                <div className="flex flex-col">
+                  {allMessages
+                    .filter((message) => message.text.startsWith("https"))
+                    .map((message) => (
+                      <a
+                        href={message.text}
+                        target="_blank"
+                        rel="noreferrer"
+                        key={message._id}
+                        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+                      >
+                        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
+
+                        <div className="flex flex-1 flex-col items-start pl-3">
+                          <span className="break-words text-sm">{message.text}</span>
+                          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+                            {/* slice https:// , result: facebook.com */}
+                            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
+                            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </div>
