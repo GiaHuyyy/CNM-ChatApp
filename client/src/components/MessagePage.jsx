@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useGlobalContext } from "../context/GlobalProvider";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -42,6 +42,9 @@ import commingSoon from "../helpers/commingSoon";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
+import AddGroupMemberModal from "./AddGroupMemberModal";
+import ConfirmModal from "./ConfirmModal";
+import { toast } from "sonner";
 
 // Button component
 const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
@@ -202,6 +205,7 @@ MediaItem.propTypes = {
 
 export default function MessagePage() {
   const params = useParams();
+  const navigate = useNavigate();
   const { socketConnection, seenMessage, setSeenMessage } = useGlobalContext();
   const user = useSelector((state) => state?.user);
 
@@ -243,6 +247,15 @@ export default function MessagePage() {
   const [showContextMenu, setShowContextMenu] = useState("Thông tin hội thoại");
 
   const [activeTab, setActiveTab] = useState("Anh/Video");
+
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    action: null,
+  });
 
   useEffect(() => {
     if (socketConnection) {
@@ -390,8 +403,27 @@ export default function MessagePage() {
   const getSenderInfo = (senderId) => {
     if (!conversation?.members) return { name: "Unknown", profilePic: "" };
 
+    // First try to find member in current group members
     const memberInfo = conversation.members.find((m) => m._id === senderId);
-    return memberInfo || { name: "Unknown", profilePic: "" };
+
+    if (memberInfo) return memberInfo;
+
+    // If not found in current members, the user may have left the group
+    // Check if the message object has populated sender info from messages array
+    const messageWithSender = allMessages.find(
+      (msg) => msg.msgByUserId && msg.msgByUserId._id === senderId && msg.msgByUserId.name,
+    );
+
+    if (messageWithSender && messageWithSender.msgByUserId) {
+      return {
+        _id: messageWithSender.msgByUserId._id,
+        name: messageWithSender.msgByUserId.name,
+        profilePic: messageWithSender.msgByUserId.profilePic || "",
+      };
+    }
+
+    // If we can't find sender info anywhere, show as former member
+    return { name: "Thành viên đã rời nhóm", profilePic: "" };
   };
 
   const renderFilePreview = () => {
@@ -427,6 +459,116 @@ export default function MessagePage() {
   const handleOpenArchive = (tab) => {
     setShowContextMenu("Kho lưu trữ");
     setActiveTab(tab);
+  };
+
+  const handleAddMember = () => {
+    setShowAddMemberModal(true);
+  };
+
+  const handleLeaveGroup = () => {
+    if (!socketConnection || !dataUser.isGroup) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Rời nhóm chat",
+      message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+      action: () => {
+        // Extract only the ID string, ensuring we don't send the full user object
+        let cleanUserId;
+
+        if (typeof user._id === "object" && user._id !== null) {
+          // If it's an ObjectId object
+          cleanUserId = user._id.toString();
+        } else if (typeof user._id === "string") {
+          cleanUserId = user._id;
+        } else {
+          // Fallback - use the user._id directly, though this should rarely happen
+          cleanUserId = user._id;
+          console.warn("Unexpected user ID format:", user._id);
+        }
+
+        socketConnection.emit("leaveGroup", {
+          groupId: params.userId,
+          userId: cleanUserId,
+        });
+
+        socketConnection.once("leftGroup", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            // Navigate back to home after leaving
+            navigate("/");
+          } else {
+            toast.error(response.message);
+          }
+        });
+      },
+    });
+  };
+
+  const handleDeleteConversation = () => {
+    if (!socketConnection) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: dataUser.isGroup ? "Xóa nhóm chat" : "Xóa lịch sử trò chuyện",
+      message: dataUser.isGroup
+        ? "Bạn có chắc chắn muốn xóa nhóm chat này? Thao tác này không thể hoàn tác."
+        : "Bạn có chắc chắn muốn xóa lịch sử trò chuyện này? Thao tác này không thể hoàn tác.",
+      action: () => {
+        // Extract clean user ID
+        const cleanUserId = typeof user._id === "object" ? user._id.toString() : user._id;
+
+        socketConnection.emit("deleteConversation", {
+          conversationId: params.userId,
+          userId: cleanUserId,
+        });
+
+        socketConnection.once("conversationDeleted", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            // Navigate back to home after successful deletion
+            navigate("/");
+          } else {
+            toast.error(response.message);
+          }
+        });
+      },
+    });
+  };
+
+  const handleRemoveMember = (memberId, memberName) => {
+    if (!socketConnection || !dataUser.isGroup) return;
+
+    // Only admin can remove members
+    if (user._id !== dataUser.groupAdmin?._id) {
+      toast.error("Chỉ quản trị viên mới có thể xóa thành viên");
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Xóa thành viên khỏi nhóm",
+      message: `Bạn có chắc chắn muốn xóa ${memberName} khỏi nhóm?`,
+      action: () => {
+        // Extract clean user IDs
+        const cleanAdminId = typeof user._id === "object" ? user._id.toString() : user._id;
+        const cleanMemberId = typeof memberId === "object" ? memberId.toString() : memberId;
+
+        socketConnection.emit("removeMemberFromGroup", {
+          groupId: params.userId,
+          memberId: cleanMemberId,
+          adminId: cleanAdminId,
+        });
+
+        socketConnection.once("memberRemovedFromGroup", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+          } else {
+            toast.error(response.message);
+          }
+        });
+      },
+    });
   };
 
   const photoVideoMessages = allMessages.filter(
@@ -473,6 +615,22 @@ export default function MessagePage() {
     }
   };
 
+  // Add this function to check if a message is a system notification
+  const isSystemNotification = (messageText) => {
+    if (!messageText) return false;
+
+    // Patterns that match system notifications
+    const patterns = [
+      /đã tạo nhóm/i,
+      /đã thêm .+ vào nhóm/i,
+      /đã thêm \d+ người dùng vào nhóm/i,
+      /đã rời khỏi nhóm/i,
+      /đã xóa/i,
+    ];
+
+    return patterns.some((pattern) => pattern.test(messageText));
+  };
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -488,13 +646,18 @@ export default function MessagePage() {
               {!dataUser.isGroup && dataUser.online && (
                 <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
               )}
+              {dataUser.isGroup && (
+                <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
+                  <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-y-1">
               <span className="text-base font-semibold">{dataUser?.name}</span>
-              {dataUser.isGroup && (
-                <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
-              )}
-              {!dataUser.isGroup && (
+              <div className="flex items-center space-x-2">
+                {dataUser.isGroup && (
+                  <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
+                )}
                 <button className="flex">
                   <FontAwesomeIcon
                     icon={faBookmark}
@@ -502,7 +665,7 @@ export default function MessagePage() {
                     className="rotate-90 text-sm text-[#555454] hover:text-[#005ae0]"
                   />
                 </button>
-              )}
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-[3px]">
@@ -524,6 +687,21 @@ export default function MessagePage() {
           <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
             <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
               {allMessages.map((message) => {
+                // Check if this is a system notification message
+                if (isSystemNotification(message.text)) {
+                  return (
+                    <div key={message._id} className="flex justify-center">
+                      <div className="flex items-center rounded-full bg-white px-4 py-2 text-center text-[11px] font-semibold text-gray-500">
+                        <span>{message.text}:</span>
+                        <span className="text-[11px] font-medium text-[#00000060]">
+                          {format(new Date(message.createdAt), "HH:mm")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Regular message rendering
                 const isCurrentUser = message.msgByUserId === user._id;
                 let sender = null;
 
@@ -547,7 +725,6 @@ export default function MessagePage() {
                         />
                       </button>
                     )}
-
                     <div
                       className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 ${
                         isCurrentUser ? "bg-[#dbebff] text-[#081b3a]" : "bg-white text-[#081b3a]"
@@ -688,7 +865,6 @@ export default function MessagePage() {
             )}
           </section>
         </div>
-
         {/* Footer: Input send message */}
         <footer className="relative">
           <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
@@ -701,7 +877,6 @@ export default function MessagePage() {
             <Button title="Chèn tin nhắn nhanh" icon={faBolt} width={20} handleOnClick={commingSoon} />
             <Button title="Tùy chọn thêm" icon={faEllipsis} width={20} handleOnClick={commingSoon} />
           </div>
-
           {openEmoji && (
             <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
               <EmojiPicker
@@ -799,11 +974,10 @@ export default function MessagePage() {
                 <div className="mt-3 flex w-full items-center justify-between">
                   <ActionGroupButton icon={faBell} title="Tăt thông báo" handleOnClick={commingSoon} />
                   <ActionGroupButton icon={faThumbTack} title="Ghim hội thoại" handleOnClick={commingSoon} />
-                  <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={commingSoon} />
+                  <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={handleAddMember} />
                   <ActionGroupButton icon={faGear} title="Quản lý nhóm" handleOnClick={commingSoon} />
                 </div>
               </div>
-
               {dataUser.isGroup && (
                 <div className="mt-2 flex flex-col items-center bg-white">
                   <button className="flex h-12 w-full items-center justify-between px-4">
@@ -819,7 +993,6 @@ export default function MessagePage() {
                   </button>
                 </div>
               )}
-
               {/* Show 8 Photo & Video lastest */}
               <SidebarSection
                 title="Ảnh/Video"
@@ -855,11 +1028,14 @@ export default function MessagePage() {
                   <MediaItem key={message._id} message={message} type="link" />
                 ))}
               </SidebarSection>
-
               <div className="mt-2 flex flex-col items-center bg-white">
                 <button
                   className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
-                  onClick={commingSoon}
+                  onClick={
+                    user._id !== dataUser.groupAdmin?._id && dataUser.isGroup
+                      ? handleLeaveGroup
+                      : handleDeleteConversation
+                  }
                 >
                   {user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? (
                     <>
@@ -869,14 +1045,13 @@ export default function MessagePage() {
                   ) : (
                     <>
                       <FontAwesomeIcon icon={faTrash} width={20} />
-                      Xóa lịch sử trò chuyện
+                      {dataUser.isGroup ? "Xóa nhóm chat" : "Xóa lịch sử trò chuyện"}
                     </>
                   )}
                 </button>
               </div>
             </div>
           )}
-
           {/* Show context members */}
           {showContextMenu === "Thành viên" && (
             <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white pt-4">
@@ -890,23 +1065,32 @@ export default function MessagePage() {
                 Danh sách thành viên ({dataUser.members?.length || 0})
               </span>
               {dataUser.members?.map((member) => (
-                <button
-                  key={member._id}
-                  title={member.name}
-                  className="flex h-16 w-full items-center px-4 hover:bg-[#ebe7eb]"
-                >
-                  <img src={member.profilePic} alt={member.name} className="h-10 w-10 rounded-full object-cover" />
-                  <div className="flex flex-col items-start pl-3">
-                    {member._id === user._id ? (
-                      <span className="text-[15px] text-pink-600">Bạn</span>
-                    ) : (
-                      <p className="text-[15px]">{member.name}</p>
-                    )}
-                    {dataUser.groupAdmin._id === member._id && (
-                      <span className="text-xs text-blue-500">Quản trị viên</span>
-                    )}
+                <div key={member._id} className="flex h-16 w-full items-center justify-between px-4 hover:bg-[#ebe7eb]">
+                  <div className="flex items-center">
+                    <img src={member.profilePic} alt={member.name} className="h-10 w-10 rounded-full object-cover" />
+                    <div className="flex flex-col items-start pl-3">
+                      {member._id === user._id ? (
+                        <span className="text-[15px] text-pink-600">Bạn</span>
+                      ) : (
+                        <p className="text-[15px]">{member.name}</p>
+                      )}
+                      {dataUser.groupAdmin._id === member._id && (
+                        <span className="text-xs text-blue-500">Quản trị viên</span>
+                      )}
+                    </div>
                   </div>
-                </button>
+
+                  {/* Button for admin delete member */}
+                  {user._id === dataUser.groupAdmin?._id && member._id !== user._id && (
+                    <button
+                      onClick={() => handleRemoveMember(member._id, member.name)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
+                      title="Xóa thành viên"
+                    >
+                      <FontAwesomeIcon icon={faTrash} width={14} />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -934,6 +1118,26 @@ export default function MessagePage() {
           )}
         </div>
       )}
+
+      {/* Add Member Modal */}
+      {showAddMemberModal && (
+        <AddGroupMemberModal
+          isOpen={showAddMemberModal}
+          onClose={() => setShowAddMemberModal(false)}
+          groupId={params.userId}
+          existingMembers={dataUser.members || []}
+        />
+      )}
+
+      {/* Add Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.action}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type="danger"
+      />
     </main>
   );
 }

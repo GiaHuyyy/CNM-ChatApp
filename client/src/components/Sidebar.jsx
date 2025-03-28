@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { faAddressBook, faImage, faMessage, faSquareCheck } from "@fortawesome/free-regular-svg-icons";
 import {
@@ -26,10 +27,11 @@ import { NavLink } from "react-router-dom";
 import commingSoon from "../helpers/commingSoon";
 import { useGlobalContext } from "../context/GlobalProvider";
 
-export default function Sidebar() {
+export default function Sidebar({ onGroupCreated }) {
   const user = useSelector((state) => state.user);
   const isOnline = user?.onlineUser?.includes(user?._id);
   const { socketConnection, setSeenMessage } = useGlobalContext();
+  const navigate = useNavigate();
 
   const [allUsers, setAllUsers] = useState([]);
 
@@ -143,8 +145,12 @@ export default function Sidebar() {
   }, [socketConnection, user?._id]);
 
   const handleGroupCreated = (conversationId) => {
-    // Navigate to the newly created group chat
-    window.location.href = `/${conversationId}`;
+    // Pass the conversationId to the parent component
+    if (onGroupCreated) {
+      onGroupCreated(conversationId);
+    }
+
+    navigate(`/${conversationId}`);
   };
 
   return (
@@ -308,13 +314,13 @@ export default function Sidebar() {
                         <img
                           src={chatItem?.userDetails?.profilePic}
                           alt={chatItem?.userDetails?.name}
-                          className={`h-12 w-12 object-cover ${chatItem?.isGroup ? "rounded-lg" : "rounded-full"}`}
+                          className={`h-12 w-12 rounded-full object-cover`}
                         />
-                        {/* {chatItem?.isGroup && (
-                          <div className="absolute -bottom-1 -right-1 rounded-full bg-blue-500 p-1">
-                            <FontAwesomeIcon icon={faUsers} size="xs" className="text-white" />
+                        {chatItem?.isGroup && (
+                          <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
+                            <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
                           </div>
-                        )} */}
+                        )}
                       </div>
                       <div className="ml-3 flex-1 overflow-hidden">
                         <p className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</p>
@@ -329,8 +335,7 @@ export default function Sidebar() {
                                 /* Otherwise show sender's name - find the sender from members array */
                                 <>
                                   {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
-                                    ?.name || "Unknown"}
-                                  :
+                                    ?.name + ":" || ""}
                                 </>
                               )}
                             </>
@@ -416,3 +421,7 @@ export default function Sidebar() {
     </nav>
   );
 }
+
+Sidebar.propTypes = {
+  onGroupCreated: PropTypes.func,
+};
