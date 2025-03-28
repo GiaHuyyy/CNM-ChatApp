@@ -43,6 +43,163 @@ import uploadFileToCloud from "../helpers/uploadFileToClound";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
 
+// Button component
+const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
+  return isUpload ? (
+    <label
+      htmlFor={id}
+      title={title}
+      onClick={handleOnClick}
+      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
+    >
+      <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
+    </label>
+  ) : (
+    <button
+      title={title}
+      onClick={handleOnClick}
+      className="flex h-8 w-8 items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
+    >
+      <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
+    </button>
+  );
+};
+
+Button.propTypes = {
+  icon: PropTypes.object,
+  width: PropTypes.number,
+  title: PropTypes.string,
+  styleIcon: PropTypes.string,
+  isUpload: PropTypes.bool,
+  id: PropTypes.string,
+  handleOnClick: PropTypes.func,
+};
+
+// Action Group Button component
+const ActionGroupButton = ({ icon, title, handleOnClick }) => {
+  return (
+    <div className="flex flex-col items-center justify-center gap-y-1">
+      <button
+        onClick={handleOnClick}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ebe7eb] hover:bg-[#e0dde0]"
+      >
+        <FontAwesomeIcon icon={icon} width={20} />
+      </button>
+      <span className="w-16 text-center text-xs">{title}</span>
+    </div>
+  );
+};
+
+ActionGroupButton.propTypes = {
+  icon: PropTypes.object,
+  title: PropTypes.string,
+  handleOnClick: PropTypes.func,
+};
+
+// SidebarSection component
+const SidebarSection = ({ title, children, emptyMessage, onViewAll, activeTab }) => {
+  return (
+    <div className="mt-2 flex flex-col items-center bg-white">
+      <button className="flex h-12 w-full items-center justify-between px-4">
+        <span className="text-base font-semibold">{title}</span>
+        <FontAwesomeIcon icon={faCaretDown} width={20} />
+      </button>
+
+      {children.length > 0 ? (
+        <div className="w-full">
+          <div className={title === "File" || title === "Link" ? "flex flex-col" : "grid grid-cols-4 gap-2 px-4"}>
+            {children}
+          </div>
+          <div className="p-4">
+            <button
+              className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
+              onClick={() => onViewAll(activeTab)}
+            >
+              Xem tất cả
+            </button>
+          </div>
+        </div>
+      ) : (
+        <span className="h-10 text-[13px] text-[#888]">{emptyMessage}</span>
+      )}
+    </div>
+  );
+};
+
+SidebarSection.propTypes = {
+  title: PropTypes.string.isRequired,
+  children: PropTypes.array,
+  emptyMessage: PropTypes.string.isRequired,
+  onViewAll: PropTypes.func.isRequired,
+  activeTab: PropTypes.string.isRequired,
+};
+
+// MediaItem component
+const MediaItem = ({ message, type }) => {
+  if (type === "photo") {
+    return (
+      <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
+        {message.imageUrl && <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />}
+        {message.fileUrl &&
+          (message.fileUrl.endsWith(".mp4") ||
+            message.fileUrl.endsWith(".webm") ||
+            message.fileUrl.endsWith(".ogg")) && (
+            <video controls className="rounded-[3px] object-contain">
+              <source src={message.fileUrl} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          )}
+      </button>
+    );
+  } else if (type === "file") {
+    return (
+      <a
+        href={message.fileUrl}
+        target="_blank"
+        rel="noreferrer"
+        key={message._id}
+        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+      >
+        <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+
+        <div className="flex flex-1 flex-col items-start pl-3">
+          <span className="break-words text-sm">{message.fileName}</span>
+          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+            <span>100.00 KB</span>
+            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+          </div>
+        </div>
+      </a>
+    );
+  } else if (type === "link") {
+    return (
+      <a
+        href={message.text}
+        target="_blank"
+        rel="noreferrer"
+        key={message._id}
+        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+      >
+        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
+
+        <div className="flex flex-1 flex-col items-start pl-3">
+          <span className="break-words text-sm">{message.text}</span>
+          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
+            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+          </div>
+        </div>
+      </a>
+    );
+  }
+  return null;
+};
+
+MediaItem.propTypes = {
+  message: PropTypes.object.isRequired,
+  type: PropTypes.string.isRequired,
+};
+
 export default function MessagePage() {
   const params = useParams();
   const { socketConnection, seenMessage, setSeenMessage } = useGlobalContext();
@@ -81,8 +238,6 @@ export default function MessagePage() {
   const [hoveredLikeMessage, setHoveredLikeMessage] = useState(null);
   const [hoveredMessage, setHoveredMessage] = useState(null);
 
-  // State to track if members panel is open
-
   const [showRightSideBar, setShowRightSideBar] = useState(true);
 
   const [showContextMenu, setShowContextMenu] = useState("Thông tin hội thoại");
@@ -91,30 +246,23 @@ export default function MessagePage() {
 
   useEffect(() => {
     if (socketConnection) {
-      // Clear previous event listeners when changing rooms
       socketConnection.off("messageUser");
       socketConnection.off("message");
       socketConnection.off("groupMessage");
 
-      // Join the new room
       socketConnection.emit("joinRoom", params.userId);
 
       socketConnection.on("messageUser", (payload) => {
-        console.log("Message User: ", payload);
         setDataUser({ ...payload, isGroup: false });
-
-        // Already been marked as seen in the server
         setSeenMessage(true);
       });
 
       socketConnection.on("message", (message) => {
-        console.log("Message Data", message);
         setAllMessages(message?.messages || []);
         setConversation(message);
       });
 
       socketConnection.on("groupMessage", (groupData) => {
-        console.log("Group Message Data", groupData);
         setAllMessages(groupData?.messages || []);
         setConversation(groupData);
 
@@ -127,7 +275,6 @@ export default function MessagePage() {
           groupAdmin: groupData.groupAdmin,
         });
 
-        // Already been marked as seen in the server
         setSeenMessage(true);
       });
     }
@@ -168,40 +315,8 @@ export default function MessagePage() {
     };
   }, [openEmoji]);
 
-  const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
-    return isUpload ? (
-      <label
-        htmlFor={id}
-        title={title}
-        onClick={handleOnClick}
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
-      >
-        <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
-      </label>
-    ) : (
-      <button
-        title={title}
-        onClick={handleOnClick}
-        className="flex h-8 w-8 items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
-      >
-        <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
-      </button>
-    );
-  };
-
-  Button.propTypes = {
-    icon: PropTypes.object,
-    width: PropTypes.number,
-    title: PropTypes.string,
-    styleIcon: PropTypes.string,
-    isUpload: PropTypes.bool,
-    id: PropTypes.string,
-    handleOnClick: PropTypes.func,
-  };
-
   const handleUploadFile = (e) => {
     const file = e.target.files[0];
-    console.log("File: ", file);
     setSelectedFile(file);
   };
 
@@ -213,7 +328,7 @@ export default function MessagePage() {
 
   const handleSendMessage = async () => {
     if ((!messages.text.trim() && !selectedFile) || !socketConnection) {
-      return; // Don't send empty messages
+      return;
     }
 
     let fileUrl = "";
@@ -223,7 +338,6 @@ export default function MessagePage() {
     }
 
     if (dataUser.isGroup) {
-      // Send group message
       const groupMessage = {
         conversationId: params.userId,
         text: messages.text,
@@ -234,7 +348,6 @@ export default function MessagePage() {
       };
       socketConnection.emit("newGroupMessage", groupMessage);
     } else {
-      // Send direct message
       const newMessage = {
         sender: user._id,
         receiver: params.userId,
@@ -247,7 +360,6 @@ export default function MessagePage() {
       socketConnection.emit("newMessage", newMessage);
     }
 
-    // Reset state
     setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
     setSelectedFile(null);
     handleClearUploadFile();
@@ -255,7 +367,6 @@ export default function MessagePage() {
 
   const handleSendEmojiLike = () => {
     if (dataUser.isGroup) {
-      // Send like emoji to group
       const emojiMessage = {
         conversationId: params.userId,
         text: "👍",
@@ -263,7 +374,6 @@ export default function MessagePage() {
       };
       socketConnection.emit("newGroupMessage", emojiMessage);
     } else {
-      // Send like emoji to direct chat
       const emojiMessage = {
         sender: user._id,
         receiver: params.userId,
@@ -277,7 +387,6 @@ export default function MessagePage() {
     }
   };
 
-  // Get sender info for group messages
   const getSenderInfo = (senderId) => {
     if (!conversation?.members) return { name: "Unknown", profilePic: "" };
 
@@ -315,24 +424,59 @@ export default function MessagePage() {
     setSeenMessage(true);
   };
 
-  const ActionGroupButton = ({ icon, title, handleOnClick }) => {
-    return (
-      <div className="flex flex-col items-center justify-center gap-y-1">
-        <button
-          onClick={handleOnClick}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ebe7eb] hover:bg-[#e0dde0]"
-        >
-          <FontAwesomeIcon icon={icon} width={20} />
-        </button>
-        <span className="w-16 text-center text-xs">{title}</span>
-      </div>
-    );
+  const handleOpenArchive = (tab) => {
+    setShowContextMenu("Kho lưu trữ");
+    setActiveTab(tab);
+  };
+
+  const photoVideoMessages = allMessages.filter(
+    (message) =>
+      (message.imageUrl || message.fileUrl) &&
+      !(message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf"))),
+  );
+
+  const fileMessages = allMessages.filter(
+    (message) => message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")),
+  );
+
+  const linkMessages = allMessages.filter((message) => message.text.startsWith("https"));
+
+  // Render content for Anh/Video, Files, Links
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "Anh/Video":
+        return (
+          <div className="grid grid-cols-4 gap-2 px-4">
+            {photoVideoMessages.map((message) => (
+              <MediaItem key={message._id} message={message} type="photo" />
+            ))}
+          </div>
+        );
+      case "Files":
+        return (
+          <div className="flex flex-col">
+            {fileMessages.map((message) => (
+              <MediaItem key={message._id} message={message} type="file" />
+            ))}
+          </div>
+        );
+      case "Link":
+        return (
+          <div className="flex flex-col">
+            {linkMessages.map((message) => (
+              <MediaItem key={message._id} message={message} type="link" />
+            ))}
+          </div>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
-        {/* Header chat */}
+        {/* Header: message page */}
         <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
           <div className="flex w-full items-center space-x-4">
             <div className="relative">
@@ -341,11 +485,6 @@ export default function MessagePage() {
                 alt={dataUser.name}
                 className="h-12 w-12 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
               />
-              {/* {dataUser.isGroup && (
-                <div className="absolute -bottom-1 -right-1 rounded-full bg-blue-500 p-1">
-                  <FontAwesomeIcon icon={faUsers} size="xs" className="text-white" />
-                </div>
-              )} */}
               {!dataUser.isGroup && dataUser.online && (
                 <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
               )}
@@ -380,16 +519,14 @@ export default function MessagePage() {
           </div>
         </header>
 
+        {/* Body: Show all messages */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Show all message chat */}
           <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
-            {/* All message chat */}
             <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
               {allMessages.map((message) => {
                 const isCurrentUser = message.msgByUserId === user._id;
                 let sender = null;
 
-                // For group chats, get the sender's info
                 if (dataUser.isGroup && !isCurrentUser) {
                   sender = getSenderInfo(message.msgByUserId);
                 }
@@ -416,7 +553,6 @@ export default function MessagePage() {
                         isCurrentUser ? "bg-[#dbebff] text-[#081b3a]" : "bg-white text-[#081b3a]"
                       }`}
                     >
-                      {/* Show sender name in group chats */}
                       {dataUser.isGroup && !isCurrentUser && (
                         <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
                       )}
@@ -482,7 +618,6 @@ export default function MessagePage() {
                               reactionsDefaultOpen={true}
                               onEmojiClick={(emojiData) => {
                                 console.log("Chọn emoji:", emojiData.emoji);
-                                // Add emoji reaction functionality here
                               }}
                             />
                           </div>
@@ -532,7 +667,6 @@ export default function MessagePage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Render file preview */}
             {selectedFile && (
               <div className="sticky top-0 z-50 flex h-full items-center justify-center bg-gray-400 bg-opacity-40">
                 <div
@@ -555,7 +689,7 @@ export default function MessagePage() {
           </section>
         </div>
 
-        {/* Sent message */}
+        {/* Footer: Input send message */}
         <footer className="relative">
           <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
             <Button title="Gửi Sticker" icon={faFaceLaughSquint} width={20} handleOnClick={() => setOpenEmoji(true)} />
@@ -568,7 +702,6 @@ export default function MessagePage() {
             <Button title="Tùy chọn thêm" icon={faEllipsis} width={20} handleOnClick={commingSoon} />
           </div>
 
-          {/* Emoji Picker React*/}
           {openEmoji && (
             <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
               <EmojiPicker
@@ -584,7 +717,6 @@ export default function MessagePage() {
               />
             </div>
           )}
-          {/* Input file*/}
           <input
             type="file"
             name="image"
@@ -631,11 +763,11 @@ export default function MessagePage() {
         </footer>
       </div>
 
-      {/* Right side bar */}
+      {/* Show right sidebar */}
       {showRightSideBar && (
         <div className="w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
           {/* Header */}
-          <div className="sticky top-0 flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
+          <div className="sticky top-0 z-10 flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
             {showContextMenu !== "Thông tin hội thoại" && (
               <button
                 className="absolute left-2 flex h-8 w-8 items-center justify-center rounded-full object-cover hover:bg-[#ebe7eb]"
@@ -647,10 +779,9 @@ export default function MessagePage() {
             <span className="text-lg font-bold">{showContextMenu}</span>
           </div>
 
-          {/* Context main */}
+          {/* Show context main */}
           {showContextMenu === "Thông tin hội thoại" && (
             <div className="">
-              {/* Information conversation*/}
               <div className="flex flex-col items-center bg-white px-4 py-3">
                 <button className="my-3">
                   <img
@@ -673,7 +804,6 @@ export default function MessagePage() {
                 </div>
               </div>
 
-              {/* Member group chat */}
               {dataUser.isGroup && (
                 <div className="mt-2 flex flex-col items-center bg-white">
                   <button className="flex h-12 w-full items-center justify-between px-4">
@@ -690,162 +820,64 @@ export default function MessagePage() {
                 </div>
               )}
 
-              {/* Photo & Video */}
+              {/* Show 8 Photo & Video lastest */}
+              <SidebarSection
+                title="Ảnh/Video"
+                emptyMessage="Chưa có Ảnh/Video nào được chia sẻ"
+                onViewAll={handleOpenArchive}
+                activeTab="Anh/Video"
+              >
+                {photoVideoMessages.slice(0, 8).map((message) => (
+                  <MediaItem key={message._id} message={message} type="photo" />
+                ))}
+              </SidebarSection>
+
+              {/* Show 3 File lastest */}
+              <SidebarSection
+                title="File"
+                emptyMessage="Chưa có file nào được chia sẻ"
+                onViewAll={handleOpenArchive}
+                activeTab="Files"
+              >
+                {fileMessages.slice(0, 3).map((message) => (
+                  <MediaItem key={message._id} message={message} type="file" />
+                ))}
+              </SidebarSection>
+
+              {/* Show 3 Link lastest */}
+              <SidebarSection
+                title="Link"
+                emptyMessage="Chưa có link nào được chia sẻ"
+                onViewAll={handleOpenArchive}
+                activeTab="Link"
+              >
+                {linkMessages.slice(0, 3).map((message) => (
+                  <MediaItem key={message._id} message={message} type="link" />
+                ))}
+              </SidebarSection>
+
               <div className="mt-2 flex flex-col items-center bg-white">
-                <button className="flex h-12 w-full items-center justify-between px-4">
-                  <span className="text-base font-semibold">Ảnh/Video</span>
-                  <FontAwesomeIcon icon={faCaretDown} width={20} />
+                <button
+                  className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
+                  onClick={commingSoon}
+                >
+                  {user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? (
+                    <>
+                      <FontAwesomeIcon icon={faSignOut} width={20} />
+                      Rời nhóm
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faTrash} width={20} />
+                      Xóa lịch sử trò chuyện
+                    </>
+                  )}
                 </button>
-                {/*  Show 8 photo and video lastest from conversation*/}
-                <div className="grid w-full grid-cols-4 gap-2 px-4">
-                  {allMessages
-                    .filter((message) => message.imageUrl || message.fileUrl)
-                    .slice(0, 9)
-                    .map(
-                      (message) =>
-                        !(message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
-                          <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
-                            {message.imageUrl && (
-                              <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
-                            )}
-                            {message.fileUrl &&
-                              (message.fileUrl.endsWith(".mp4") ||
-                              message.fileUrl.endsWith(".webm") ||
-                              message.fileUrl.endsWith(".ogg") ? (
-                                <video controls className="rounded-[3px] object-contain">
-                                  <source src={message.fileUrl} type="video/mp4" />
-                                  Your browser does not support the video tag.
-                                </video>
-                              ) : (
-                                <></>
-                              ))}
-                          </button>
-                        ),
-                    )}
-                </div>
-
-                <div className="w-full p-4">
-                  <button
-                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
-                    onClick={() => {
-                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Anh/Video");
-                    }}
-                  >
-                    Xem tất cả
-                  </button>
-                </div>
               </div>
-
-              {/* File */}
-              <div className="mt-2 flex flex-col items-center bg-white">
-                <button className="flex h-12 w-full items-center justify-between px-4">
-                  <span className="text-base font-semibold">File</span>
-                  <FontAwesomeIcon icon={faCaretDown} width={20} />
-                </button>
-                {/*  Show 3 file lastest from conversation*/}
-                <div className="flex w-full flex-col">
-                  {allMessages
-                    .filter((message) => message.fileUrl)
-                    .slice(0, 4)
-                    .map(
-                      (message) =>
-                        (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
-                          <a
-                            href={message.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            key={message._id}
-                            className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-                          >
-                            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
-
-                            <div className="flex flex-1 flex-col items-start pl-3">
-                              <span className="break-words text-sm">{message.fileName}</span>
-                              <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-                                {/* Number kb */}
-                                {/* {Math.round(message.fileSize / 1024)} KB */}
-                                <span>100.00 KB</span>
-                                <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
-                              </div>
-                            </div>
-                          </a>
-                        ),
-                    )}
-                </div>
-
-                <div className="w-full p-4">
-                  <button
-                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
-                    onClick={() => {
-                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Files");
-                    }}
-                  >
-                    Xem tất cả
-                  </button>
-                </div>
-              </div>
-
-              {/* Link */}
-              <div className="mt-2 flex flex-col items-center bg-white">
-                <button className="flex h-12 w-full items-center justify-between px-4">
-                  <span className="text-base font-semibold">Link</span>
-                  <FontAwesomeIcon icon={faCaretDown} width={20} />
-                </button>
-                {/*  Show 3 Link lastest from conversation */}
-                <div className="flex w-full flex-col">
-                  {allMessages
-                    .filter((message) => message.text.startsWith("https"))
-                    .slice(0, 4)
-                    .map((message) => (
-                      <a
-                        href={message.text}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={message._id}
-                        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-                      >
-                        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
-
-                        <div className="flex flex-1 flex-col items-start pl-3">
-                          <span className="break-words text-sm">{message.text}</span>
-                          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-                            {/* slice https:// , result: facebook.com */}
-                            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
-                            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
-                          </div>
-                        </div>
-                      </a>
-                    ))}
-                </div>
-
-                <div className="w-full p-4">
-                  <button
-                    className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm font-semibold hover:bg-[#e0dde0]"
-                    onClick={() => {
-                      setShowContextMenu("Kho lưu trữ"), setActiveTab("Link");
-                    }}
-                  >
-                    Xem tất cả
-                  </button>
-                </div>
-              </div>
-
-              {/* OutGroup */}
-              {dataUser.isGroup && (
-                <div className="mt-2 flex flex-col items-center bg-white">
-                  <button
-                    className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
-                    onClick={commingSoon}
-                  >
-                    <FontAwesomeIcon icon={faSignOut} width={20} />
-                    Rời nhóm
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Show member group panel */}
+          {/* Show context members */}
           {showContextMenu === "Thành viên" && (
             <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white pt-4">
               <div className="mx-4">
@@ -879,118 +911,25 @@ export default function MessagePage() {
             </div>
           )}
 
-          {/* Show 2 tab : Show all Ảnh/Video && Show all File*/}
+          {/* Show context stock */}
           {showContextMenu === "Kho lưu trữ" && (
             <div className="h-[calc(100vh_-_68px)] w-full overflow-hidden bg-white">
               <div className="flex w-full items-center justify-between px-4">
-                <button
-                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Anh/Video" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
-                  onClick={() => setActiveTab("Anh/Video")}
-                >
-                  Ảnh/video
-                </button>
-                <button
-                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Files" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
-                  onClick={() => setActiveTab("Files")}
-                >
-                  Files
-                </button>
-                <button
-                  className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${activeTab === "Link" && "border-[#005ae0] text-[#005ae0]"} text-[15px] font-bold`}
-                  onClick={() => setActiveTab("Link")}
-                >
-                  Link
-                </button>
+                {["Anh/Video", "Files", "Link"].map((tab) => (
+                  <button
+                    key={tab}
+                    className={`flex h-11 flex-1 items-center justify-center gap-x-1 border-b-2 ${
+                      activeTab === tab ? "border-[#005ae0] text-[#005ae0]" : ""
+                    } text-[15px] font-bold`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
               </div>
 
-              {/* Show context Anh/Video follow activetab */}
-              {activeTab === "Anh/Video" && (
-                <div className="grid grid-cols-4 gap-2 px-4">
-                  {allMessages
-                    .filter((message) => message.imageUrl || message.fileUrl)
-                    .map(
-                      (message) =>
-                        !(message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
-                          <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
-                            {message.imageUrl && (
-                              <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
-                            )}
-                            {message.fileUrl &&
-                              (message.fileUrl.endsWith(".mp4") ||
-                              message.fileUrl.endsWith(".webm") ||
-                              message.fileUrl.endsWith(".ogg") ? (
-                                <video controls className="rounded-[3px] object-contain">
-                                  <source src={message.fileUrl} type="video/mp4" />
-                                  Your browser does not support the video tag.
-                                </video>
-                              ) : (
-                                <></>
-                              ))}
-                          </button>
-                        ),
-                    )}
-                </div>
-              )}
-
-              {/* Show context Files follow activetab */}
-              {activeTab === "Files" && (
-                <div className="flex flex-col">
-                  {allMessages
-                    .filter((message) => message.fileUrl)
-                    .map(
-                      (message) =>
-                        (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")) && (
-                          <a
-                            href={message.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            key={message._id}
-                            className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-                          >
-                            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
-
-                            <div className="flex flex-1 flex-col items-start pl-3">
-                              <span className="break-words text-sm">{message.fileName}</span>
-                              <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-                                {/* Number kb */}
-                                {/* {Math.round(message.fileSize / 1024)} KB */}
-                                <span>100.00 KB</span>
-                                <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
-                              </div>
-                            </div>
-                          </a>
-                        ),
-                    )}
-                </div>
-              )}
-
-              {/* Show context Link follow activetab */}
-              {activeTab === "Link" && (
-                <div className="flex flex-col">
-                  {allMessages
-                    .filter((message) => message.text.startsWith("https"))
-                    .map((message) => (
-                      <a
-                        href={message.text}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={message._id}
-                        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-                      >
-                        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
-
-                        <div className="flex flex-1 flex-col items-start pl-3">
-                          <span className="break-words text-sm">{message.text}</span>
-                          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-                            {/* slice https:// , result: facebook.com */}
-                            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
-                            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
-                          </div>
-                        </div>
-                      </a>
-                    ))}
-                </div>
-              )}
+              {/* Render */}
+              {renderTabContent()}
             </div>
           )}
         </div>
