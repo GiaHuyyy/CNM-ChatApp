@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
-import { View, Text, Image, TouchableOpacity, FlatList, Dimensions } from "react-native";
+import { View, Image, FlatList, Dimensions, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import CustomButton from "../components/CustomButton";
+import CustomLinkButton from "../components/CustomLinkButton";
+import { router, Link } from "expo-router";
 
 const backgrounds = [
   require("../assets/images/bg-1.jpg"),
@@ -11,68 +14,74 @@ const backgrounds = [
 ];
 
 const { width } = Dimensions.get("window");
-const imageHeight = 500; // Chiều cao ảnh
 
 export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
 
-  // Xử lý khi cuộn ngang
   const handleScroll = (event) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentIndex(slideIndex);
   };
 
-  // Xử lý khi bấm vào dot
   const handleDotPress = (index) => {
-    flatListRef.current?.scrollToIndex({ index, animated: true });
+    flatListRef.current.scrollToOffset({ offset: index * width, animated: true });
     setCurrentIndex(index);
   };
 
+  // Hàm xử lý khi bấm nút đăng nhập
+  const handleLogin = () => {
+    console.log("Đăng nhập");
+  };
+
+  // Hàm xử lý khi bấm nút tạo tài khoản mới
+  const handleSignUp = () => {
+    console.log("Tạo tài khoản mới");
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+    <SafeAreaView className="flex-1 bg-white">
       {/* Hiển thị hình nền dạng Carousel */}
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View className="flex-1 justify-center items-center">
         <FlatList
-          ref={flatListRef}
+          ref={flatListRef} // Gán ref vào FlatList
           data={backgrounds}
-          keyExtractor={(_, index) => index.toString()}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handleScroll}
+          onScroll={handleScroll}
           renderItem={({ item }) => (
-            <Image source={item} style={{ width, height: imageHeight, resizeMode: "cover" }} />
+            <Image source={item} className="w-screen h-[500px]" resizeMode="cover" />
           )}
         />
       </View>
 
-      {/* Pagination dots */}
-      <View style={{ flexDirection: "row", justifyContent: "center", marginBottom: 16 }}>
+      {/* Pagination dots (bấm để chuyển ảnh) */}
+      <View className="flex-row justify-center mb-6">
         {backgrounds.map((_, index) => (
           <TouchableOpacity key={index} onPress={() => handleDotPress(index)}>
             <View
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: index === currentIndex ? "#007AFF" : "#D1D5DB",
-                marginHorizontal: 5,
-              }}
+              className={`w-2 h-2 mx-1 rounded-full ${index === currentIndex ? "bg-blue-500" : "bg-gray-300"}`}
             />
           </TouchableOpacity>
         ))}
       </View>
 
       {/* Nút đăng nhập */}
-      <TouchableOpacity style={{ backgroundColor: "#007AFF", paddingVertical: 12, width: "80%", borderRadius: 50, alignSelf: "center", alignItems: "center", marginBottom: 10 }}>
-        <Text style={{ color: "white", fontSize: 18, fontWeight: "bold" }}>Đăng nhập</Text>
-      </TouchableOpacity>
+      <CustomLinkButton
+        title="Đăng nhập"
+        containerStyles="bg-blue-500 py-3 w-4/5 mx-auto mb-3"
+        textStyles="text-white text-lg font-bold text-center"
+        href={"/sign-in"}
+      />
 
       {/* Nút tạo tài khoản mới */}
-      <TouchableOpacity style={{ backgroundColor: "#D1D5DB", paddingVertical: 12, width: "80%", borderRadius: 50, alignSelf: "center", alignItems: "center" }}>
-        <Text style={{ color: "black", fontSize: 18 }}>Tạo tài khoản mới</Text>
-      </TouchableOpacity>
+      <CustomButton
+        title="Tạo tài khoản mới"
+        handlePress={handleSignUp}
+        containerStyles="bg-gray-300 py-3 w-4/5 mx-auto"
+        textStyles="text-black text-lg"
+      />
     </SafeAreaView>
   );
 }
