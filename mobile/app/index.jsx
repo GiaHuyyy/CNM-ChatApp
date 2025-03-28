@@ -76,11 +76,11 @@ export default function App() {
       />
 
       {/* Nút tạo tài khoản mới */}
-      <CustomButton
+      <CustomLinkButton
         title="Tạo tài khoản mới"
-        handlePress={handleSignUp}
         containerStyles="bg-gray-300 py-3 w-4/5 mx-auto"
         textStyles="text-black text-lg"
+        href={"/sign-up"}
       />
     </SafeAreaView>
   );
