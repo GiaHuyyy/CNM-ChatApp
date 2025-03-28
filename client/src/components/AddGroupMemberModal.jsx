@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom"; // Add this import
 import axios from "axios";
 import { toast } from "sonner";
 import PropTypes from "prop-types";
@@ -8,12 +7,10 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faXmark, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 
-export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
+export default function AddGroupMemberModal({ isOpen, onClose, groupId, existingMembers }) {
   const { socketConnection } = useGlobalContext();
   const user = useSelector((state) => state.user);
-  const navigate = useNavigate(); // Add this line to get navigate function
 
-  const [groupName, setGroupName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -48,7 +45,12 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
         setIsLoading(true);
         const URL = `${import.meta.env.VITE_APP_BACKEND_URL}/api/search-friend-user`;
         const response = await axios.post(URL, { search: searchQuery }, { withCredentials: true });
-        setSearchResults(response.data.data || []);
+
+        // Filter out users who are already members of the group
+        const existingMemberIds = existingMembers.map((member) => member._id);
+        const filteredResults = response.data.data.filter((user) => !existingMemberIds.includes(user._id));
+
+        setSearchResults(filteredResults || []);
       } catch (error) {
         console.error("Error searching users:", error);
       } finally {
@@ -58,7 +60,7 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
 
     const timer = setTimeout(searchUsers, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, existingMembers]);
 
   const toggleUserSelection = (selectedUser) => {
     setSelectedUsers((prev) => {
@@ -71,54 +73,36 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
     });
   };
 
-  // Create group chat
-  const handleCreateGroup = async () => {
-    if (!groupName.trim()) {
-      toast.error("Vui lòng nhập tên nhóm");
-      return;
-    }
-
-    if (selectedUsers.length < 2) {
-      toast.error("Vui lòng chọn ít nhất 2 người dùng");
+  // Add members to group
+  const handleAddMembers = async () => {
+    if (selectedUsers.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 người dùng");
       return;
     }
 
     try {
       setIsLoading(true);
 
-      // Add current user to members if not already included
-      const members = [...selectedUsers, user].filter((v, i, a) => a.findIndex((t) => t._id === v._id) === i);
-
-      // Create a new group conversation via socket
-      socketConnection.emit("createGroupChat", {
-        name: groupName,
-        members: members.map((member) => member._id),
-        creator: user._id,
+      // Add members to group via socket
+      socketConnection.emit("addMembersToGroup", {
+        groupId,
+        newMembers: selectedUsers.map((member) => member._id),
+        addedBy: user._id,
       });
 
-      // Listen for group creation confirmation
-      socketConnection.once("groupCreated", (response) => {
+      // Listen for confirmation
+      socketConnection.once("membersAddedToGroup", (response) => {
         if (response.success) {
-          toast.success("Nhóm chat đã được tạo");
+          toast.success(response.message || "Đã thêm thành viên vào nhóm");
           setSelectedUsers([]);
-          setGroupName("");
           onClose();
-
-          // Update to use navigate instead of window.location
-          if (response.conversationId) {
-            // If onGroupCreated callback exists, call it
-            if (onGroupCreated) onGroupCreated(response.conversationId);
-
-            // Use React Router's navigate
-            navigate(`/${response.conversationId}`);
-          }
         } else {
-          toast.error(response.message || "Không thể tạo nhóm chat");
+          toast.error(response.message || "Không thể thêm thành viên vào nhóm");
         }
         setIsLoading(false);
       });
     } catch (error) {
-      toast.error("Lỗi khi tạo nhóm chat");
+      toast.error("Lỗi khi thêm thành viên");
       console.error(error);
       setIsLoading(false);
     }
@@ -131,28 +115,16 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
       <div ref={modalRef} className="mx-auto w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">Tạo nhóm chat mới</h3>
+          <h3 className="text-lg font-medium">Thêm thành viên vào nhóm</h3>
           <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-100">
             <FontAwesomeIcon icon={faXmark} width={18} className="text-gray-500" />
           </button>
         </div>
 
         <div className="space-y-4">
-          {/* Group name input */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Tên nhóm</label>
-            <input
-              type="text"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
-              placeholder="Nhập tên nhóm chat"
-            />
-          </div>
-
           {/* User search */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Thêm thành viên</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Tìm kiếm người dùng</label>
             <input
               type="text"
               value={searchQuery}
@@ -184,14 +156,11 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
           )}
 
           {/* Search results */}
-          {searchResults.length > 0 && (
+          {searchResults.length > 0 ? (
             <div className="max-h-60 overflow-y-auto">
               <label className="mb-1 block text-sm font-medium text-gray-700">Kết quả tìm kiếm</label>
               <div className="mt-1 space-y-2">
                 {searchResults.map((searchUser) => {
-                  // Don't show current user in search results
-                  if (searchUser._id === user._id) return null;
-
                   const isSelected = selectedUsers.some((u) => u._id === searchUser._id);
                   return (
                     <div
@@ -224,20 +193,22 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
                 })}
               </div>
             </div>
-          )}
+          ) : searchQuery.trim() && !isLoading ? (
+            <div className="text-center text-sm text-gray-500">
+              Không tìm thấy người dùng phù hợp hoặc tất cả người dùng đã trong nhóm
+            </div>
+          ) : null}
 
-          {/* Create button */}
+          {/* Add button */}
           <div className="mt-6">
             <button
-              disabled={isLoading || selectedUsers.length < 2 || !groupName.trim()}
-              onClick={handleCreateGroup}
+              disabled={isLoading || selectedUsers.length === 0}
+              onClick={handleAddMembers}
               className={`w-full rounded-md bg-blue-600 py-2 text-white ${
-                isLoading || selectedUsers.length < 2 || !groupName.trim()
-                  ? "cursor-not-allowed opacity-50"
-                  : "hover:bg-blue-700"
+                isLoading || selectedUsers.length === 0 ? "cursor-not-allowed opacity-50" : "hover:bg-blue-700"
               }`}
             >
-              {isLoading ? "Đang tạo..." : "Tạo nhóm"}
+              {isLoading ? "Đang thêm..." : "Thêm vào nhóm"}
             </button>
           </div>
         </div>
@@ -246,8 +217,9 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
   );
 }
 
-GroupChatModal.propTypes = {
+AddGroupMemberModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
-  onGroupCreated: PropTypes.func,
+  groupId: PropTypes.string.isRequired,
+  existingMembers: PropTypes.array.isRequired,
 };

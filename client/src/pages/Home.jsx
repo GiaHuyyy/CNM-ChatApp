@@ -60,12 +60,18 @@ export default function Home() {
 
   const basePath = location.pathname === "/";
 
+  const handleGroupCreated = (conversationId) => {
+
+    console.log("Group created with ID:", conversationId);
+    
+  };
+
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
       <section className="w-[408px] border-r border-gray-300 bg-white">
         {/* Main tab */}
-        <Sidebar />
+        <Sidebar onGroupCreated={handleGroupCreated} />
 
         {/*  */}
       </section>
