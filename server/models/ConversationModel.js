@@ -33,6 +33,14 @@ const messageSchema = new mongoose.Schema(
       required: true,
       ref: "User",
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

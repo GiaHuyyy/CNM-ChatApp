@@ -915,6 +915,147 @@ io.on("connection", async (socket) => {
       }
     });
 
+    // Delete message (soft delete)
+    socket.on("deleteMessage", async (data) => {
+      try {
+        const { messageId, conversationId, userId, isGroup } = data;
+
+        // Find the message
+        const message = await MessageModel.findById(messageId);
+
+        if (!message) {
+          return socket.emit("error", { message: "Tin nhắn không tồn tại" });
+        }
+
+        // Check if user is authorized to delete the message
+        if (message.msgByUserId.toString() !== userId.toString()) {
+          return socket.emit("error", { message: "Bạn không có quyền xóa tin nhắn này" });
+        }
+
+        // Soft delete - mark as deleted but keep in database
+        await MessageModel.findByIdAndUpdate(messageId, {
+          isDeleted: true,
+        });
+
+        // Retrieve updated conversation
+        let updatedConversation;
+        if (isGroup) {
+          updatedConversation = await ConversationModel.findById(conversationId)
+            .populate("messages")
+            .populate("members")
+            .populate("groupAdmin");
+
+          // Notify all group members
+          for (const memberId of updatedConversation.members) {
+            const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
+            io.to(memberIdStr).emit("groupMessage", updatedConversation);
+
+            // Update sidebar for all members
+            const memberConversations = await getConversation(memberIdStr);
+            io.to(memberIdStr).emit("conversation", memberConversations);
+          }
+        } else {
+          updatedConversation = await ConversationModel.findOne({
+            $or: [
+              { _id: conversationId },
+              { $and: [{ sender: userId }, { receiver: conversationId }] },
+              { $and: [{ sender: conversationId }, { receiver: userId }] },
+            ],
+          }).populate("messages");
+
+          const senderStr = updatedConversation.sender.toString();
+          const receiverStr = updatedConversation.receiver.toString();
+
+          // Emit updated conversation to both users
+          io.to(senderStr).emit("message", updatedConversation);
+          io.to(receiverStr).emit("message", updatedConversation);
+
+          // Update sidebar for both users
+          const senderConversations = await getConversation(senderStr);
+          const receiverConversations = await getConversation(receiverStr);
+
+          io.to(senderStr).emit("conversation", senderConversations);
+          io.to(receiverStr).emit("conversation", receiverConversations);
+        }
+
+        socket.emit("messageDeleted", { success: true });
+      } catch (error) {
+        console.error("Error deleting message:", error);
+        socket.emit("error", { message: "Có lỗi xảy ra khi xóa tin nhắn" });
+      }
+    });
+
+    // Edit message
+    socket.on("editMessage", async (data) => {
+      try {
+        const { messageId, conversationId, text, userId, isGroup } = data;
+
+        // Find the message
+        const message = await MessageModel.findById(messageId);
+
+        if (!message) {
+          return socket.emit("error", { message: "Tin nhắn không tồn tại" });
+        }
+
+        // Check if user is authorized to edit the message
+        if (message.msgByUserId.toString() !== userId.toString()) {
+          return socket.emit("error", { message: "Bạn không có quyền sửa tin nhắn này" });
+        }
+
+        // Update the message
+        await MessageModel.findByIdAndUpdate(messageId, {
+          text,
+          isEdited: true,
+        });
+
+        // Retrieve updated conversation
+        let updatedConversation;
+        if (isGroup) {
+          updatedConversation = await ConversationModel.findById(conversationId)
+            .populate("messages")
+            .populate("members")
+            .populate("groupAdmin");
+
+          // Notify all group members
+          for (const memberId of updatedConversation.members) {
+            const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
+            io.to(memberIdStr).emit("groupMessage", updatedConversation);
+
+            // Update sidebar for all members
+            const memberConversations = await getConversation(memberIdStr);
+            io.to(memberIdStr).emit("conversation", memberConversations);
+          }
+        } else {
+          updatedConversation = await ConversationModel.findOne({
+            $or: [
+              { _id: conversationId },
+              { $and: [{ sender: userId }, { receiver: conversationId }] },
+              { $and: [{ sender: conversationId }, { receiver: userId }] },
+            ],
+          }).populate("messages");
+
+          const senderStr = updatedConversation.sender.toString();
+          const receiverStr = updatedConversation.receiver.toString();
+
+          // Emit updated conversation to both users
+          io.to(senderStr).emit("message", updatedConversation);
+          io.to(receiverStr).emit("message", updatedConversation);
+
+          // Update sidebar for both users
+          const senderConversations = await getConversation(senderStr);
+          const receiverConversations = await getConversation(receiverStr);
+
+          io.to(senderStr).emit("conversation", senderConversations);
+          io.to(receiverStr).emit("conversation", receiverConversations);
+        }
+
+        socket.emit("messageEdited", { success: true });
+      } catch (error) {
+        console.error("Error editing message:", error);
+        socket.emit("error", { message: "Có lỗi xảy ra khi sửa tin nhắn" });
+      }
+    });
+
     //   Disconnect
     socket.on("disconnect", () => {
       onlineUser.delete(userId);
