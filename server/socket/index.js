@@ -847,7 +847,20 @@ io.on("connection", async (socket) => {
 
         // Handle group conversations
         if (conversation.isGroup) {
-          // ...existing group conversation handling code...
+          // Only allow admin to delete the group
+          const groupAdminId = conversation.groupAdmin.toString();
+
+          if (groupAdminId === userIdString) {
+            canDelete = true;
+            // Get all member IDs to update their conversation lists
+            affectedUserIds = conversation.members.map((id) => id.toString());
+          } else {
+            socket.emit("conversationDeleted", {
+              success: false,
+              message: "Chỉ quản trị viên mới có thể xóa nhóm chat",
+            });
+            return;
+          }
         }
         // Handle direct conversations
         else {
