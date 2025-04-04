@@ -12,6 +12,7 @@ import {
   faThumbsUp,
 } from "@fortawesome/free-regular-svg-icons";
 import {
+  faArrowRotateRight,
   faBars,
   faBolt,
   faCamera,
@@ -108,6 +109,7 @@ export default function MessagePage() {
 
   const [hoveredLikeMessage, setHoveredLikeMessage] = useState(null);
   const [hoveredMessage, setHoveredMessage] = useState(null);
+  const [openActionMessage, setOpenActionMessage] = useState(false);
 
   const [showRightSideBar, setShowRightSideBar] = useState(true);
   const [showContextMenu, setShowContextMenu] = useState("Thông tin hội thoại");
@@ -119,6 +121,8 @@ export default function MessagePage() {
     message: "",
     action: null,
   });
+
+  const [editingMessage, setEditingMessage] = useState(null);
 
   useEffect(() => {
     if (socketConnection) {
@@ -215,27 +219,39 @@ export default function MessagePage() {
       fileUrl = uploadFile.secure_url;
     }
 
-    if (dataUser.isGroup) {
-      const groupMessage = {
+    if (editingMessage) {
+      socketConnection.emit("editMessage", {
+        messageId: editingMessage._id,
         conversationId: params.userId,
         text: messages.text,
-        imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
-        fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
-        fileName: selectedFile?.name || "",
-        msgByUserId: user?._id,
-      };
-      socketConnection.emit("newGroupMessage", groupMessage);
+        userId: user._id,
+        isGroup: dataUser.isGroup,
+      });
+
+      setEditingMessage(null);
     } else {
-      const newMessage = {
-        sender: user._id,
-        receiver: params.userId,
-        text: messages.text,
-        imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
-        fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
-        fileName: selectedFile?.name || "",
-        msgByUserId: user?._id,
-      };
-      socketConnection.emit("newMessage", newMessage);
+      if (dataUser.isGroup) {
+        const groupMessage = {
+          conversationId: params.userId,
+          text: messages.text,
+          imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
+          fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
+          fileName: selectedFile?.name || "",
+          msgByUserId: user?._id,
+        };
+        socketConnection.emit("newGroupMessage", groupMessage);
+      } else {
+        const newMessage = {
+          sender: user._id,
+          receiver: params.userId,
+          text: messages.text,
+          imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
+          fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
+          fileName: selectedFile?.name || "",
+          msgByUserId: user?._id,
+        };
+        socketConnection.emit("newMessage", newMessage);
+      }
     }
 
     setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
@@ -328,8 +344,8 @@ export default function MessagePage() {
       isOpen: true,
       title: "Rời nhóm chat",
       message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+      // Extract only the ID string, ensuring we don't send the full user object
       action: () => {
-        // Extract only the ID string, ensuring we don't send the full user object
         let cleanUserId;
 
         if (typeof user._id === "object" && user._id !== null) {
@@ -371,9 +387,6 @@ export default function MessagePage() {
         ? "Bạn có chắc chắn muốn xóa nhóm chat này? Thao tác này không thể hoàn tác."
         : "Bạn có chắc chắn muốn xóa lịch sử trò chuyện này? Thao tác này không thể hoàn tác.",
       action: () => {
-        console.log("Deleting conversation:", params.userId, user._id); // debugging
-
-        // Extract clean user ID
         const cleanUserId = typeof user._id === "object" ? user._id.toString() : user._id;
 
         socketConnection.emit("deleteConversation", {
@@ -433,7 +446,40 @@ export default function MessagePage() {
     setShowAddMemberModal(true);
   };
 
-  // Filter messages for media sections
+  const handleEditMessage = (message) => {
+    setEditingMessage(message);
+    setMessages({
+      ...messages,
+      text: message.text,
+    });
+    inputRef.current?.focus();
+    setOpenActionMessage(false);
+  };
+
+  const handleDeleteMessage = (messageId) => {
+    if (!socketConnection) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Xóa tin nhắn",
+      message: "Bạn có chắc chắn muốn xóa tin nhắn này?",
+      action: () => {
+        socketConnection.emit("deleteMessage", {
+          messageId,
+          conversationId: params.userId,
+          userId: user._id,
+          isGroup: dataUser.isGroup,
+        });
+
+        setOpenActionMessage(false);
+      },
+    });
+  };
+
+  const isDeletedMessage = (message) => {
+    return message.isDeleted;
+  };
+
   const photoVideoMessages = allMessages.filter(
     (message) =>
       (message.imageUrl || message.fileUrl) &&
@@ -474,8 +520,10 @@ export default function MessagePage() {
                 alt={dataUser.name}
                 className="h-12 w-12 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
               />
-              {!dataUser.isGroup && dataUser.online && (
+              {!dataUser.isGroup && dataUser.online ? (
                 <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
+              ) : (
+                <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#8f918f]"></div>
               )}
               {dataUser.isGroup && (
                 <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
@@ -518,7 +566,6 @@ export default function MessagePage() {
           <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
             <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
               {allMessages.map((message) => {
-                // Check if this is a system notification message
                 if (isSystemNotification(message.text)) {
                   return (
                     <div key={message._id} className="flex justify-center">
@@ -593,7 +640,9 @@ export default function MessagePage() {
                         </div>
                       )}
                       <div>
-                        {message.text.startsWith("https") ? (
+                        {isDeletedMessage(message) ? (
+                          <p className="break-words text-sm italic text-gray-500">Tin nhắn đã được xóa</p>
+                        ) : message.text.startsWith("https") ? (
                           <a
                             href={message.text}
                             target="_blank"
@@ -607,6 +656,7 @@ export default function MessagePage() {
                         )}
                         <p className="mt-1 text-[11px] text-[#00000080]">
                           {format(new Date(message.createdAt), "HH:mm")}
+                          {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
                         </p>
                       </div>
 
@@ -658,14 +708,46 @@ export default function MessagePage() {
                           </button>
                           <button
                             className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                            onClick={commingSoon}
+                            onMouseEnter={() => setOpenActionMessage(true)}
                           >
                             <FontAwesomeIcon
-                              icon={faTrash}
+                              icon={faEllipsis}
                               width={10}
-                              className="text-[#5a5a5a] group-hover:text-red-600"
+                              className="text-[#5a5a5a] group-hover:text-[#005ae0]"
                             />
                           </button>
+
+                          {/* Action message */}
+                          {openActionMessage && isCurrentUser && !isDeletedMessage(message) && (
+                            <div
+                              className={`absolute bottom-7 ${isCurrentUser ? "right-0" : "left-0"} w-[120px] rounded-sm bg-white py-2`}
+                              onMouseEnter={() => setOpenActionMessage(true)}
+                              onMouseLeave={() => setOpenActionMessage(false)}
+                            >
+                              {isCurrentUser && !isDeletedMessage(message) && (
+                                <>
+                                  <button
+                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
+                                    onClick={() => handleEditMessage(message)}
+                                  >
+                                    <FontAwesomeIcon icon={faArrowRotateRight} width={10} className="text-[#5a5a5a]" />
+                                    <span className="text-sm">Sửa tin nhắn</span>
+                                  </button>
+                                  <button
+                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
+                                    onClick={() => handleDeleteMessage(message._id)}
+                                  >
+                                    <FontAwesomeIcon
+                                      icon={faTrash}
+                                      width={10}
+                                      className="text-[#5a5a5a] group-hover:text-red-600"
+                                    />
+                                    <span className="text-sm group-hover:text-red-600">Xóa tin nhắn</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -696,6 +778,7 @@ export default function MessagePage() {
             )}
           </section>
         </div>
+
         {/* Footer: Input send message */}
         <footer className="relative">
           <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
@@ -735,6 +818,20 @@ export default function MessagePage() {
           <input type="file" name="file" id="file" hidden onChange={handleUploadFile} ref={fileInputRef} />
 
           <div className="flex h-[50px] items-center px-3 py-[10px]">
+            {editingMessage && (
+              <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
+                <span>Chỉnh sửa tin nhắn</span>
+                <button
+                  onClick={() => {
+                    setEditingMessage(null);
+                    setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
+                  }}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  Hủy
+                </button>
+              </div>
+            )}
             <input
               type="text"
               placeholder={`Nhập tin nhắn với ${dataUser.name}`}
