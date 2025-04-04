@@ -38,6 +38,7 @@ import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmModal from "./ConfirmModal";
 import RightSidebar from "./RightSidebar";
 import { toast } from "sonner";
+import ReactionDisplay from "./ReactionDisplay";
 
 // Button component
 const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
@@ -407,7 +408,10 @@ export default function MessagePage() {
     });
   };
 
-  const handleRemoveMember = (memberId, memberName) => {
+  const handleRemoveMember = (
+    memberId,
+    memberName, // Only admin can remove members
+  ) => {
     if (!socketConnection || !dataUser.isGroup) return;
 
     // Only admin can remove members
@@ -508,6 +512,24 @@ export default function MessagePage() {
     return patterns.some((pattern) => pattern.test(messageText));
   };
 
+  const handleAddReaction = (messageId, emoji) => {
+    if (!socketConnection) return;
+
+    socketConnection.emit("addReaction", {
+      messageId,
+      conversationId: params.userId,
+      emoji,
+      userId: user._id,
+      isGroup: dataUser.isGroup,
+    });
+
+    setHoveredLikeMessage(null);
+  };
+
+  const handleQuickLike = (messageId) => {
+    handleAddReaction(messageId, "👍");
+  };
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -604,83 +626,100 @@ export default function MessagePage() {
                       </button>
                     )}
                     <div
-                      className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 ${
-                        isCurrentUser ? "bg-[#dbebff] text-[#081b3a]" : "bg-white text-[#081b3a]"
+                      className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 text-[#081b3a] ${
+                        isCurrentUser ? "bg-[#dbebff]" : "bg-white"
                       }`}
                     >
                       {dataUser.isGroup && !isCurrentUser && (
                         <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
                       )}
 
-                      {message.imageUrl && (
-                        <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
-                      )}
-                      {message.fileUrl && (
-                        <div className="flex items-center gap-x-1">
-                          {message.fileUrl.endsWith(".mp4") ||
-                          message.fileUrl.endsWith(".webm") ||
-                          message.fileUrl.endsWith(".ogg") ? (
-                            <video controls className="rounded-[3px] object-contain">
-                              <source src={message.fileUrl} type="video/mp4" />
-                              Your browser does not support the video tag.
-                            </video>
-                          ) : (
-                            <>
-                              <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+                      {isDeletedMessage(message) ? (
+                        // If message is deleted, only show "Tin nhắn đã được xóa" text
+                        <div>
+                          <p className="break-words text-sm italic text-gray-500">Tin nhắn đã được xóa</p>
+                          <p className="mt-1 text-[11px] text-[#00000080]">
+                            {format(new Date(message.createdAt), "HH:mm")}
+                            {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
+                          </p>
+                        </div>
+                      ) : (
+                        // If message is not deleted, show regular content
+                        <>
+                          {message.imageUrl && (
+                            <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
+                          )}
+                          {message.fileUrl && (
+                            <div className="flex items-center gap-x-1">
+                              {message.fileUrl.endsWith(".mp4") ||
+                              message.fileUrl.endsWith(".webm") ||
+                              message.fileUrl.endsWith(".ogg") ? (
+                                <video controls className="rounded-[3px] object-contain">
+                                  <source src={message.fileUrl} type="video/mp4" />
+                                  Your browser does not support the video tag.
+                                </video>
+                              ) : (
+                                <>
+                                  <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+                                  <a
+                                    href={message.fileUrl}
+                                    className="break-words text-sm"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {message.fileName}
+                                  </a>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            {message.text.startsWith("https") ? (
                               <a
-                                href={message.fileUrl}
-                                className="break-words text-sm"
+                                href={message.text}
                                 target="_blank"
                                 rel="noreferrer"
+                                className="text-sm text-blue-500 underline"
                               >
-                                {message.fileName}
+                                {message.text}
                               </a>
-                            </>
+                            ) : (
+                              <p className="break-words text-sm">{message.text}</p>
+                            )}
+                            <p className="mt-1 text-[11px] text-[#00000080]">
+                              {format(new Date(message.createdAt), "HH:mm")}
+                              {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
+                            </p>
+
+                            <ReactionDisplay reactions={message.reactions} currentUserId={user._id} />
+                          </div>
+                        </>
+                      )}
+
+                      {!isDeletedMessage(message) && (
+                        <div
+                          className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
+                          onMouseEnter={() => {
+                            setHoveredLikeMessage(message._id), setHoveredMessage(null);
+                          }}
+                          onMouseLeave={() => setHoveredLikeMessage(null)}
+                          onClick={() => handleQuickLike(message._id)}
+                        >
+                          <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
+
+                          {hoveredLikeMessage === message._id && (
+                            <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-3" : "left-3"}`}>
+                              <EmojiPicker
+                                emojiStyle="apple"
+                                reactionsDefaultOpen={true}
+                                onEmojiClick={(emojiData) => {
+                                  handleAddReaction(message._id, emojiData.emoji);
+                                }}
+                              />
+                            </div>
                           )}
                         </div>
                       )}
-                      <div>
-                        {isDeletedMessage(message) ? (
-                          <p className="break-words text-sm italic text-gray-500">Tin nhắn đã được xóa</p>
-                        ) : message.text.startsWith("https") ? (
-                          <a
-                            href={message.text}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm text-blue-500 underline"
-                          >
-                            {message.text}
-                          </a>
-                        ) : (
-                          <p className="break-words text-sm">{message.text}</p>
-                        )}
-                        <p className="mt-1 text-[11px] text-[#00000080]">
-                          {format(new Date(message.createdAt), "HH:mm")}
-                          {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
-                        </p>
-                      </div>
-
-                      <div
-                        className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
-                        onMouseEnter={() => {
-                          setHoveredLikeMessage(message._id), setHoveredMessage(null);
-                        }}
-                        onMouseLeave={() => setHoveredLikeMessage(null)}
-                      >
-                        <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
-
-                        {hoveredLikeMessage === message._id && (
-                          <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-3" : "left-3"}`}>
-                            <EmojiPicker
-                              emojiStyle="apple"
-                              reactionsDefaultOpen={true}
-                              onEmojiClick={(emojiData) => {
-                                console.log("Chọn emoji:", emojiData.emoji);
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
 
                       {hoveredMessage === message._id && (
                         <div
@@ -724,28 +763,24 @@ export default function MessagePage() {
                               onMouseEnter={() => setOpenActionMessage(true)}
                               onMouseLeave={() => setOpenActionMessage(false)}
                             >
-                              {isCurrentUser && !isDeletedMessage(message) && (
-                                <>
-                                  <button
-                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
-                                    onClick={() => handleEditMessage(message)}
-                                  >
-                                    <FontAwesomeIcon icon={faArrowRotateRight} width={10} className="text-[#5a5a5a]" />
-                                    <span className="text-sm">Sửa tin nhắn</span>
-                                  </button>
-                                  <button
-                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
-                                    onClick={() => handleDeleteMessage(message._id)}
-                                  >
-                                    <FontAwesomeIcon
-                                      icon={faTrash}
-                                      width={10}
-                                      className="text-[#5a5a5a] group-hover:text-red-600"
-                                    />
-                                    <span className="text-sm group-hover:text-red-600">Xóa tin nhắn</span>
-                                  </button>
-                                </>
-                              )}
+                              <button
+                                className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
+                                onClick={() => handleEditMessage(message)}
+                              >
+                                <FontAwesomeIcon icon={faArrowRotateRight} width={10} className="text-[#5a5a5a]" />
+                                <span className="text-sm">Sửa tin nhắn</span>
+                              </button>
+                              <button
+                                className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
+                                onClick={() => handleDeleteMessage(message._id)}
+                              >
+                                <FontAwesomeIcon
+                                  icon={faTrash}
+                                  width={10}
+                                  className="text-[#5a5a5a] group-hover:text-red-600"
+                                />
+                                <span className="text-sm group-hover:text-red-600">Xóa tin nhắn</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -783,8 +818,22 @@ export default function MessagePage() {
         <footer className="relative">
           <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
             <Button title="Gửi Sticker" icon={faFaceLaughSquint} width={20} handleOnClick={() => setOpenEmoji(true)} />
-            <Button title="Gửi hình ảnh" icon={faImage} width={20} isUpload id="image" />
-            <Button title="Gửi kèm File" icon={faFolderClosed} width={20} isUpload id="file" />
+            <Button
+              title="Gửi hình ảnh"
+              icon={faImage}
+              width={20}
+              isUpload
+              id="image"
+              handleOnClick={handleUploadFile}
+            />
+            <Button
+              title="Gửi kèm File"
+              icon={faFolderClosed}
+              width={20}
+              isUpload
+              id="file"
+              handleOnClick={handleUploadFile}
+            />
             <Button title="Gửi danh thiếp" icon={faAddressCard} width={20} handleOnClick={commingSoon} />
             <Button title="Chụp kèm với cửa sổ Z" icon={faCamera} width={20} handleOnClick={commingSoon} />
             <Button title="Định dạng tin nhắn" icon={faFilePen} width={20} handleOnClick={commingSoon} />
@@ -816,7 +865,6 @@ export default function MessagePage() {
             ref={imageInputRef}
           />
           <input type="file" name="file" id="file" hidden onChange={handleUploadFile} ref={fileInputRef} />
-
           <div className="flex h-[50px] items-center px-3 py-[10px]">
             {editingMessage && (
               <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">

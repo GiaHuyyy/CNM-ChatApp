@@ -915,7 +915,7 @@ io.on("connection", async (socket) => {
       }
     });
 
-    // Delete message (soft delete)
+    // Delete message (soft delete with content replacement)
     socket.on("deleteMessage", async (data) => {
       try {
         const { messageId, conversationId, userId, isGroup } = data;
@@ -932,29 +932,60 @@ io.on("connection", async (socket) => {
           return socket.emit("error", { message: "Bạn không có quyền xóa tin nhắn này" });
         }
 
-        // Soft delete - mark as deleted but keep in database
+        // Soft delete - keep the message but replace its content
         await MessageModel.findByIdAndUpdate(messageId, {
+          text: "Tin nhắn đã được xóa",
+          imageUrl: "",
+          fileUrl: "",
+          fileName: "",
           isDeleted: true,
+          // Keep reactions, timestamps, and other metadata
         });
+
+        // No need to remove from conversation - we're keeping the message
 
         // Retrieve updated conversation
         let updatedConversation;
+
         if (isGroup) {
+          // For group chats, find by ID directly without using query with members array
           updatedConversation = await ConversationModel.findById(conversationId)
             .populate("messages")
             .populate("members")
             .populate("groupAdmin");
 
-          // Notify all group members
-          for (const memberId of updatedConversation.members) {
-            const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
-            io.to(memberIdStr).emit("groupMessage", updatedConversation);
+          if (!updatedConversation) {
+            console.error("Group conversation not found:", conversationId);
+            return socket.emit("error", { message: "Không tìm thấy cuộc trò chuyện nhóm" });
+          }
+
+          // Extract member IDs safely
+          const memberIds = [];
+
+          if (updatedConversation.members && Array.isArray(updatedConversation.members)) {
+            for (const member of updatedConversation.members) {
+              if (member) {
+                let memberId;
+                if (typeof member === "object") {
+                  memberId = member._id ? member._id.toString() : member.toString();
+                } else {
+                  memberId = member.toString();
+                }
+                memberIds.push(memberId);
+              }
+            }
+          }
+
+          // Notify all group members using the clean IDs
+          for (const memberId of memberIds) {
+            io.to(memberId).emit("groupMessage", updatedConversation);
 
             // Update sidebar for all members
-            const memberConversations = await getConversation(memberIdStr);
-            io.to(memberIdStr).emit("conversation", memberConversations);
+            const memberConversations = await getConversation(memberId);
+            io.to(memberId).emit("conversation", memberConversations);
           }
         } else {
+          // Non-group chat logic remains unchanged
           updatedConversation = await ConversationModel.findOne({
             $or: [
               { _id: conversationId },
@@ -1010,22 +1041,46 @@ io.on("connection", async (socket) => {
 
         // Retrieve updated conversation
         let updatedConversation;
+
         if (isGroup) {
+          // For group chats, find by ID directly without querying by members
           updatedConversation = await ConversationModel.findById(conversationId)
             .populate("messages")
             .populate("members")
             .populate("groupAdmin");
 
-          // Notify all group members
-          for (const memberId of updatedConversation.members) {
-            const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
-            io.to(memberIdStr).emit("groupMessage", updatedConversation);
+          if (!updatedConversation) {
+            console.error("Group conversation not found:", conversationId);
+            return socket.emit("error", { message: "Không tìm thấy cuộc trò chuyện nhóm" });
+          }
+
+          // Extract member IDs safely
+          const memberIds = [];
+
+          if (updatedConversation.members && Array.isArray(updatedConversation.members)) {
+            for (const member of updatedConversation.members) {
+              if (member) {
+                let memberId;
+                if (typeof member === "object") {
+                  memberId = member._id ? member._id.toString() : member.toString();
+                } else {
+                  memberId = member.toString();
+                }
+                memberIds.push(memberId);
+              }
+            }
+          }
+
+          // Notify all group members using the clean IDs
+          for (const memberId of memberIds) {
+            io.to(memberId).emit("groupMessage", updatedConversation);
 
             // Update sidebar for all members
-            const memberConversations = await getConversation(memberIdStr);
-            io.to(memberIdStr).emit("conversation", memberConversations);
+            const memberConversations = await getConversation(memberId);
+            io.to(memberId).emit("conversation", memberConversations);
           }
         } else {
+          // Non-group chat logic remains unchanged
           updatedConversation = await ConversationModel.findOne({
             $or: [
               { _id: conversationId },
@@ -1053,6 +1108,88 @@ io.on("connection", async (socket) => {
       } catch (error) {
         console.error("Error editing message:", error);
         socket.emit("error", { message: "Có lỗi xảy ra khi sửa tin nhắn" });
+      }
+    });
+
+    // Add reaction to message
+    socket.on("addReaction", async (data) => {
+      try {
+        const { messageId, conversationId, emoji, userId, isGroup } = data;
+
+        // Find the message
+        const message = await MessageModel.findById(messageId);
+
+        if (!message) {
+          return socket.emit("error", { message: "Tin nhắn không tồn tại" });
+        }
+
+        // Get user's name for displaying in reaction
+        const user = await UserModel.findById(userId);
+
+        if (!user) {
+          return socket.emit("error", { message: "Người dùng không tồn tại" });
+        }
+
+        // Check if user has already reacted with this emoji
+        const existingReactionIndex = message.reactions?.findIndex(
+          (reaction) => reaction.userId.toString() === userId.toString() && reaction.emoji === emoji
+        );
+
+        if (existingReactionIndex !== -1) {
+          // Remove the reaction if it already exists (toggle behavior)
+          message.reactions.splice(existingReactionIndex, 1);
+        } else {
+          // Add the new reaction
+          if (!message.reactions) {
+            message.reactions = [];
+          }
+
+          message.reactions.push({
+            emoji,
+            userId,
+            userName: user.name,
+          });
+        }
+
+        // Save the updated message
+        await message.save();
+
+        // Retrieve updated conversation
+        let updatedConversation;
+        if (isGroup) {
+          updatedConversation = await ConversationModel.findById(conversationId)
+            .populate("messages")
+            .populate("members")
+            .populate("groupAdmin");
+
+          // Notify all group members
+          for (const memberId of updatedConversation.members) {
+            const memberIdStr =
+              typeof memberId === "object" ? (memberId._id ? memberId._id.toString() : memberId.toString()) : memberId;
+
+            io.to(memberIdStr).emit("groupMessage", updatedConversation);
+          }
+        } else {
+          updatedConversation = await ConversationModel.findOne({
+            $or: [
+              { _id: conversationId },
+              { $and: [{ sender: userId }, { receiver: conversationId }] },
+              { $and: [{ sender: conversationId }, { receiver: userId }] },
+            ],
+          }).populate("messages");
+
+          const senderStr = updatedConversation.sender.toString();
+          const receiverStr = updatedConversation.receiver.toString();
+
+          // Emit updated conversation to both users
+          io.to(senderStr).emit("message", updatedConversation);
+          io.to(receiverStr).emit("message", updatedConversation);
+        }
+
+        socket.emit("reactionAdded", { success: true });
+      } catch (error) {
+        console.error("Error adding reaction:", error);
+        socket.emit("error", { message: "Có lỗi xảy ra khi thêm cảm xúc" });
       }
     });
 
