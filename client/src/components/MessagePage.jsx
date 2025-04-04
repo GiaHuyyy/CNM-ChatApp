@@ -371,6 +371,8 @@ export default function MessagePage() {
         ? "Bạn có chắc chắn muốn xóa nhóm chat này? Thao tác này không thể hoàn tác."
         : "Bạn có chắc chắn muốn xóa lịch sử trò chuyện này? Thao tác này không thể hoàn tác.",
       action: () => {
+        console.log("Deleting conversation:", params.userId, user._id); // debugging
+
         // Extract clean user ID
         const cleanUserId = typeof user._id === "object" ? user._id.toString() : user._id;
 

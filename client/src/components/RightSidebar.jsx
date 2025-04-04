@@ -152,7 +152,6 @@ export default function RightSidebar({
   onLeaveGroup,
   onDeleteConversation,
   onRemoveMember,
-  onContextMenuChange,
   showContextMenu,
   setShowContextMenu,
 }) {
@@ -160,7 +159,6 @@ export default function RightSidebar({
 
   const handleContextMenuChange = (menu) => {
     setShowContextMenu(menu);
-    if (onContextMenuChange) onContextMenuChange(menu);
   };
 
   const handleOpenArchive = (tab) => {
@@ -294,7 +292,13 @@ export default function RightSidebar({
           <div className="mt-2 flex flex-col items-center bg-white">
             <button
               className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
-              onClick={user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? onLeaveGroup : onDeleteConversation}
+              onClick={() => {
+                if (dataUser.isGroup && user._id !== dataUser.groupAdmin?._id) {
+                  onLeaveGroup();
+                } else {
+                  onDeleteConversation();
+                }
+              }}
             >
               {user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? (
                 <>
@@ -391,5 +395,6 @@ RightSidebar.propTypes = {
   onLeaveGroup: PropTypes.func.isRequired,
   onDeleteConversation: PropTypes.func.isRequired,
   onRemoveMember: PropTypes.func.isRequired,
-  onContextMenuChange: PropTypes.func,
+  showContextMenu: PropTypes.string.isRequired,
+  setShowContextMenu: PropTypes.func.isRequired,
 };
