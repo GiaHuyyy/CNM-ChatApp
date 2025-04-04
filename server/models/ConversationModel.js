@@ -41,6 +41,16 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    reactions: [
+      {
+        emoji: String,
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        userName: String,
+      },
+    ],
   },
   {
     timestamps: true,
