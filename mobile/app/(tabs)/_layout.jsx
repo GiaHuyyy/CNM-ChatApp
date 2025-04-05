@@ -66,6 +66,20 @@ const TabsLayout = () => {
           tabBarIcon: ({ focused }) => <TabIcon Icon={Icons.Explore} name="Profile" focused={focused} />,
         }}
       />
+      <Tabs.Screen
+        name="contact"
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={Icons.Explore} name="Contact" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="story"
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={Icons.Explore} name="Story" focused={focused} />,
+        }}
+      />
     </Tabs>
   );
 };
