@@ -43,27 +43,57 @@ export default function Home() {
       auth: {
         token: localStorage.getItem("token"),
       },
+      // Add reconnection options
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    // Add connection status logging
+    socketConnection.on("connect", () => {
+      console.log("Socket connection established successfully:", socketConnection.id);
+
+      // Check if there's a conversation ID in the URL to join immediately
+      const currentPath = location.pathname;
+      const conversationId = currentPath.substring(1); // Remove the leading slash
+
+      if (conversationId && conversationId !== "") {
+        console.log("Immediately joining room on connect:", conversationId);
+        socketConnection.emit("joinRoom", conversationId);
+      }
     });
 
     socketConnection.on("onlineUser", (data) => {
       console.log("Online user: ", data);
       dispatch(setOnlineUser(data));
     });
-    console.log("Socket connection: ", socketConnection);
-    // Save socket connection to global context
+
+    console.log("Socket connection initialized");
+
+    // Save socket to global context
     setSocketConnection(socketConnection);
 
+    // Also save to window for access during page reloads
+    window.socketConnection = socketConnection;
+
+    // Dispatch event for other components to know socket is ready
+    window.dispatchEvent(
+      new CustomEvent("socketConnected", {
+        detail: { socket: socketConnection },
+      }),
+    );
+
     return () => {
+      console.log("Disconnecting socket");
       socketConnection.disconnect();
+      window.socketConnection = null;
     };
-  }, [dispatch, setSocketConnection]);
+  }, [dispatch, setSocketConnection, location.pathname]);
 
   const basePath = location.pathname === "/";
 
   const handleGroupCreated = (conversationId) => {
-
     console.log("Group created with ID:", conversationId);
-    
   };
 
   return (

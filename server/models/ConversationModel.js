@@ -51,6 +51,20 @@ const messageSchema = new mongoose.Schema(
         userName: String,
       },
     ],
+    callData: {
+      callType: {
+        type: String,
+        enum: ["audio", "video"],
+      },
+      callStatus: {
+        type: String,
+        enum: ["missed", "answered", "rejected", "completed"],
+      },
+      callDuration: {
+        type: Number,
+        default: 0,
+      },
+    },
   },
   {
     timestamps: true,
