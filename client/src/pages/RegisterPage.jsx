@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import {
   faEye,
   faEyeSlash,
@@ -13,7 +13,6 @@ import uploadFileToCloud from "../helpers/uploadFileToClound";
 import axios from "axios";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
-import firebase from "../helpers/firebase";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -70,13 +69,103 @@ export default function RegisterPage() {
     e.preventDefault();
     setUploadPhoto("");
     if (fileInputRef.current) {
-      fileInputRef.current.value = null; // Đặt lại giá trị của input file để có thể chọn lại cùng 1 file
+      fileInputRef.current.value = null;
+    }
+  };
+
+  const [phoneVerificationStep, setPhoneVerificationStep] = useState("initial");
+  const [otpCode, setOtpCode] = useState("");
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [mockOtp, setMockOtp] = useState("");
+
+  const handleSendOtp = async () => {
+    if (!data.phone) {
+      toast.error("Vui lòng nhập số điện thoại");
+      return;
+    }
+
+    setVerificationLoading(true);
+    setVerificationError("");
+
+    try {
+      // Call our server endpoint to send OTP
+      const response = await axios.post(`${import.meta.env.VITE_APP_BACKEND_URL}/api/send-otp`, { phone: data.phone });
+
+      if (response.data.success) {
+        // Show fallback OTP in all environments for this demo/development app
+        if (response.data.otp) {
+          setMockOtp(response.data.otp);
+          console.log("Your OTP is:", response.data.otp);
+
+          // Add this to display the OTP directly in the UI for easier testing
+          toast.info(`Mã OTP của bạn là: ${response.data.otp}`, {
+            duration: 10000, // 10 seconds to give time to read it
+          });
+        }
+
+        toast.success("Mã OTP đã được gửi đến số điện thoại của bạn");
+        setPhoneVerificationStep("sent");
+      } else {
+        throw new Error(response.data.message || "Không thể gửi mã OTP");
+      }
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      setVerificationError(error.response?.data?.message || "Có lỗi xảy ra khi gửi OTP");
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra khi gửi OTP");
+
+      // If there's an OTP in the error response, use it as fallback
+      if (error.response?.data?.otp) {
+        setMockOtp(error.response.data.otp);
+        setPhoneVerificationStep("sent");
+        toast.info(`Fallback OTP: ${error.response.data.otp}`, {
+          duration: 10000,
+        });
+      }
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode) {
+      toast.error("Vui lòng nhập mã OTP");
+      return;
+    }
+
+    setVerificationLoading(true);
+    setVerificationError("");
+
+    try {
+      // Call our server endpoint to verify OTP
+      const response = await axios.post(`${import.meta.env.VITE_APP_BACKEND_URL}/api/verify-otp`, {
+        phone: data.phone,
+        code: otpCode,
+      });
+
+      if (response.data.success) {
+        toast.success("Xác thực thành công");
+        setPhoneVerificationStep("verified");
+      } else {
+        throw new Error(response.data.message || "Mã OTP không đúng");
+      }
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      setVerificationError(error.response?.data?.message || "Có lỗi xảy ra khi xác thực OTP");
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra khi xác thực OTP");
+    } finally {
+      setVerificationLoading(false);
     }
   };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (data.password !== data.confirmPassword) {
+      toast.error("Mật khẩu và xác nhận mật khẩu không khớp");
+      return;
+    }
 
     try {
       let profilePicUrl = "";
@@ -110,130 +199,7 @@ export default function RegisterPage() {
       }
     } catch (error) {
       console.log("Error: " + error);
-    }
-  };
-
-  // Send OTP Firebase
-  const [phoneNumber, setPhoneNumber] = useState("+1 650-555-1234");
-  const [otp, setOtp] = useState("123456");
-  const [loading, setLoading] = useState(false);
-  const [recaptchaVerified, setRecaptchaVerified] = useState(false);
-
-  const setupRecaptcha = () => {
-    if (window.recaptchaVerifier) {
-      window.recaptchaVerifier.clear();
-    }
-
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptcha-container", {
-      size: "normal", // Changed from "invisible" to "normal" to make it visible
-      callback: () => {
-        // This will be called when user successfully solves the captcha
-        setRecaptchaVerified(true);
-        console.log("reCAPTCHA verified by user");
-      },
-      "expired-callback": () => {
-        // Reset when expired
-        setRecaptchaVerified(false);
-        console.log("reCAPTCHA expired");
-      },
-    });
-
-    // Render the reCAPTCHA widget
-    window.recaptchaVerifier.render();
-  };
-
-  useEffect(() => {
-    try {
-      setupRecaptcha();
-    } catch (error) {
-      console.error("Error setting up reCAPTCHA:", error);
-    }
-
-    return () => {
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (error) {
-          console.error("Error clearing reCAPTCHA:", error);
-        }
-      }
-    };
-  }, []);
-
-  const handleSendOtp = async () => {
-    if (!phoneNumber) {
-      alert("Vui lòng nhập số điện thoại");
-      return;
-    }
-
-    if (!recaptchaVerified) {
-      alert("Vui lòng xác nhận reCAPTCHA trước khi gửi OTP");
-      return;
-    }
-
-    setLoading(true);
-
-    // Format phone number to E.164 format if needed
-    // let formattedPhone = phoneNumber;
-    // if (!phoneNumber.startsWith("+")) {
-    //   formattedPhone = `+84${phoneNumber.replace(/^0/, "")}`;
-    // }
-
-    const appVerifier = window.recaptchaVerifier;
-
-    try {
-      const confirmationResult = await firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier);
-      window.confirmationResult = confirmationResult;
-      // alert("OTP đã được gửi");
-      toast.success("OTP đã được gửi");
-    } catch (error) {
-      console.error("Error sending OTP:", error);
-
-      // Special handling for billing-not-enabled error
-      if (error.code === "auth/billing-not-enabled") {
-        alert(
-          `Lỗi: Tính năng xác thực qua SMS chưa được kích hoạt. Cần kích hoạt thanh toán trên Firebase Console để sử dụng tính năng này.`,
-        );
-      } else {
-        // alert(`Có lỗi xảy ra: ${error.message}`);
-        toast.error(`Có lỗi xảy ra: ${error.message}`);
-      }
-
-      // Reset reCAPTCHA on error
-      setupRecaptcha();
-      setRecaptchaVerified(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e) => {
-    if (!otp) {
-      // alert("Vui lòng nhập mã OTP");
-      toast.error("Vui lòng nhập mã OTP");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const confirmationResult = window.confirmationResult;
-      if (!confirmationResult) {
-        alert("Vui lòng gửi OTP trước");
-        setLoading(false);
-        return;
-      }
-
-      await confirmationResult.confirm(otp);
-      await handleRegister(e);
-      // alert("Xác thực thành công");
-      toast.success("Xác thực thành công");
-    } catch (error) {
-      console.error("Error verifying OTP:", error);
-      // alert(`Có lỗi xảy ra: ${error.message}`);
-      toast.error(`Có lỗi xảy ra: ${error.message}`);
-    } finally {
-      setLoading(false);
+      toast.error("Đăng ký thất bại: " + error.message);
     }
   };
 
@@ -331,65 +297,76 @@ export default function RegisterPage() {
           />
         </div>
 
-        {/* Firebase OPT*/}
-        <div className="flex flex-col items-center justify-center gap-3 py-4">
-          {/* <h2 className="text-xl font-bold">Xác thực OTP</h2>
-        <input
-          type="text"
-          placeholder="Nhập số điện thoại"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
-          disabled={loading}
-          className="w-full max-w-xs rounded border p-2"
-        /> */}
+        <div className="mt-4 flex flex-col items-center justify-center gap-3 border-t border-gray-200 py-4">
+          <h3 className="text-sm font-semibold">Xác thực số điện thoại</h3>
 
-          {/* reCAPTCHA container with clear styling */}
-          <div className="my-3 flex justify-center">
-            <div id="recaptcha-container" className="rounded border border-gray-200 p-1"></div>
-          </div>
+          {phoneVerificationStep === "initial" && (
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={verificationLoading || !data.phone}
+              className={`w-full rounded p-2 text-white ${
+                data.phone ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-400"
+              }`}
+            >
+              {verificationLoading ? "Đang gửi..." : "Gửi mã OTP"}
+            </button>
+          )}
 
-          <div className="flex items-center gap-2">
-            {recaptchaVerified && <span className="text-sm text-green-500">✓ Đã xác thực reCAPTCHA</span>}
-          </div>
+          {phoneVerificationStep === "sent" && (
+            <div className="w-full">
+              <div className="mb-2 flex items-center">
+                <input
+                  type="text"
+                  placeholder="Nhập mã OTP"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  className="flex-1 rounded border border-gray-300 p-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={verificationLoading}
+                  className="ml-2 rounded bg-gray-200 p-2 text-xs hover:bg-gray-300"
+                >
+                  Gửi lại
+                </button>
+              </div>
 
-          {/* Information about Firebase phone auth requirement */}
-          <div className="mb-2 w-full max-w-xs text-center text-xs text-orange-600">
-            <p>Lưu ý: Xác thực qua SMS yêu cầu kích hoạt thanh toán trên Firebase.</p>
-          </div>
+              {import.meta.env.DEV && mockOtp && (
+                <div className="mb-2 rounded bg-yellow-100 p-2 text-center text-xs text-yellow-800">
+                  DEV MODE: Mã OTP của bạn là <strong>{mockOtp}</strong>
+                </div>
+              )}
 
-          <button
-            type="button"
-            onClick={handleSendOtp}
-            disabled={loading || !recaptchaVerified}
-            className={`w-full max-w-xs rounded p-2 text-white ${recaptchaVerified ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-400"}`}
-          >
-            {loading ? "Đang xử lý..." : "Gửi OTP"}
-          </button>
+              {verificationError && <div className="mb-2 text-xs text-red-500">{verificationError}</div>}
 
-          <input
-            type="text"
-            placeholder="Xác thực OTP"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            disabled={loading}
-            className="w-full max-w-xs rounded border p-2"
-          />
+              <button
+                type="button"
+                onClick={handleVerifyOtp}
+                disabled={verificationLoading || !otpCode}
+                className={`w-full rounded p-2 text-white ${
+                  otpCode ? "bg-green-500 hover:bg-green-600" : "bg-gray-400"
+                }`}
+              >
+                {verificationLoading ? "Đang xác thực..." : "Xác thực OTP"}
+              </button>
+            </div>
+          )}
 
-          <button
-            type="button"
-            onClick={handleVerifyOtp}
-            disabled={loading}
-            className="w-full max-w-xs rounded bg-green-500 p-2 text-white hover:bg-green-600"
-          >
-            {loading ? "Đang xử lý..." : "Đăng ký"}
-          </button>
+          {phoneVerificationStep === "verified" && (
+            <div className="flex w-full items-center rounded bg-green-100 p-2">
+              <span className="text-sm text-green-700">✓ Số điện thoại đã được xác thực</span>
+            </div>
+          )}
         </div>
 
         <button
-          className="h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white"
-          disabled={loading || !recaptchaVerified}
+          type="submit"
+          className="mt-4 h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white disabled:bg-gray-400"
+          disabled={verificationLoading}
         >
-          {loading ? "Đang xử lý..." : "Đăng ký"}
+          {verificationLoading ? "Đang xử lý..." : "Đăng ký"}
         </button>
       </form>
     </div>
