@@ -1,12 +1,12 @@
 import axios from "axios";
 import { useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { logout, setOnlineUser, setUser } from "../redux/userSlice";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import io from "socket.io-client";
 import { toast } from "sonner";
 import Sidebar from "../components/Sidebar";
-import io from "socket.io-client";
 import { useGlobalContext } from "../context/GlobalProvider";
+import { logout, setOnlineUser, setUser } from "../redux/userSlice";
 
 export default function Home() {
   const dispatch = useDispatch();
