@@ -1,56 +1,33 @@
 const express = require("express");
-const OTPModel = require("../models/OTPModel"); // Add this import at the top
+const OTPModel = require("../models/OTPModel");
 const registerUser = require("../controller/registerUser");
-const checkPhone = require("../controller/checkPhone");
-const checkPassword = require("../controller/checkPassword");
 const loginUser = require("../controller/loginUser");
 const userDetails = require("../controller/userDetails");
 const updateUserDetails = require("../controller/updateUserDetails");
 const logout = require("../controller/logout");
 const searchUser = require("../controller/searchUser");
-const searchFriendUser = require("../controller/searchFriendUser");
-const { sendOtp } = require("../controller/sendOtp"); // Updated import
+const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
+const forgotPassword = require("../controller/forgotPassword");
+const resetPassword = require("../controller/resetPassword");
 
 const router = express.Router();
 
-// Create user api
+// Authentication routes
 router.post("/register", registerUser);
-
-// Check user phone
-router.post("/phone", checkPhone);
-
-// Check user password (Login)
-router.post("/password", checkPassword);
-
-// Login user with phone and password
 router.post("/login", loginUser);
+router.get("/logout", logout);
 
-// Get user details
+// User management routes
 router.get("/user-details", userDetails);
-
-// Update user details
 router.post("/update-user", updateUserDetails);
-
-// Search user
 router.post("/search-user", searchUser);
-
-// Search Friend & User
-router.post("/search-friend-user", searchFriendUser);
 
 // OTP routes
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);
 
-// Registration and Login routes
-router.post("/register", registerUser);
-router.post("/login", loginUser);
-
-// Logout user
-router.get("/logout", logout);
-
-// Temporary route to check OTPs (remove in production)
-// Debug route to check stored OTPs
+// Debug route
 router.get("/debug/otps", async (req, res) => {
   try {
     const otps = await OTPModel.find({});
@@ -65,5 +42,9 @@ router.get("/debug/otps", async (req, res) => {
     });
   }
 });
+
+// Password reset routes
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

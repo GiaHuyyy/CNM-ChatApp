@@ -32,7 +32,7 @@ paths:
               properties:
                 email:
                   type: string
-                  example: "bewchan06@gmail.com"
+                  example: "baotran.060103@gmail.com"
       responses:
         '200':
           description: OTP sent successfully
@@ -47,6 +47,9 @@ paths:
                   message:
                     type: string
                     example: "OTP sent successfully"
+                  email:
+                    type: string
+                    example: "baotran.060103@gmail.com"
 
   /api/verify-otp:
     post:
@@ -65,7 +68,7 @@ paths:
               properties:
                 email:
                   type: string
-                  example: "bewchan06@gmail.com"
+                  example: "baotran.060103@gmail.com"
                 otp:
                   type: string
                   example: "123456"
@@ -82,23 +85,7 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: "OTP verified successfully"
-        '400':
-          description: Invalid OTP
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  message:
-                    type: string
-                    example: "Invalid OTP or OTP expired"
-                  error:
-                    type: boolean
-                    example: true
+                    example: "Xác thực thành công"
 
   /api/register:
     post:
@@ -112,24 +99,20 @@ paths:
             schema:
               type: object
               required:
-                - phone
                 - email
                 - password
                 - name
                 - otp
               properties:
-                phone:
-                  type: string
-                  example: "0123456789"
                 email:
                   type: string
-                  example: "bewchan06@gmail.com"
+                  example: "baotran.060103@gmail.com"
                 password:
                   type: string
-                  example: "yourpassword"
+                  example: "1111"
                 name:
                   type: string
-                  example: "John Doe"
+                  example: "bewchan06"
                 profilePic:
                   type: string
                   example: "https://example.com/profile.jpg"
@@ -149,34 +132,16 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: "User registered successfully"
+                    example: "Đăng ký thành công"
                   data:
                     type: object
                     properties:
-                      phone:
-                        type: string
                       email:
                         type: string
                       name:
                         type: string
                       profilePic:
                         type: string
-        '400':
-          description: Registration failed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  message:
-                    type: string
-                    example: "Invalid OTP or OTP expired"
-                  error:
-                    type: boolean
-                    example: true
 
   /api/login:
     post:
@@ -190,15 +155,15 @@ paths:
             schema:
               type: object
               required:
-                - phone
+                - email
                 - password
               properties:
-                phone:
+                email:
                   type: string
-                  example: "0123456789"
+                  example: "baotran.060103@gmail.com"
                 password:
                   type: string
-                  example: "yourpassword"
+                  example: "1111"
       responses:
         '200':
           description: Login successful
@@ -207,86 +172,14 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   message:
                     type: string
-                    example: "Login successful"
+                    example: "Đăng nhập thành công"
                   token:
                     type: string
-                  success:
-                    type: boolean
-                    example: true
-        '400':
-          description: Invalid credentials
-
-  /api/send-otp:
-    post:
-      tags:
-        - Authentication
-      summary: Send OTP to email
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-              properties:
-                email:
-                  type: string
-                  example: "baotran.060103@gmail.com"
-
-  /api/verify-otp:
-    post:
-      tags:
-        - Authentication
-      summary: Verify OTP code
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - otp
-              properties:
-                email:
-                  type: string
-                  example: "baotran.060103@gmail.com"
-                otp:
-                  type: string
-                  example: "210424"
-      responses:
-        '200':
-          description: OTP verified successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Xác thực thành công"
-        '400':
-          description: Invalid OTP
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: false
-                  message:
-                    type: string
-                    example: "Invalid OTP or OTP expired"
-                  error:
-                    type: boolean
-                    example: true
 
   /api/user-details:
     get:
@@ -309,58 +202,12 @@ paths:
                   user:
                     type: object
                     properties:
-                      phone:
-                        type: string
                       email:
                         type: string
                       name:
                         type: string
                       profilePic:
                         type: string
-        '401':
-          description: Unauthorized
-
-  /api/search-user:
-    post:
-      tags:
-        - User
-      summary: Search user by phone number
-      security:
-        - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - phone
-              properties:
-                phone:
-                  type: string
-                  example: "0123456789"
-      responses:
-        '200':
-          description: User found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  user:
-                    type: object
-                    properties:
-                      phone:
-                        type: string
-                      name:
-                        type: string
-                      profilePic:
-                        type: string
-        '404':
-          description: User not found
 
   /api/logout:
     get:
@@ -382,4 +229,76 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: "Logged out successfully"
+                    example: "Đăng xuất thành công"
+
+  /api/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Send password reset OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP đã được gửi đến email của bạn"
+
+  /api/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+                - newPassword
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                otp:
+                  type: string
+                  example: "123456"
+                newPassword:
+                  type: string
+                  example: "newpassword123"
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Mật khẩu đã được cập nhật thành công"
