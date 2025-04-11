@@ -1,56 +1,47 @@
 const UserModel = require("../models/UserModel");
 const bcryptjs = require("bcryptjs");
-const OTPModel = require("../models/OTPModel");
 
 async function registerUser(request, response) {
   try {
-    const { phone, email, password, name, profilePic, otp } = request.body;
+    const { email, password, name, profilePic, otp } = request.body;
 
-    // Verify OTP first
-    const validOTP = await OTPModel.findOne({ email, otp });
-    if (!validOTP) {
-      return response.status(400).json({ 
-        message: "Invalid OTP or OTP expired", 
-        error: true 
+    // Check if user already exists
+    const existingUser = await UserModel.findOne({ email });
+    if (existingUser) {
+      return response.status(400).json({
+        success: false,
+        message: "Email đã tồn tại",
+        error: true
       });
     }
 
-    const checkPhone = await UserModel.findOne({ phone });
-    if (checkPhone) {
-      return response.status(400).json({ message: "Phone number already exists", error: true });
-    }
+    // Hash password
+    const hashedPassword = await bcryptjs.hash(password, 10);
 
-    const checkEmail = await UserModel.findOne({ email });
-    if (checkEmail) {
-      return response.status(400).json({ message: "Email already exists", error: true });
-    }
-
-    const salt = await bcryptjs.genSalt(10);
-    const hashPassword = await bcryptjs.hash(password, salt);
-
-    const payload = {
-      phone,
+    // Create new user
+    const newUser = new UserModel({
       email,
-      password: hashPassword,
+      password: hashedPassword,
       name,
-      profilePic,
-    };
+      profilePic: profilePic || ""
+    });
 
-    const user = new UserModel(payload);
-    const userSave = await user.save();
+    await newUser.save();
 
-    // Delete the OTP after successful registration
-    await OTPModel.deleteOne({ email, otp });
-
-    return response.status(201).json({ 
-      message: "User registered successfully", 
-      data: userSave, 
-      success: true 
+    response.status(201).json({
+      success: true,
+      message: "Đăng ký thành công",
+      data: {
+        email: newUser.email,
+        name: newUser.name,
+        profilePic: newUser.profilePic
+      }
     });
   } catch (error) {
-    response.status(500).json({ 
-      message: error.message || "Internal server error", 
-      error: true 
+    response.status(500).json({
+      success: false,
+      message: "Đăng ký thất bại",
+      error: true
     });
   }
 }
