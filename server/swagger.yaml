@@ -1,0 +1,297 @@
+openapi: 3.0.0
+info:
+  title: Chat App API
+  description: API documentation for Chat Application
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+paths:
+  /api/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - email
+                - password
+                - name
+              properties:
+                phone:
+                  type: string
+                  example: "0123456789"
+                email:
+                  type: string
+                  example: "bewchan06@gmail.com"
+                password:
+                  type: string
+                  example: "yourpassword"
+                name:
+                  type: string
+                  example: "John Doe"
+                profilePic:
+                  type: string
+                  example: "https://example.com/profile.jpg"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User registered successfully"
+                  data:
+                    type: object
+                    properties:
+                      phone:
+                        type: string
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      profilePic:
+                        type: string
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User already exists"
+                  error:
+                    type: boolean
+                    example: true
+
+  /api/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - password
+              properties:
+                phone:
+                  type: string
+                  example: "0123456789"
+                password:
+                  type: string
+                  example: "yourpassword"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+                  token:
+                    type: string
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid credentials
+
+  /api/send-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Send OTP to email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "bewchan06@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Mã OTP đã được gửi đến email của bạn"
+                  email:
+                    type: string
+                    example: "bewchan06@gmail.com"
+        '400':
+          description: Invalid email
+
+  /api/verify-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Verify OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - code
+              properties:
+                email:
+                  type: string
+                  example: "bewchan06@gmail.com"
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Xác thực thành công"
+
+  /api/user-details:
+    get:
+      tags:
+        - User
+      summary: Get current user details
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    type: object
+                    properties:
+                      phone:
+                        type: string
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      profilePic:
+                        type: string
+        '401':
+          description: Unauthorized
+
+  /api/search-user:
+    post:
+      tags:
+        - User
+      summary: Search user by phone number
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  example: "0123456789"
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    type: object
+                    properties:
+                      phone:
+                        type: string
+                      name:
+                        type: string
+                      profilePic:
+                        type: string
+        '404':
+          description: User not found
+
+  /api/logout:
+    get:
+      tags:
+        - Authentication
+      summary: Logout user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Logged out successfully"
