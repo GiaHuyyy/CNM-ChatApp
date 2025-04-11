@@ -5,45 +5,41 @@ import HeaderOfSignIn from "../../components/HeaderOfSignIn";
 import { View, Text, TextInput, TouchableOpacity } from "react-native";
 
 export default function SignIn() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isPhoneInputFocused, setIsPhoneInputFocused] = useState(false);
+  const [isEmailInputFocused, setIsEmailInputFocused] = useState(false);
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
 
   const handlePasswordVisibilityToggle = () => {
     setIsPasswordVisible((prevState) => !prevState);
   };
 
-  const handlePhoneNumberChange = (text) => {
-    // Kiểm tra chỉ cho phép nhập số và giới hạn số lượng ký tự là 10
-    const formattedText = text.replace(/[^0-9]/g, "").slice(0, 10);
-    setPhoneNumber(formattedText);
-  };
-
   return (
     <View className="flex-1 bg-white">
-      {/* Sử dụng HeaderOfSignIn với tiêu đề "Đăng nhập" */}
+      {/* Header */}
       <HeaderOfSignIn title="Đăng nhập" />
 
-      {/* Dòng chữ thông báo dưới header */}
+      {/* Thông báo dưới header */}
       <View className="bg-[#f8f4f4] p-4">
         <Text className="text-black">
-          Vui lòng nhập số điện thoại và mật khẩu để đăng nhập
+          Vui lòng nhập email và mật khẩu để đăng nhập
         </Text>
       </View>
 
-      {/* Nội dung SignIn */}
+      {/* Nội dung chính */}
       <View className="flex-1 mt-10 items-center px-6">
-        {/* Input Số điện thoại */}
+        {/* Input Email */}
         <TextInput
-          value={phoneNumber}
-          onChangeText={handlePhoneNumberChange} // Sử dụng hàm xử lý nhập số điện thoại
-          placeholder="Số điện thoại"
-          keyboardType="phone-pad"
-          onFocus={() => setIsPhoneInputFocused(true)}
-          onBlur={() => setIsPhoneInputFocused(false)}
-          className={`h-12 w-full border-b-2 px-3 mb-5 text-base ${isPhoneInputFocused ? "border-blue-500" : "border-gray-400"}`}
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Email"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          onFocus={() => setIsEmailInputFocused(true)}
+          onBlur={() => setIsEmailInputFocused(false)}
+          className={`h-12 w-full border-b-2 px-3 mb-5 text-base ${isEmailInputFocused ? "border-blue-500" : "border-gray-400"
+            }`}
           style={{ outline: "none" }}
         />
 
@@ -56,11 +52,12 @@ export default function SignIn() {
             secureTextEntry={!isPasswordVisible}
             onFocus={() => setIsPasswordInputFocused(true)}
             onBlur={() => setIsPasswordInputFocused(false)}
-            className={`h-12 w-full border-b-2 px-3 mb-3 text-base ${isPasswordInputFocused ? "border-blue-500" : "border-gray-400"}`}
+            className={`h-12 w-full border-b-2 px-3 mb-3 text-base ${isPasswordInputFocused ? "border-blue-500" : "border-gray-400"
+              }`}
             style={{ outline: "none" }}
           />
 
-          {/* Nút hiển thị/ẩn mật khẩu */}
+          {/* Toggle hiển thị mật khẩu */}
           <TouchableOpacity
             onPress={handlePasswordVisibilityToggle}
             className="absolute right-3 top-3"
@@ -71,18 +68,16 @@ export default function SignIn() {
           </TouchableOpacity>
         </View>
 
-
-        {/* Dòng "Lấy lại mật khẩu" */}
+        {/* Link lấy lại mật khẩu */}
         <View className="mb-5 flex-row justify-start w-full">
           <TouchableOpacity
-            onPress={() => router.push("/forgot-password")} // Thay đổi link theo đường dẫn của bạn
+            onPress={() => router.push("/forgot-password")}
           >
             <Text className="text-blue-500 text-sm font-bold">
               Lấy lại mật khẩu
             </Text>
           </TouchableOpacity>
         </View>
-
 
         {/* Nút đăng nhập */}
         <CustomButton
