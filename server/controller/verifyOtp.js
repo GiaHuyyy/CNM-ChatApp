@@ -1,77 +1,51 @@
-// Import the shared otpStore from sendOtp.js
 const { otpStore } = require("./sendOtp");
+const OTPModel = require("../models/OTPModel");
 
 const verifyOtp = async (req, res) => {
   try {
-    const { phone, code } = req.body;
+    const { email, otp } = req.body;
 
-    if (!phone || !code) {
+    if (!email || !otp) {
       return res.status(400).json({
         success: false,
-        message: "Số điện thoại và mã OTP không được để trống",
+        message: "Email and OTP code are required",
+        error: true
       });
     }
 
-    // Format phone number consistently with how it was stored
-    let formattedPhone = phone.replace(/\s+/g, ""); // Remove any spaces
-    if (!formattedPhone.startsWith("+")) {
-      // If it starts with 0, replace with +84 (Vietnam)
-      if (formattedPhone.startsWith("0")) {
-        formattedPhone = "+84" + formattedPhone.substring(1);
-      } else {
-        // Otherwise, just add + prefix
-        formattedPhone = "+" + formattedPhone;
+    // Convert OTP to string for comparison
+    const otpString = otp.toString();
+
+    const otpRecord = await OTPModel.findOne({
+      email: email,
+      otp: otpString,
+      createdAt: {
+        $gt: new Date(Date.now() - 5 * 60 * 1000)
       }
-    }
+    });
 
-    console.log("Verifying OTP for phone:", formattedPhone);
-    console.log("Entered OTP code:", code);
-
-    // Log all stored OTPs for debugging
-    console.log("Current OTP store at verification time:");
-    for (const [key, value] of otpStore.entries()) {
-      console.log(`- ${key}: ${value.code} (expires in ${Math.floor((value.expiresAt - Date.now()) / 1000)}s)`);
-    }
-
-    // Check if OTP exists and is valid
-    const otpData = otpStore.get(formattedPhone);
-
-    if (!otpData) {
+    if (!otpRecord) {
       return res.status(400).json({
         success: false,
-        message: "Mã OTP không tồn tại hoặc đã hết hạn, vui lòng gửi lại",
+        message: "Invalid OTP or OTP expired",
+        error: true
       });
     }
 
-    // Check if OTP has expired
-    if (Date.now() > otpData.expiresAt) {
-      otpStore.delete(formattedPhone);
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP đã hết hạn, vui lòng gửi lại",
-      });
-    }
+    // Delete the used OTP
+    await OTPModel.deleteOne({ _id: otpRecord._id });
 
-    // Check if OTP matches
-    if (otpData.code !== code) {
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP không chính xác",
-      });
-    }
-
-    // OTP is valid, delete it to prevent reuse
-    otpStore.delete(formattedPhone);
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Xác thực thành công",
+      email: email
     });
   } catch (error) {
-    console.error("Error verifying OTP:", error);
-    return res.status(500).json({
+    console.error("Verify OTP Error:", error);
+    res.status(500).json({
       success: false,
-      message: "Có lỗi xảy ra khi xác thực mã OTP",
+      message: "OTP verification failed",
+      error: true
     });
   }
 };
