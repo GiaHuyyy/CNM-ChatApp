@@ -1,4 +1,5 @@
 const express = require("express");
+const OTPModel = require("../models/OTPModel"); // Add this import at the top
 const registerUser = require("../controller/registerUser");
 const checkPhone = require("../controller/checkPhone");
 const checkPassword = require("../controller/checkPassword");
@@ -41,7 +42,28 @@ router.post("/search-friend-user", searchFriendUser);
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);
 
+// Registration and Login routes
+router.post("/register", registerUser);
+router.post("/login", loginUser);
+
 // Logout user
 router.get("/logout", logout);
+
+// Temporary route to check OTPs (remove in production)
+// Debug route to check stored OTPs
+router.get("/debug/otps", async (req, res) => {
+  try {
+    const otps = await OTPModel.find({});
+    res.json({
+      count: otps.length,
+      otps: otps
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to fetch OTPs",
+      details: error.message
+    });
+  }
+});
 
 module.exports = router;
