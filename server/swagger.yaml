@@ -230,3 +230,75 @@ paths:
                   message:
                     type: string
                     example: "Đăng xuất thành công"
+
+  /api/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Send password reset OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP đã được gửi đến email của bạn"
+
+  /api/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+                - newPassword
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                otp:
+                  type: string
+                  example: "123456"
+                newPassword:
+                  type: string
+                  example: "newpassword123"
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Mật khẩu đã được cập nhật thành công"

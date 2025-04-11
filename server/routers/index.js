@@ -8,6 +8,8 @@ const logout = require("../controller/logout");
 const searchUser = require("../controller/searchUser");
 const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
+const forgotPassword = require("../controller/forgotPassword");
+const resetPassword = require("../controller/resetPassword");
 
 const router = express.Router();
 
@@ -40,5 +42,9 @@ router.get("/debug/otps", async (req, res) => {
     });
   }
 });
+
+// Password reset routes
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;
