@@ -1,18 +1,19 @@
-import { createContext, useContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
+import { createContext, useContext, useEffect, useState } from "react";
 
 const GlobalContext = createContext();
-// eslint-disable-next-line react-refresh/only-export-components
+
+// Export the context hook
 export const useGlobalContext = () => useContext(GlobalContext);
 
-export default function GlobalProvider({ children }) {
-  const [isLoginWithQR, setIsLoginWithQR] = useState(true);
+// Create the provider component
+const GlobalProvider = ({ children }) => {
+  const [isLoginWithEmail, setIsLoginWithEmail] = useState(() => {
+    const savedState = localStorage.getItem("authState");
+    return savedState !== null ? JSON.parse(savedState) : null;
+  });
   const [isLoginWithPhone, setIsLoginWithPhone] = useState(false);
-
-  // Socket connection
   const [socketConnection, setSocketConnection] = useState(null);
-
-  // Seen message
   const [seenMessage, setSeenMessage] = useState(false);
 
   // Add this function to fetch room data after connection is established
@@ -72,23 +73,26 @@ export default function GlobalProvider({ children }) {
   }, []);
 
   return (
-    <GlobalContext.Provider
-      value={{
-        isLoginWithQR,
-        setIsLoginWithQR,
+    <GlobalContext.Provider 
+      value={{ 
+        isLoginWithEmail, 
+        setIsLoginWithEmail,
         isLoginWithPhone,
         setIsLoginWithPhone,
         socketConnection,
         setSocketConnection,
         seenMessage,
-        setSeenMessage,
+        setSeenMessage
       }}
     >
       {children}
     </GlobalContext.Provider>
   );
-}
+};
 
 GlobalProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
+
+// Add default export
+export default GlobalProvider;
