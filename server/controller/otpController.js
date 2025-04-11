@@ -1,5 +1,3 @@
-const UserModel = require("../models/UserModel");
-const { sendOTPEmail } = require("../helpers/emailService");
 const OTPModel = require("../models/OTPModel");
 const nodemailer = require("nodemailer");
 
@@ -11,24 +9,22 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-const sendOtp = async (req, res) => {
+const sendOTP = async (req, res) => {
   try {
     const { email } = req.body;
-
+    
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Remove any existing OTP for this email
     await OTPModel.deleteMany({ email });
 
-    // Create and save new OTP record
+    // Create new OTP record
     const otpDoc = new OTPModel({
       email,
       otp
     });
-
     await otpDoc.save();
-    console.log('OTP saved to database:', { email, otp }); // Debug log
 
     // Send email
     await transporter.sendMail({
@@ -46,10 +42,8 @@ const sendOtp = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Mã OTP đã được gửi đến email của bạn",
-      email: email
+      message: "OTP sent successfully"
     });
-
   } catch (error) {
     console.error("Send OTP Error:", error);
     res.status(500).json({
@@ -60,4 +54,41 @@ const sendOtp = async (req, res) => {
   }
 };
 
-module.exports = { sendOtp };
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const otpRecord = await OTPModel.findOne({ 
+      email, 
+      otp,
+      createdAt: { 
+        $gt: new Date(Date.now() - 5 * 60 * 1000) // Check if OTP is less than 5 minutes old
+      }
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP or OTP expired",
+        error: true
+      });
+    }
+
+    // Delete the used OTP
+    await OTPModel.deleteOne({ _id: otpRecord._id });
+
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully"
+    });
+  } catch (error) {
+    console.error("Verify OTP Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "OTP verification failed",
+      error: true
+    });
+  }
+};
+
+module.exports = { sendOTP, verifyOTP };

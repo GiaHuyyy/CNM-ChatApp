@@ -16,6 +16,90 @@ components:
       name: token
 
 paths:
+  /api/send-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Send OTP to email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "bewchan06@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP sent successfully"
+
+  /api/verify-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Verify OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  example: "bewchan06@gmail.com"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+        '400':
+          description: Invalid OTP
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid OTP or OTP expired"
+                  error:
+                    type: boolean
+                    example: true
+
   /api/register:
     post:
       tags:
@@ -32,6 +116,7 @@ paths:
                 - email
                 - password
                 - name
+                - otp
               properties:
                 phone:
                   type: string
@@ -48,6 +133,9 @@ paths:
                 profilePic:
                   type: string
                   example: "https://example.com/profile.jpg"
+                otp:
+                  type: string
+                  example: "123456"
       responses:
         '201':
           description: User registered successfully
@@ -56,6 +144,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   message:
                     type: string
                     example: "User registered successfully"
@@ -70,19 +161,19 @@ paths:
                         type: string
                       profilePic:
                         type: string
-                  success:
-                    type: boolean
-                    example: true
         '400':
-          description: User already exists
+          description: Registration failed
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: false
                   message:
                     type: string
-                    example: "User already exists"
+                    example: "Invalid OTP or OTP expired"
                   error:
                     type: boolean
                     example: true
@@ -143,26 +234,7 @@ paths:
               properties:
                 email:
                   type: string
-                  example: "bewchan06@gmail.com"
-      responses:
-        '200':
-          description: OTP sent successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Mã OTP đã được gửi đến email của bạn"
-                  email:
-                    type: string
-                    example: "bewchan06@gmail.com"
-        '400':
-          description: Invalid email
+                  example: "baotran.060103@gmail.com"
 
   /api/verify-otp:
     post:
@@ -177,14 +249,14 @@ paths:
               type: object
               required:
                 - email
-                - code
+                - otp
               properties:
                 email:
                   type: string
-                  example: "bewchan06@gmail.com"
-                code:
+                  example: "baotran.060103@gmail.com"
+                otp:
                   type: string
-                  example: "123456"
+                  example: "210424"
       responses:
         '200':
           description: OTP verified successfully
@@ -199,6 +271,22 @@ paths:
                   message:
                     type: string
                     example: "Xác thực thành công"
+        '400':
+          description: Invalid OTP
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid OTP or OTP expired"
+                  error:
+                    type: boolean
+                    example: true
 
   /api/user-details:
     get:

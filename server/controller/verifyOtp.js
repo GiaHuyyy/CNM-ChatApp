@@ -1,51 +1,51 @@
 const { otpStore } = require("./sendOtp");
+const OTPModel = require("../models/OTPModel");
 
 const verifyOtp = async (req, res) => {
   try {
-    const { email, code } = req.body;
+    const { email, otp } = req.body;
 
-    if (!email || !code) {
+    if (!email || !otp) {
       return res.status(400).json({
         success: false,
-        message: "Email và mã OTP không được để trống",
+        message: "Email and OTP code are required",
+        error: true
       });
     }
 
-    const otpData = otpStore.get(email);
+    // Convert OTP to string for comparison
+    const otpString = otp.toString();
 
-    if (!otpData) {
+    const otpRecord = await OTPModel.findOne({
+      email: email,
+      otp: otpString,
+      createdAt: {
+        $gt: new Date(Date.now() - 5 * 60 * 1000)
+      }
+    });
+
+    if (!otpRecord) {
       return res.status(400).json({
         success: false,
-        message: "Mã OTP không tồn tại hoặc đã hết hạn",
+        message: "Invalid OTP or OTP expired",
+        error: true
       });
     }
 
-    if (Date.now() > otpData.expiresAt) {
-      otpStore.delete(email);
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP đã hết hạn",
-      });
-    }
+    // Delete the used OTP
+    await OTPModel.deleteOne({ _id: otpRecord._id });
 
-    if (otpData.code !== code) {
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP không chính xác",
-      });
-    }
-
-    otpStore.delete(email);
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Xác thực thành công",
+      email: email
     });
   } catch (error) {
-    console.error("Error verifying OTP:", error);
-    return res.status(500).json({
+    console.error("Verify OTP Error:", error);
+    res.status(500).json({
       success: false,
-      message: "Có lỗi xảy ra khi xác thực mã OTP",
+      message: "OTP verification failed",
+      error: true
     });
   }
 };
