@@ -31,7 +31,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    
+
     if (!data.email || !data.password) {
       toast.error("Please fill in all fields");
       return;
@@ -45,16 +45,16 @@ export default function LoginPage() {
         {
           email: data.email,
           password: data.password
-        }
+        }, { withCredentials: true }
       );
 
       if (response.data.success) {
         // Store in Redux
         dispatch(setToken(response.data.token));
-        
+
         // Store in localStorage
         localStorage.setItem("token", response.data.token);
-        
+
         // Reset form
         setData({
           email: "",
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
         // Show success message
         toast.success(response.data.message || "Login successful");
-        
+
         // Navigate to home page
         navigate("/", { replace: true });
       } else {

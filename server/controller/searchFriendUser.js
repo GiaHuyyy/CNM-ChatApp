@@ -6,7 +6,7 @@ async function searchFriendUser(request, response) {
 
     const query = new RegExp(search, "i", "g");
 
-    const users = await UserModel.find({ $or: [{ name: query }, { phone: query }] }).select("-password");
+    const users = await UserModel.find({ $or: [{ name: query }, { email: query }] }).select("-password");
 
     if (users.length === 0) {
       return response.status(404).json({ message: "Not found" });

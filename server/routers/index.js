@@ -6,6 +6,7 @@ const userDetails = require("../controller/userDetails");
 const updateUserDetails = require("../controller/updateUserDetails");
 const logout = require("../controller/logout");
 const searchUser = require("../controller/searchUser");
+const searchFriendUser = require("../controller/searchFriendUser");
 const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
 const forgotPassword = require("../controller/forgotPassword");
@@ -22,6 +23,7 @@ router.get("/logout", logout);
 router.get("/user-details", userDetails);
 router.post("/update-user", updateUserDetails);
 router.post("/search-user", searchUser);
+router.post("/search-friend-user", searchFriendUser);
 
 // OTP routes
 router.post("/send-otp", sendOtp);
