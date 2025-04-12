@@ -14,7 +14,7 @@ export default function AddFriend({ onClose }) {
   const handleSearchUser = async () => {
     try {
       const URL = `${import.meta.env.VITE_APP_BACKEND_URL}/api/search-user`;
-      const response = await axios.post(URL, { phone: search });
+      const response = await axios.post(URL, { email: search });
 
       toast.success(response.data.message);
       setSearchUser(response.data.data);
