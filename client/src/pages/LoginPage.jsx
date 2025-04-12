@@ -40,47 +40,42 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log("Attempting login with:", data); // Debug log
-
       const response = await axios.post(
         `${import.meta.env.VITE_APP_BACKEND_URL}/api/login`,
         {
           email: data.email,
           password: data.password
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
         }
       );
 
-      console.log("Server response:", response.data); // Debug log
-
       if (response.data.success) {
-        // Store token in Redux and localStorage
+        // Store in Redux
         dispatch(setToken(response.data.token));
+        
+        // Store in localStorage
         localStorage.setItem("token", response.data.token);
-
+        
         // Reset form
         setData({
           email: "",
           password: "",
         });
 
-        toast.success(response.data.message);
+        // Show success message
+        toast.success(response.data.message || "Login successful");
+        
+        // Navigate to home page
         navigate("/", { replace: true });
       } else {
-        toast.error(response.data.message);
+        toast.error(response.data.message || "Login failed");
       }
     } catch (error) {
-      console.error("Full error:", error); // Debug log
-      console.error("Response data:", error.response?.data); // Debug log
-      
-      const errorMessage = error.response?.data?.message || "Login failed. Please try again.";
-      toast.error(errorMessage);
+      console.error("Login error:", error.response?.data);
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error("Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
