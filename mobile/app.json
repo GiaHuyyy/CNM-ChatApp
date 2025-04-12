@@ -25,6 +25,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": ["expo-router"],
-    "permissions": ["CAMERA", "MEDIA_LIBRARY"]
+    "permissions": ["CAMERA", "MEDIA_LIBRARY"],
+    "extra": {
+      "cloudinaryName": "your_cloudinary_name",
+      "cloudinaryUploadPreset": "your_upload_preset"
+    }
   }
 }
