@@ -1,15 +1,18 @@
-import { faEnvelope, faEye, faEyeSlash, faLock, faUser } from "@fortawesome/free-solid-svg-icons";
+import { faEnvelope, faEye, faEyeSlash, faLock, faUser, faImage } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import axios from "axios";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
+import uploadFileToCloud from "../helpers/uploadFileToClound";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
+  const [profilePic, setProfilePic] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
   
   const [data, setData] = useState({
     email: "",
@@ -19,6 +22,19 @@ export default function RegisterPage() {
   });
 
   const { setIsLoginWithEmail } = useGlobalContext();
+
+  // Add handleImageChange here, before it's used
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+      setProfilePic(file);
+      setPreviewImage(URL.createObjectURL(file));
+    }
+  };
 
   const handleShowPassword = () => setShowPassword(!showPassword);
 
@@ -81,6 +97,13 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
+      // Upload image first if selected
+      let profilePicUrl = null;
+      if (profilePic) {
+        const uploadResponse = await uploadFileToCloud(profilePic);
+        profilePicUrl = uploadResponse.secure_url;
+      }
+
       // First verify OTP
       const verifyResponse = await axios.post(
         `${import.meta.env.VITE_APP_BACKEND_URL}/api/verify-otp`,
@@ -91,13 +114,14 @@ export default function RegisterPage() {
       );
 
       if (verifyResponse.data) {
-        // Then register
+        // Then register with profile pic
         const registerResponse = await axios.post(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/register`,
           {
             email: data.email,
             name: data.name,
-            password: data.password
+            password: data.password,
+            profilePic: profilePicUrl
           }
         );
 
@@ -218,6 +242,28 @@ export default function RegisterPage() {
             onChange={handleOnChange}
             required
           />
+        </div>
+
+        {/* Add this before the password fields */}
+        <div className="mb-[18px] flex flex-col items-center border-b border-[#f0f0f0] py-[5px]">
+          <div className="flex w-full items-center">
+            <FontAwesomeIcon icon={faImage} width={8.5} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="ml-3 flex-1 text-sm"
+            />
+          </div>
+          {previewImage && (
+            <div className="mt-2">
+              <img
+                src={previewImage}
+                alt="Profile preview"
+                className="h-20 w-20 rounded-full object-cover"
+              />
+            </div>
+          )}
         </div>
 
         <button
