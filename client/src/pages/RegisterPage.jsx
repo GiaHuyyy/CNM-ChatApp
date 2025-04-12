@@ -12,7 +12,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
-
   const [data, setData] = useState({
     email: "",
     name: "",
@@ -101,6 +100,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
+
       // First verify OTP
       const verifyResponse = await axios.post(`${import.meta.env.VITE_APP_BACKEND_URL}/api/verify-otp`, {
         email: data.email,
