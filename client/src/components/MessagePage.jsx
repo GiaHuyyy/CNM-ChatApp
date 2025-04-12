@@ -307,7 +307,7 @@ export default function MessagePage() {
     if ((!messages.text.trim() && !selectedFile) || !socketConnection) {
       return;
     }
-
+    console.log(selectedFile, "selectedFile");
     let fileUrl = "";
     if (selectedFile) {
       const uploadFile = await uploadFileToCloud(selectedFile);
