@@ -31,7 +31,8 @@
     "react-native-web": "~0.19.13",
     "react-redux": "^9.2.0",
     "sonner": "^2.0.3",
-    "sooner": "^1.1.4"
+    "sooner": "^1.1.4",
+    "expo-media-library": "~17.0.6"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

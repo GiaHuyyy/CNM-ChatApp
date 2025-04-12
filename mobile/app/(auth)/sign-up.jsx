@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from 'expo-media-library';
 import { router } from "expo-router";
 import axios from "axios";
 import HeaderOfSignIn from "../../components/HeaderOfSignIn";
@@ -25,20 +26,63 @@ export default function SignUp() {
         setData((prev) => ({ ...prev, [key]: value }));
     };
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 1,
-        });
+    // Hàm yêu cầu quyền truy cập vào thư viện ảnh
+    const requestPermissions = async () => {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+            alert('You need to grant permission to access media library');
+        }
+    };
 
-        if (!result.canceled) {
-            const file = result.assets[0];
-            if (file.fileSize > 5 * 1024 * 1024) {
-                return showModal("Ảnh phải nhỏ hơn 5MB");
+    // Hàm chọn ảnh
+    const pickImage = async () => {
+        if (Platform.OS === "web") {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        return showModal("Ảnh phải nhỏ hơn 5MB");
+                    }
+
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setAvatar({
+                            uri: reader.result,
+                            name: file.name,
+                            type: file.type,
+                            file, // <-- quan trọng: giữ nguyên file object
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        }
+        else {
+            const permission = await MediaLibrary.requestPermissionsAsync();
+            if (permission.status !== 'granted') {
+                return alert('Bạn cần cấp quyền truy cập thư viện ảnh');
             }
-            setAvatar(file);
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 1,
+                base64: true,
+            });
+
+            console.log('Image picker result:', result);
+            if (!result.canceled) {
+                const file = result.assets[0];
+                if (file.fileSize > 5 * 1024 * 1024) {
+                    return showModal("Ảnh phải nhỏ hơn 5MB");
+                }
+                setAvatar(file);
+            }
         }
     };
 
@@ -90,9 +134,22 @@ export default function SignUp() {
             // Upload avatar nếu có
             let avatarUrl = null;
             if (avatar?.uri) {
-                const upload = await uploadFileToCloud(avatar); // đảm bảo bạn có helper giống trên web
+                let fileToUpload;
+
+                if (Platform.OS === "web") {
+                    fileToUpload = avatar.file; // sử dụng file object từ input
+                } else {
+                    fileToUpload = {
+                        uri: avatar.uri,
+                        name: avatar.fileName || "photo.jpg",
+                        type: avatar.mimeType || "image/jpeg",
+                    };
+                }
+
+                const upload = await uploadFileToCloud(fileToUpload);
                 avatarUrl = upload.secure_url;
             }
+
 
             // Đăng ký tài khoản
             const register = await axios.post(`http://localhost:5000/api/register`, {
