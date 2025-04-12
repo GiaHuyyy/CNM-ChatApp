@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import axios from "axios";
 import HeaderOfSignIn from "../../components/HeaderOfSignIn";
-
+import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 
 export default function SignUp() {
     const [data, setData] = useState({
@@ -16,16 +16,13 @@ export default function SignUp() {
     const [otp, setOtp] = useState("");
     const [otpSent, setOtpSent] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [avatarUri, setAvatarUri] = useState(null);
+    const [avatar, setAvatar] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalMessage, setModalMessage] = useState("");
     const [showPassword, setShowPassword] = useState(false);
 
     const handleChange = (key, value) => {
-        setData((prev) => ({
-            ...prev,
-            [key]: value,
-        }));
+        setData((prev) => ({ ...prev, [key]: value }));
     };
 
     const pickImage = async () => {
@@ -37,7 +34,11 @@ export default function SignUp() {
         });
 
         if (!result.canceled) {
-            setAvatarUri(result.assets[0].uri);
+            const file = result.assets[0];
+            if (file.fileSize > 5 * 1024 * 1024) {
+                return showModal("Ảnh phải nhỏ hơn 5MB");
+            }
+            setAvatar(file);
         }
     };
 
@@ -48,22 +49,20 @@ export default function SignUp() {
 
     const sendOtp = async () => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
         if (!data.email) return showModal("Vui lòng nhập email");
         if (!emailRegex.test(data.email)) return showModal("Email không hợp lệ");
 
         setLoading(true);
         try {
-            const response = await axios.post("http://localhost:5000/api/send-otp", {
+            const res = await axios.post(`http://localhost:5000/api/send-otp`, {
                 email: data.email,
             });
-
-            if (response.data) {
-                showModal("OTP đã được gửi đến email của bạn");
+            if (res.data) {
+                showModal("Đã gửi OTP tới email");
                 setOtpSent(true);
             }
-        } catch (error) {
-            showModal(error.response?.data?.message || "Không thể gửi OTP");
+        } catch (err) {
+            showModal(err.response?.data?.message || "Lỗi khi gửi OTP");
         } finally {
             setLoading(false);
         }
@@ -72,45 +71,39 @@ export default function SignUp() {
     const handleRegister = async () => {
         const { email, name, password, confirmPassword } = data;
 
-        if (!email || !name || !password || !confirmPassword || !otp) {
+        if (!email || !name || !password || !confirmPassword || !otp)
             return showModal("Vui lòng điền đầy đủ thông tin");
-        }
 
-        if (password.length < 4) return showModal("Mật khẩu tối thiểu 4 ký tự");
         if (password !== confirmPassword) return showModal("Mật khẩu không khớp");
+        if (password.length < 4) return showModal("Mật khẩu tối thiểu 4 ký tự");
 
         setLoading(true);
-
         try {
-            const verifyOtp = await axios.post("http://localhost:5000/api/verify-otp", {
+            // Xác minh OTP
+            const verify = await axios.post(`http://localhost:5000/api/verify-otp`, {
                 email,
                 otp,
             });
 
-            if (!verifyOtp.data.success) {
-                return showModal("OTP không hợp lệ hoặc đã hết hạn");
+            if (!verify.data?.success) return showModal("OTP không hợp lệ hoặc đã hết hạn");
+
+            // Upload avatar nếu có
+            let avatarUrl = null;
+            if (avatar?.uri) {
+                const upload = await uploadFileToCloud(avatar); // đảm bảo bạn có helper giống trên web
+                avatarUrl = upload.secure_url;
             }
 
-            const formData = new FormData();
-            formData.append("email", email);
-            formData.append("name", name);
-            formData.append("password", password);
-
-            if (avatarUri) {
-                const filename = avatarUri.split("/").pop();
-                const type = filename.split(".").pop();
-                formData.append("avatar", {
-                    uri: avatarUri,
-                    name: filename,
-                    type: `image/${type}`,
-                });
-            }
-
-            const register = await axios.post("http://localhost:5000/api/register", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
+            // Đăng ký tài khoản
+            const register = await axios.post(`http://localhost:5000/api/register`, {
+                email,
+                name,
+                password,
+                profilePic: avatarUrl,
             });
+            console.log("Phản hồi đăng ký:", register.data);
 
-            if (register.data.success) {
+            if (register.data?.success) {
                 showModal("Đăng ký thành công");
                 setTimeout(() => {
                     setModalVisible(false);
@@ -120,8 +113,8 @@ export default function SignUp() {
                 showModal(register.data.message || "Đăng ký thất bại");
             }
         } catch (err) {
-            console.log("❌ Lỗi đăng ký:", err.response?.data || err.message || err);
-            showModal(err.response?.data?.message || "Lỗi đăng ký. Vui lòng thử lại");
+            console.log("Đăng ký lỗi:", err);
+            showModal(err.response?.data?.message || "Lỗi khi đăng ký");
         } finally {
             setLoading(false);
         }
@@ -130,12 +123,10 @@ export default function SignUp() {
     return (
         <View className="flex-1 bg-white">
             <HeaderOfSignIn title="Đăng Ký" className="mb-4" />
-
             <View className="items-center px-6 mt-4">
-                {/* Avatar upload */}
                 <TouchableOpacity onPress={pickImage} className="items-center mb-6">
-                    {avatarUri ? (
-                        <Image source={{ uri: avatarUri }} className="w-24 h-24 rounded-full mb-2" />
+                    {avatar?.uri ? (
+                        <Image source={{ uri: avatar.uri }} className="w-24 h-24 rounded-full mb-2" />
                     ) : (
                         <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center mb-2">
                             <Text className="text-gray-500">Chọn ảnh</Text>
@@ -145,18 +136,13 @@ export default function SignUp() {
                 </TouchableOpacity>
             </View>
 
-
             <View className="px-6">
-                {/* Email + Send OTP */}
                 <View className="flex-row items-center border-b border-gray-300 mb-4">
                     <TextInput
                         className="flex-1 h-10 text-base px-2"
                         placeholder="Email"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
                         value={data.email}
                         onChangeText={(value) => handleChange("email", value)}
-                        style={{ outline: "none" }}
                     />
                     <TouchableOpacity
                         className={`px-2 py-1 rounded ${data.email ? "bg-blue-500" : "bg-gray-300"}`}
@@ -174,7 +160,6 @@ export default function SignUp() {
                         keyboardType="number-pad"
                         value={otp}
                         onChangeText={setOtp}
-                        style={{ outline: "none" }}
                     />
                 )}
 
@@ -183,7 +168,6 @@ export default function SignUp() {
                     placeholder="Họ và tên"
                     value={data.name}
                     onChangeText={(value) => handleChange("name", value)}
-                    style={{ outline: "none" }}
                 />
 
                 <View className="border-b border-gray-300 mb-4 flex-row items-center">
@@ -193,7 +177,6 @@ export default function SignUp() {
                         secureTextEntry={!showPassword}
                         value={data.password}
                         onChangeText={(value) => handleChange("password", value)}
-                        style={{ outline: "none" }}
                     />
                     <TouchableOpacity onPress={() => setShowPassword((prev) => !prev)}>
                         <Text className="text-blue-500 text-xs px-2">{showPassword ? "Ẩn" : "Hiện"}</Text>
@@ -206,12 +189,9 @@ export default function SignUp() {
                     secureTextEntry={!showPassword}
                     value={data.confirmPassword}
                     onChangeText={(value) => handleChange("confirmPassword", value)}
-                    style={{ outline: "none" }}
                 />
             </View>
 
-
-            {/* Register button */}
             <TouchableOpacity
                 className="bg-blue-500 rounded-full py-3 items-center w-4/5 mx-auto"
                 onPress={handleRegister}
@@ -224,7 +204,6 @@ export default function SignUp() {
                 )}
             </TouchableOpacity>
 
-            {/* Modal for feedback */}
             <Modal
                 animationType="fade"
                 transparent
