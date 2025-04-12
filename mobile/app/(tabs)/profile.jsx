@@ -1,20 +1,13 @@
 import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  Pressable,
-} from "react-native";
+import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform } from "react-native";
+import * as MediaLibrary from "expo-media-library";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faArrowLeft, faGear } from "@fortawesome/free-solid-svg-icons";
 import { useSelector, useDispatch } from "react-redux";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import { setUser } from "../redux/userSlice";
+import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 
 export default function Profile() {
   const dispatch = useDispatch();
@@ -48,50 +41,116 @@ export default function Profile() {
   }, []);
 
   const pickNewAvatar = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (file) {
+          if (file.size > 5 * 1024 * 1024) {
+            return alert("Ảnh phải nhỏ hơn 5MB");
+          }
 
-    if (!result.canceled) {
-      setNewAvatarUri(result.assets[0].uri);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setNewAvatarUri({
+              uri: reader.result,
+              name: file.name,
+              type: file.type,
+              file, // giữ nguyên file object
+            });
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
+    } else {
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        return alert('Bạn cần cấp quyền truy cập thư viện ảnh');
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+        base64: true,
+      });
+
+      if (!result.canceled) {
+        const file = result.assets[0];
+        if (file.fileSize > 5 * 1024 * 1024) {
+          return alert("Ảnh phải nhỏ hơn 5MB");
+        }
+
+        // Lưu ảnh vào trạng thái mới
+        setNewAvatarUri({
+          uri: file.uri,
+          name: file.fileName,
+          type: file.type,
+          file, // Lưu nguyên đối tượng file
+        });
+      }
     }
   };
 
   const handleUpdateUser = async () => {
-    if (!editData.name.trim()) return;
+    if (!editData.name.trim()) return; // Kiểm tra nếu tên người dùng không rỗng
 
     setUpdating(true);
     try {
-      const formData = new FormData();
-      formData.append("name", editData.name);
+      let avatarUrl = editData.profilePic; // Sử dụng ảnh cũ ban đầu
 
+      // Nếu người dùng đã chọn ảnh mới, upload lên Cloudinary
       if (newAvatarUri) {
-        const filename = newAvatarUri.split("/").pop();
-        const type = filename.split(".").pop();
-        formData.append("avatar", {
-          uri: newAvatarUri,
+        const filename = newAvatarUri.name || newAvatarUri.uri.split("/").pop(); // Lấy tên file từ URI
+        const type = newAvatarUri.type || filename.split(".").pop(); // Lấy loại tệp từ tên file
+
+        const file = {
+          uri: newAvatarUri.uri,
           name: filename,
           type: `image/${type}`,
-        });
+        };
+
+        const uploadResult = await uploadFileToCloud(file); // Gửi file lên Cloudinary
+        if (uploadResult && uploadResult.secure_url) {
+          avatarUrl = uploadResult.secure_url; // Cập nhật avatarUrl bằng URL ảnh mới
+        }
       }
 
-      const res = await axios.post("http://localhost:5000/api/update-user", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        withCredentials: true,
-      });
+      console.log("Avatar URL to update:", avatarUrl); // Kiểm tra avatarUrl
 
+      // Gửi yêu cầu API để cập nhật thông tin người dùng
+      const res = await axios.post(
+        "http://localhost:5000/api/update-user",
+        {
+          name: editData.name, // Tên người dùng
+          profilePic: avatarUrl, // URL ảnh mới từ Cloudinary hoặc ảnh cũ
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`, // Gửi token nếu cần
+          },
+          withCredentials: true,
+        }
+      );
+
+      console.log("Update successful:", res.data);
+
+      // Cập nhật lại thông tin người dùng trong Redux và đóng modal
       setUserInfo(res.data.data);
       dispatch(setUser(res.data.data));
-      setModalVisible(false);
+      setModalVisible(false); // Đóng modal sau khi thành công
     } catch (err) {
-      console.error("Update failed:", err.message);
+      console.error("Update failed:", err.message); // Log lỗi nếu có
     } finally {
-      setUpdating(false);
+      setUpdating(false); // Dừng loading
     }
   };
+
+
 
   if (loading) {
     return (
@@ -146,7 +205,7 @@ export default function Profile() {
             <TouchableOpacity className="items-center mb-4" onPress={pickNewAvatar}>
               <Image
                 source={{
-                  uri: newAvatarUri || editData.profilePic,
+                  uri: newAvatarUri ? newAvatarUri.uri : editData.profilePic,
                 }}
                 className="w-24 h-24 rounded-full"
               />
