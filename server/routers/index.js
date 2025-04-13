@@ -11,6 +11,7 @@ const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
 const forgotPassword = require("../controller/forgotPassword");
 const resetPassword = require("../controller/resetPassword");
+const { handleFileUpload } = require("../controller/uploadFile");
 
 const router = express.Router();
 
@@ -35,12 +36,12 @@ router.get("/debug/otps", async (req, res) => {
     const otps = await OTPModel.find({});
     res.json({
       count: otps.length,
-      otps: otps
+      otps: otps,
     });
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch OTPs",
-      details: error.message
+      details: error.message,
     });
   }
 });
@@ -48,5 +49,8 @@ router.get("/debug/otps", async (req, res) => {
 // Password reset routes
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
+
+// File upload route
+router.post("/upload-file", handleFileUpload);
 
 module.exports = router;

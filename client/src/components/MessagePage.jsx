@@ -31,7 +31,7 @@ import {
 import { useSelector } from "react-redux";
 import PropTypes from "prop-types";
 import commingSoon from "../helpers/commingSoon";
-import uploadFileToCloud from "../helpers/uploadFileToClound";
+import uploadFileToS3 from "../helpers/uploadFileToS3";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
 import AddGroupMemberModal from "./AddGroupMemberModal";
@@ -40,6 +40,7 @@ import RightSidebar from "./RightSidebar";
 import { toast } from "sonner";
 import ReactionDisplay from "./ReactionDisplay";
 import { useCallContext } from "../context/CallProvider";
+import uploadFileToCloud from "../helpers/uploadFileToClound";
 
 // Button component
 const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
@@ -310,8 +311,11 @@ export default function MessagePage() {
     console.log(selectedFile, "selectedFile");
     let fileUrl = "";
     if (selectedFile) {
-      const uploadFile = await uploadFileToCloud(selectedFile);
-      fileUrl = uploadFile.secure_url;
+      // Upload use S3 AWS
+      // const uploadPhotoToCloud = await uploadFileToS3(selectedFile);
+      // Upload use Cloudinary
+      const uploadPhotoToCloud = await uploadFileToCloud(selectedFile);
+      fileUrl = uploadPhotoToCloud.secure_url;
     }
 
     if (editingMessage) {
