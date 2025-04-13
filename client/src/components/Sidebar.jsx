@@ -50,6 +50,7 @@ export default function Sidebar({ onGroupCreated }) {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchFriendUserInput, setSearchFriendUserInput] = useState("");
   const [searchFriendUser, setSearchFriendUser] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const toggleDropdownSetting = () => {
     setDropdownSettingVisible(!dropdownSettingVisible);
@@ -113,16 +114,30 @@ export default function Sidebar({ onGroupCreated }) {
   useEffect(() => {
     const fetchSearchFriendUser = async () => {
       try {
+        if (!searchFriendUserInput) {
+          setSearchFriendUser([]);
+          return;
+        }
+
+        setSearchLoading(true);
+
         setTimeout(async () => {
-          if (!searchFriendUserInput) {
-            return setSearchFriendUser([]);
-          }
           const URL = `${import.meta.env.VITE_APP_BACKEND_URL}/api/search-friend-user`;
           const response = await axios.post(URL, { search: searchFriendUserInput }, { withCredentials: true });
-          setSearchFriendUser(response?.data?.data);
-        }, 1200);
+
+          console.log("Search results:", {
+            total: response?.data?.data?.length || 0,
+            users: response?.data?.data?.filter((r) => !r.isGroup)?.length || 0,
+            groups: response?.data?.data?.filter((r) => r.isGroup)?.length || 0,
+            results: response?.data?.data,
+          });
+
+          setSearchFriendUser(response?.data?.data || []);
+          setSearchLoading(false);
+        }, 600);
       } catch (error) {
-        console.log(error);
+        console.error("Search error:", error.response?.data || error);
+        setSearchLoading(false);
       }
     };
     fetchSearchFriendUser();
@@ -381,24 +396,73 @@ export default function Sidebar({ onGroupCreated }) {
               </div>
             </div>
           ) : (
-            // List search
+            // Search results
             <div className="h-full overflow-y-auto">
-              {searchFriendUser.map((user) => (
-                <NavLink
-                  to={"/" + user._id}
-                  key={user._id}
-                  className="flex items-center gap-x-4 border-b border-gray-300 p-4"
-                  onClick={() => {
-                    setSearchFriendUser([]), setIsSearchFocused(false), setSearchFriendUserInput("");
-                  }}
-                >
-                  <img src={user.profilePic} alt={user.name} className="h-12 w-12 rounded-full object-cover" />
-                  <div className="flex-1">
-                    <p className="text-base font-semibold">{user.name}</p>
-                    <p className="text-sm text-[#5a6981]">{user.phone}</p>
+              {searchLoading ? (
+                <div className="flex h-20 items-center justify-center">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-500"></div>
+                </div>
+              ) : searchFriendUser.length === 0 ? (
+                <div className="flex h-20 items-center justify-center">
+                  <p className="text-sm text-gray-500">Không tìm thấy kết quả phù hợp</p>
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 py-2">
+                    <p className="text-xs font-medium text-gray-500">Kết quả tìm kiếm ({searchFriendUser.length})</p>
                   </div>
-                </NavLink>
-              ))}
+                  {searchFriendUser.map((result) => (
+                    <NavLink
+                      to={"/" + result._id}
+                      key={result._id}
+                      className="flex h-[74px] items-center px-4 hover:bg-[#f1f2f4]"
+                      onClick={() => {
+                        console.log(`Clicked on result:`, {
+                          id: result._id,
+                          name: result.name,
+                          isGroup: result.isGroup,
+                        });
+                        setSearchFriendUser([]);
+                        setIsSearchFocused(false);
+                        setSearchFriendUserInput("");
+                      }}
+                    >
+                      <div className="relative">
+                        <img
+                          src={
+                            result.profilePic ||
+                            (result.isGroup
+                              ? `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                  result.name || "Group",
+                                )}&background=random`
+                              : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                  result.name || "User",
+                                )}&background=random`)
+                          }
+                          alt={result.name || (result.isGroup ? "Group" : "User")}
+                          className="h-12 w-12 rounded-full object-cover"
+                        />
+                        {/* Show group icon or online status */}
+                        {result.isGroup ? (
+                          <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
+                            <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
+                          </div>
+                        ) : (
+                          user?.onlineUser?.includes(result._id) && (
+                            <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
+                          )
+                        )}
+                      </div>
+                      <div className="ml-3 flex flex-col">
+                        <p className="text-[15px] font-semibold">
+                          {result.name || (result.isGroup ? "Group Chat" : "User")}
+                        </p>
+                        {!result.isGroup && <p className="text-sm text-[#5a6981]">{result.email}</p>}
+                      </div>
+                    </NavLink>
+                  ))}
+                </>
+              )}
             </div>
           )}
         </div>
