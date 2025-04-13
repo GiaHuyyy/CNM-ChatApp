@@ -4,6 +4,7 @@ import axios from "axios";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
+import uploadFileToS3 from "../helpers/uploadFileToS3";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 
 export default function RegisterPage() {
@@ -48,48 +49,6 @@ export default function RegisterPage() {
     }
   };
 
-  // const handleRegister = async (e) => {
-  //   e.preventDefault();
-
-  //   if (!data.email || !data.name || !data.password || !data.confirmPassword) {
-  //     toast.error("Please fill in all fields");
-  //     return;
-  //   }
-
-  //   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  //   if (!emailRegex.test(data.email)) {
-  //     toast.error("Please enter a valid email address");
-  //     return;
-  //   }
-
-  //   if (data.password !== data.confirmPassword) {
-  //     toast.error("Passwords do not match");
-  //     return;
-  //   }
-
-  //   if (data.password.length < 4) {
-  //     toast.error("Password must be at least 4 characters");
-  //     return;
-  //   }
-
-  //   setLoading(true);
-  //   try {
-  //     // First send OTP
-  //     const otpResponse = await axios.post(
-  //       `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-otp`,
-  //       { email: data.email }
-  //     );
-
-  //     if (otpResponse.data) {
-  //       toast.success("OTP sent to your email");
-  //       setOtpSent(true);
-  //     }
-  //   } catch (error) {
-  //     toast.error(error.response?.data?.message || "Failed to send OTP");
-  //     setLoading(false);
-  //   }
-  // };
-
   const handleVerifyAndRegister = async (e) => {
     e.preventDefault();
 
@@ -100,7 +59,6 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-
       // First verify OTP
       const verifyResponse = await axios.post(`${import.meta.env.VITE_APP_BACKEND_URL}/api/verify-otp`, {
         email: data.email,
@@ -110,6 +68,10 @@ export default function RegisterPage() {
       if (verifyResponse.data) {
         let profilePicUrl = "";
         if (uploadPhoto) {
+
+          // Upload use S3 AWS
+          // const uploadPhotoToCloud = await uploadFileToS3(uploadPhoto);
+          // Upload use Cloudinary
           const uploadPhotoToCloud = await uploadFileToCloud(uploadPhoto);
           if (!uploadPhotoToCloud?.url) {
             throw new Error("Failed to upload profile picture");
@@ -254,26 +216,26 @@ export default function RegisterPage() {
         </div>
 
         <div className="mb-[18px] border-b border-[#f0f0f0] py-[5px]">
-           <label htmlFor="profilePic" className="w-full cursor-pointer">
-             <div className="flex h-11 items-center justify-center gap-x-3 border bg-slate-200 hover:border-[#64b9f7]">
-               <FontAwesomeIcon icon={faImage} width={14} />
-               <p> {uploadPhoto?.name ? uploadPhoto?.name : "Chọn ảnh đại diện"} </p>
-               {uploadPhoto?.name && (
-                 <button className="px-1 hover:text-red-500" onClick={handleClearUploadPhoto}>
-                   <FontAwesomeIcon icon={faX} width={8} />
-                 </button>
-               )}
-             </div>
-           </label>
-           <input
-             type="file"
-             name="profilePic"
-             id="profilePic"
-             className="hidden"
-             onChange={handleUploadPhoto}
-             ref={fileInputRef}
-           />
-         </div>
+          <label htmlFor="profilePic" className="w-full cursor-pointer">
+            <div className="flex h-11 items-center justify-center gap-x-3 border bg-slate-200 hover:border-[#64b9f7]">
+              <FontAwesomeIcon icon={faImage} width={14} />
+              <p> {uploadPhoto?.name ? uploadPhoto?.name : "Chọn ảnh đại diện"} </p>
+              {uploadPhoto?.name && (
+                <button className="px-1 hover:text-red-500" onClick={handleClearUploadPhoto}>
+                  <FontAwesomeIcon icon={faX} width={8} />
+                </button>
+              )}
+            </div>
+          </label>
+          <input
+            type="file"
+            name="profilePic"
+            id="profilePic"
+            className="hidden"
+            onChange={handleUploadPhoto}
+            ref={fileInputRef}
+          />
+        </div>
 
         <button
           type="submit"
