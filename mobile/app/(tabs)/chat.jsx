@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -17,6 +17,8 @@ export default function Chat() {
   const [isSearching, setIsSearching] = useState(false);
   const [friendRequestsCount, setFriendRequestsCount] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState([]);
 
   useEffect(() => {
     const connectSocket = async () => {
@@ -73,6 +75,67 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
+    const loadRecentSearches = async () => {
+      try {
+        const savedSearches = await AsyncStorage.getItem('recentSearches');
+        if (savedSearches) {
+          setRecentSearches(JSON.parse(savedSearches));
+        }
+      } catch (error) {
+        console.error("Error loading recent searches:", error);
+      }
+    };
+    
+    loadRecentSearches();
+  }, []);
+
+  const saveToRecentSearches = async (query, result = null) => {
+    try {
+      if (!query.trim()) return;
+      
+      const searchItem = {
+        id: Date.now().toString(),
+        query,
+        timestamp: Date.now(),
+        firstResult: result ? {
+          id: result._id || result.id,
+          name: result.name,
+          profilePic: result.profilePic || result.avatar,
+          isGroup: !!result.isGroup
+        } : null
+      };
+      
+      const updatedSearches = [searchItem, ...recentSearches.filter(item => 
+        item.query.toLowerCase() !== query.toLowerCase()
+      )].slice(0, 10);
+      
+      setRecentSearches(updatedSearches);
+      await AsyncStorage.setItem('recentSearches', JSON.stringify(updatedSearches));
+    } catch (error) {
+      console.error("Error saving recent search:", error);
+    }
+  };
+
+  const clearAllRecentSearches = async () => {
+    try {
+      await AsyncStorage.removeItem('recentSearches');
+      setRecentSearches([]);
+    } catch (error) {
+      console.error("Error clearing recent searches:", error);
+    }
+  };
+
+  const removeSearchItem = async (id) => {
+    try {
+      const updatedSearches = recentSearches.filter(item => item.id !== id);
+      setRecentSearches(updatedSearches);
+      await AsyncStorage.setItem('recentSearches', JSON.stringify(updatedSearches));
+    } catch (error) {
+      console.error("Error removing search item:", error);
+    }
+  };
+
+  useEffect(() => {
     const fetchSearchResults = async () => {
       try {
         if (!searchQuery.trim()) {
@@ -98,7 +161,12 @@ export default function Chat() {
               results: response?.data?.data,
             });
 
-            setSearchResults(response?.data?.data || []);
+            const results = response?.data?.data || [];
+            setSearchResults(results);
+            
+            if (results.length > 0) {
+              saveToRecentSearches(searchQuery, results[0]);
+            }
           } catch (error) {
             console.error("Search error:", error.response?.data || error);
             setSearchResults([]);
@@ -117,6 +185,10 @@ export default function Chat() {
     
     fetchSearchResults();
   }, [searchQuery]);
+
+  const searchFromHistory = (query) => {
+    setSearchQuery(query);
+  };
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -165,6 +237,7 @@ export default function Chat() {
             style={{ outline: "none" }}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={clearSearch}>
@@ -184,6 +257,60 @@ export default function Chat() {
           )}
         </TouchableOpacity>
       </View>
+
+      {isSearchFocused && searchQuery.length === 0 && recentSearches.length > 0 && (
+        <View className="flex-1 bg-white">
+          <View className="flex-row justify-between items-center py-2 px-4 bg-gray-100">
+            <Text className="text-gray-600 font-medium">Liên hệ đã tìm</Text>
+            <TouchableOpacity onPress={clearAllRecentSearches}>
+              <FontAwesomeIcon icon={faTrash} size={16} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
+          <FlatList
+            data={recentSearches}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                className="flex-row items-center p-3 border-b border-gray-100 justify-between"
+                onPress={() => searchFromHistory(item.query)}
+              >
+                <View className="flex-row items-center flex-1">
+                  <FontAwesomeIcon icon={faHistory} size={16} color="#888" className="mr-3" />
+                  
+                  {item.firstResult ? (
+                    <View className="flex-row items-center flex-1">
+                      {item.firstResult.profilePic ? (
+                        <Image source={{ uri: item.firstResult.profilePic }} className="w-8 h-8 rounded-full mr-3" />
+                      ) : (
+                        <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-3">
+                          <Text className="text-white font-bold">{(item.firstResult.name || "")?.charAt(0)?.toUpperCase()}</Text>
+                        </View>
+                      )}
+                      <View className="flex-1">
+                        <Text className="text-gray-700">{item.query}</Text>
+                        <Text className="text-sm text-gray-500">{item.firstResult.name}</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text className="text-gray-700">{item.query}</Text>
+                  )}
+                </View>
+                
+                <TouchableOpacity 
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    removeSearchItem(item.id);
+                  }}
+                  className="px-2"
+                >
+                  <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {searchResults.length > 0 && (
         <View className="flex-1 bg-white">
@@ -213,7 +340,7 @@ export default function Chat() {
         </View>
       )}
 
-      {!searchResults.length && !searchLoading && (
+      {!searchResults.length && !searchLoading && !isSearchFocused && (
         <View className="flex-1 items-center justify-center">
           <Text className="text-gray-500">Danh sách chat sẽ hiển thị ở đây</Text>
         </View>
