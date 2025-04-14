@@ -8,7 +8,7 @@ async function searchUser(request, response) {
     if (!user) {
       return response.status(404).json({ message: "User not found" });
     }
-
+    
     return response.status(200).json({ message: "User found", data: user, success: true });
   } catch (error) {
     return response.status(500).json({ message: error.message || error, error: true });
