@@ -8,7 +8,39 @@ import { toast } from "sonner";
 import UserCard from "./UserCard";
 
 export default function AddFriend({ onClose }) {
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const handleSearch = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.post(
+        `${import.meta.env.VITE_APP_BACKEND_URL}/api/search-friend-user`,
+        { search: searchInput },
+        { withCredentials: true }
+      );
+      setSearchResults(response.data.data || []);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendRequest = async (receiverId) => {
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-friend-request`,
+        { receiverId },
+        { withCredentials: true }
+      );
+      toast.success(response.data.message);
+      setSearchResults(searchResults.filter(user => user._id !== receiverId));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra");
+    }
+  };
   const [searchUser, setSearchUser] = useState(null);
 
   const handleSearchUser = async () => {
