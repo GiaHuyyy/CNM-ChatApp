@@ -116,7 +116,7 @@ export default function Sidebar({ onGroupCreated }) {
     setOpenTab(tab);
     // Navigate to the corresponding route based on the tab
     if (tab === "bookphone") {
-      navigate("/bookphone");
+      navigate("/bookphone/listfriends"); // Thay đổi từ /bookphone thành /bookphone/listfriends
     } else if (tab === "chat") {
       navigate("/chat");
     }
