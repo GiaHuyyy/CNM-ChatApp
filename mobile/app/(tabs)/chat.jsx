@@ -352,7 +352,34 @@ export default function Chat() {
     <View className="flex-1 bg-white">
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-10 pb-3 bg-blue-500">
-        {/* ... header content remains the same ... */}
+        <View className="flex-row items-center bg-white rounded-full px-3 py-1 flex-1 mr-2">
+          <FontAwesomeIcon icon={faMagnifyingGlass} size={16} color="#888" />
+          <TextInput
+            placeholder="Tìm kiếm"
+            className="ml-2 flex-1 text-sm"
+            placeholderTextColor="#888"
+            style={{ outline: "none" }}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch}>
+              <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity className="mx-1">
+          <FontAwesomeIcon icon={faQrcode} size={18} color="white" />
+        </TouchableOpacity>
+        <TouchableOpacity className="ml-1">
+          <FontAwesomeIcon icon={faPlus} size={18} color="white" />
+          {friendRequestsCount > 0 && (
+            <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-5 h-5 items-center justify-center">
+              <Text className="text-white text-xs font-bold">{friendRequestsCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Recent Searches */}
@@ -377,9 +404,9 @@ export default function Chat() {
                   {item.firstResult ? (
                     <View className="flex-row items-center flex-1">
                       {item.firstResult.profilePic ? (
-                        <Image 
-                          source={{ uri: item.firstResult.profilePic }} 
-                          className="w-8 h-8 rounded-full mr-3" 
+                        <Image
+                          source={{ uri: item.firstResult.profilePic }}
+                          className="w-8 h-8 rounded-full mr-3"
                         />
                       ) : (
                         <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-3">
