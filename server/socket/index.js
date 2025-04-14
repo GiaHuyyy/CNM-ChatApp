@@ -49,25 +49,51 @@ io.on("connection", async (socket) => {
     io.emit("onlineUser", Array.from(onlineUser));
 
     socket.on("joinRoom", async (targetUserId) => {
-      console.log("Join room", targetUserId);
+      console.log("Join room request received:", targetUserId);
 
       try {
-        // Ensure valid targetUserId
-        if (!targetUserId || typeof targetUserId !== "string") {
-          console.error("Invalid targetUserId:", targetUserId);
+        // Skip processing for the base chat route or invalid IDs
+        if (targetUserId === "chat" || targetUserId === "") {
+          console.log("Base chat route detected, skipping conversation lookup");
+          // Just return a simple welcome message instead of an error
+          socket.emit("message", {
+            messages: [],
+            _id: "welcome",
+            isWelcome: true,
+          });
+          return;
+        }
+
+        // Clean up the targetUserId if it contains path prefixes
+        let cleanTargetId = targetUserId;
+
+        // If the ID contains "chat/", extract just the ID part
+        if (typeof targetUserId === "string" && targetUserId.includes("chat/")) {
+          cleanTargetId = targetUserId.split("chat/")[1];
+          console.log("Extracted ID from path:", cleanTargetId);
+        }
+
+        // Validate targetUserId - ensure it's a valid MongoDB ObjectId
+        // This is critical to prevent errors when trying to query the database
+        if (!cleanTargetId || typeof cleanTargetId !== "string" || cleanTargetId.length !== 24) {
+          console.error("Invalid conversation ID format:", cleanTargetId);
+          socket.emit("error", {
+            message: "Invalid conversation ID format",
+            invalidId: cleanTargetId,
+          });
           return;
         }
 
         // Check if this is a group chat - ensure ObjectId is properly handled
         const isGroupChat = await ConversationModel.exists({
-          _id: targetUserId,
+          _id: cleanTargetId,
           isGroup: true,
           members: userId,
         });
 
         if (isGroupChat) {
           // Fetch group conversation
-          const groupConversation = await ConversationModel.findById(targetUserId)
+          const groupConversation = await ConversationModel.findById(cleanTargetId)
             .populate("messages")
             .populate("members")
             .populate("groupAdmin");
@@ -102,10 +128,10 @@ io.on("connection", async (socket) => {
         }
 
         // Regular direct message conversation
-        const userDetail = await UserModel.findById(targetUserId).select("-password");
+        const userDetail = await UserModel.findById(cleanTargetId).select("-password");
 
         if (!userDetail) {
-          console.log("User not found:", targetUserId);
+          console.log("User not found:", cleanTargetId);
           return;
         }
 
@@ -114,7 +140,7 @@ io.on("connection", async (socket) => {
           name: userDetail?.name,
           phone: userDetail?.phone,
           profilePic: userDetail?.profilePic,
-          online: onlineUser.has(targetUserId),
+          online: onlineUser.has(cleanTargetId),
         };
 
         socket.emit("messageUser", payload);
@@ -122,8 +148,8 @@ io.on("connection", async (socket) => {
         // Fetch all messages for the conversation
         const conversation = await ConversationModel.findOne({
           $or: [
-            { sender: userId, receiver: targetUserId },
-            { sender: targetUserId, receiver: userId },
+            { sender: userId, receiver: cleanTargetId },
+            { sender: cleanTargetId, receiver: userId },
           ],
         })
           .populate("messages")
@@ -134,7 +160,7 @@ io.on("connection", async (socket) => {
           await MessageModel.updateMany(
             {
               _id: { $in: conversation.messages },
-              msgByUserId: targetUserId,
+              msgByUserId: cleanTargetId,
               seen: false,
             },
             { $set: { seen: true } }
@@ -145,16 +171,17 @@ io.on("connection", async (socket) => {
 
           // Update sidebar for both users
           const conversationSender = await getConversation(userId.toString());
-          const conversationReceiver = await getConversation(targetUserId);
+          const conversationReceiver = await getConversation(cleanTargetId);
 
           io.to(userId.toString()).emit("conversation", conversationSender);
-          io.to(targetUserId).emit("conversation", conversationReceiver);
+          io.to(cleanTargetId).emit("conversation", conversationReceiver);
         } else {
           // If no conversation exists, send an empty one
           socket.emit("message", { messages: [] });
         }
       } catch (error) {
         console.error("Error in joinRoom event:", error);
+        socket.emit("error", { message: "Failed to join conversation" });
       }
     });
 

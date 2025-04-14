@@ -27,11 +27,12 @@ import {
   faTrash,
   faUsers,
   faVideo,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { useSelector } from "react-redux";
 import PropTypes from "prop-types";
 import commingSoon from "../helpers/commingSoon";
-import uploadFileToCloud from "../helpers/uploadFileToClound";
+import uploadFileToS3 from "../helpers/uploadFileToS3";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
 import AddGroupMemberModal from "./AddGroupMemberModal";
@@ -40,6 +41,8 @@ import RightSidebar from "./RightSidebar";
 import { toast } from "sonner";
 import ReactionDisplay from "./ReactionDisplay";
 import { useCallContext } from "../context/CallProvider";
+import uploadFileToCloud from "../helpers/uploadFileToClound";
+import ImageViewerModal from "./ImageViewerModal";
 
 // Button component
 const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
@@ -132,6 +135,9 @@ export default function MessagePage() {
 
   const [editingMessage, setEditingMessage] = useState(null);
 
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState("");
+
   useEffect(() => {
     if (!socketConnection) {
       console.log("Waiting for socket connection...");
@@ -156,8 +162,8 @@ export default function MessagePage() {
       socketConnection.off("groupMessage");
       socketConnection.off("error");
 
-      console.log("Joining room:", params.userId);
-      // Immediately join the room
+      console.log("Joining room with ID:", params.userId);
+      // Send only the actual user ID, not the full path
       socketConnection.emit("joinRoom", params.userId);
 
       // Set timeout for fetching data
@@ -186,13 +192,23 @@ export default function MessagePage() {
       });
 
       socketConnection.on("groupMessage", (groupData) => {
-        console.log("Received groupMessage event:", groupData?.messages?.length || 0, "messages");
+        // Enhanced debugging for group data
+        console.log("Received groupMessage event:", {
+          id: groupData?._id,
+          name: groupData?.name,
+          isGroup: groupData?.isGroup,
+          membersCount: groupData?.members?.length || 0,
+        });
         setAllMessages(groupData?.messages || []);
         setConversation(groupData);
+
+        // Ensure group name is properly handled
+        const groupName = groupData?.name || `Group ${groupData?._id?.toString().slice(-5)}`;
+
         setDataUser({
           _id: groupData._id,
-          name: groupData.name,
-          profilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupData.name)}&background=random`,
+          name: groupName,
+          profilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=random`,
           isGroup: true,
           members: groupData.members || [],
           groupAdmin: groupData.groupAdmin,
@@ -307,11 +323,14 @@ export default function MessagePage() {
     if ((!messages.text.trim() && !selectedFile) || !socketConnection) {
       return;
     }
-
+    console.log(selectedFile, "selectedFile");
     let fileUrl = "";
     if (selectedFile) {
-      const uploadFile = await uploadFileToCloud(selectedFile);
-      fileUrl = uploadFile.secure_url;
+      // Upload use S3 AWS to report
+      // const uploadPhotoToCloud = await uploadFileToS3(selectedFile);
+      // Upload use Cloudinary to Test
+      const uploadPhotoToCloud = await uploadFileToCloud(selectedFile);
+      fileUrl = uploadPhotoToCloud.secure_url;
     }
 
     if (editingMessage) {
@@ -455,7 +474,7 @@ export default function MessagePage() {
         socketConnection.once("leftGroup", (response) => {
           if (response.success) {
             toast.success(response.message);
-            navigate("/");
+            navigate("/chat");
           } else {
             toast.error(response.message);
           }
@@ -484,7 +503,7 @@ export default function MessagePage() {
         socketConnection.once("conversationDeleted", (response) => {
           if (response.success) {
             toast.success(response.message);
-            navigate("/");
+            navigate("/chat");
           } else {
             toast.error(response.message);
           }
@@ -574,7 +593,9 @@ export default function MessagePage() {
     (message) => message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")),
   );
 
-  const linkMessages = allMessages.filter((message) => message.text.startsWith("https"));
+  const linkMessages = allMessages.filter(
+    (message) => message.text.startsWith("https") || message.text.startsWith("http"),
+  );
 
   const isSystemNotification = (messageText) => {
     if (!messageText) return false;
@@ -585,6 +606,7 @@ export default function MessagePage() {
       /đã thêm \d+ người dùng vào nhóm/i,
       /đã rời khỏi nhóm/i,
       /đã xóa/i,
+      /đã cập nhật/i,
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));
@@ -712,6 +734,11 @@ export default function MessagePage() {
     }
 
     return message.text;
+  };
+
+  const handleImageClick = (imageUrl) => {
+    setSelectedImage(imageUrl);
+    setShowImageModal(true);
   };
 
   return (
@@ -946,7 +973,12 @@ export default function MessagePage() {
                           ) : (
                             <>
                               {message.imageUrl && (
-                                <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />
+                                <img
+                                  src={message.imageUrl}
+                                  alt="image"
+                                  className="cursor-pointer rounded-[3px] object-contain hover:opacity-90"
+                                  onClick={() => handleImageClick(message.imageUrl)}
+                                />
                               )}
                               {message.fileUrl && (
                                 <div className="flex items-center gap-x-1">
@@ -973,7 +1005,7 @@ export default function MessagePage() {
                                 </div>
                               )}
                               <div>
-                                {message.text.startsWith("https") ? (
+                                {message.text.startsWith("https") || message.text.startsWith("http") ? (
                                   <a
                                     href={message.text}
                                     target="_blank"
@@ -1249,6 +1281,8 @@ export default function MessagePage() {
         message={confirmModal.message || "Bạn có chắc chắn muốn thực hiện hành động này?"}
         type="danger"
       />
+
+      {showImageModal && <ImageViewerModal fileUrl={selectedImage} onClose={() => setShowImageModal(false)} />}
     </main>
   );
 }

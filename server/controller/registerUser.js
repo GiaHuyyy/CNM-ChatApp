@@ -3,33 +3,46 @@ const bcryptjs = require("bcryptjs");
 
 async function registerUser(request, response) {
   try {
-    const { phone, password, name, profilePic } = request.body;
-    // if (!phone || !password || !name || !profilePic) {
-    //   return response.status(400).json({ message: "Please provide all fields" });
-    // }
+    const { email, password, name, profilePic, otp } = request.body;
 
-    const checkPhone = await UserModel.findOne({ phone });
-    if (checkPhone) {
-      return response.status(400).json({ message: "User already exists", error: true });
+    // Check if user already exists
+    const existingUser = await UserModel.findOne({ email });
+    if (existingUser) {
+      return response.status(400).json({
+        success: false,
+        message: "Email đã tồn tại",
+        error: true
+      });
     }
 
-    // password into hashpassword
-    const salt = await bcryptjs.genSalt(10);
-    const hashPassword = await bcryptjs.hash(password, salt);
+    // Hash password
+    const hashedPassword = await bcryptjs.hash(password, 10);
 
-    const payload = {
-      phone,
-      password: hashPassword,
+    // Create new user
+    const newUser = new UserModel({
+      email,
+      password: hashedPassword,
       name,
-      profilePic,
-    };
+      profilePic: profilePic || ""
+    });
 
-    const user = new UserModel(payload);
+    await newUser.save();
 
-    const userSave = await user.save();
-    return response.status(201).json({ message: "User registered successfully", data: userSave, success: true });
+    response.status(201).json({
+      success: true,
+      message: "Đăng ký thành công",
+      data: {
+        email: newUser.email,
+        name: newUser.name,
+        profilePic: newUser.profilePic
+      }
+    });
   } catch (error) {
-    response.status(500).json({ message: "Internal server error" || error, error: true });
+    response.status(500).json({
+      success: false,
+      message: "Đăng ký thất bại",
+      error: true
+    });
   }
 }
 

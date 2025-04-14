@@ -1,19 +1,28 @@
-import { createContext, useContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
+import { createContext, useContext, useEffect, useState } from "react";
 
 const GlobalContext = createContext();
-// eslint-disable-next-line react-refresh/only-export-components
+
 export const useGlobalContext = () => useContext(GlobalContext);
 
-export default function GlobalProvider({ children }) {
-  const [isLoginWithQR, setIsLoginWithQR] = useState(true);
+const GlobalProvider = ({ children }) => {
+  const [isLoginWithEmail, setIsLoginWithEmail] = useState(() => {
+    const savedState = localStorage.getItem("authState");
+    return savedState !== null ? JSON.parse(savedState) : null;
+  });
   const [isLoginWithPhone, setIsLoginWithPhone] = useState(false);
-
-  // Socket connection
   const [socketConnection, setSocketConnection] = useState(null);
-
-  // Seen message
   const [seenMessage, setSeenMessage] = useState(false);
+  const [notifications, setNotifications] = useState(0);
+
+  // Add notification update function
+  const updateNotifications = (count) => {
+    setNotifications(count);
+    // Update favicon or title if needed
+    requestAnimationFrame(() => {
+      document.title = count > 0 ? `(${count}) Chat App` : "Chat App";
+    });
+  };
 
   // Add this function to fetch room data after connection is established
   const handleSocketConnection = (socket) => {
@@ -71,24 +80,43 @@ export default function GlobalProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (socketConnection) {
+      // Add handler for friend request updates
+      socketConnection.on("receiveFriendRequest", (data) => {
+        // Force socket to check for updates
+        socketConnection.emit("checkPendingRequests");
+      });
+
+      return () => {
+        socketConnection.off("receiveFriendRequest");
+      };
+    }
+  }, [socketConnection]);
+
   return (
-    <GlobalContext.Provider
-      value={{
-        isLoginWithQR,
-        setIsLoginWithQR,
+    <GlobalContext.Provider 
+      value={{ 
+        isLoginWithEmail, 
+        setIsLoginWithEmail,
         isLoginWithPhone,
         setIsLoginWithPhone,
         socketConnection,
         setSocketConnection,
         seenMessage,
         setSeenMessage,
+        notifications,
+        updateNotifications  // Add new notification values
       }}
     >
       {children}
     </GlobalContext.Provider>
   );
-}
+};
 
 GlobalProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
+
+// Add default export
+export default GlobalProvider;

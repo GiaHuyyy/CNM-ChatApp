@@ -1,124 +1,281 @@
-import React, { useState } from "react";
-import CustomButton from "../../components/CustomButton";
+import React, { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, Platform } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from 'expo-media-library';
 import { router } from "expo-router";
+import axios from "axios";
 import HeaderOfSignIn from "../../components/HeaderOfSignIn";
-import { View, Text, TextInput, TouchableOpacity, CheckBox } from "react-native";
+import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 
 export default function SignUp() {
-    const [phoneNumber, setPhoneNumber] = useState("");
-    const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-    const [isPasswordMatch, setIsPasswordMatch] = useState(true);
-    const [isAgree, setIsAgree] = useState(false);
-    const [isPhoneInputFocused, setIsPhoneInputFocused] = useState(false);
-    const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
-    const [isConfirmPasswordInputFocused, setIsConfirmPasswordInputFocused] = useState(false);
+    const [data, setData] = useState({
+        email: "",
+        name: "",
+        password: "",
+        confirmPassword: "",
+    });
+    const [otp, setOtp] = useState("");
+    const [otpSent, setOtpSent] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [avatar, setAvatar] = useState(null);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalMessage, setModalMessage] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
-    const handlePasswordVisibilityToggle = () => {
-        setIsPasswordVisible((prevState) => !prevState);
+    const handleChange = (key, value) => {
+        setData((prev) => ({ ...prev, [key]: value }));
     };
 
-    const handlePhoneNumberChange = (text) => {
-        // Kiểm tra chỉ cho phép nhập số và giới hạn số lượng ký tự là 10
-        const formattedText = text.replace(/[^0-9]/g, "").slice(0, 10);
-        setPhoneNumber(formattedText);
+    // Hàm yêu cầu quyền truy cập vào thư viện ảnh
+    const requestPermissions = async () => {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+            alert('You need to grant permission to access media library');
+        }
     };
 
-    const handleConfirmPasswordChange = (text) => {
-        setConfirmPassword(text);
-        // Kiểm tra mật khẩu và xác nhận mật khẩu có khớp không
-        setIsPasswordMatch(password === text);
+    // Hàm chọn ảnh
+    const pickImage = async () => {
+        if (Platform.OS === "web") {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                        return showModal("Ảnh phải nhỏ hơn 5MB");
+                    }
+
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setAvatar({
+                            uri: reader.result,
+                            name: file.name,
+                            type: file.type,
+                            file, // <-- quan trọng: giữ nguyên file object
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        }
+        else {
+            const permission = await MediaLibrary.requestPermissionsAsync();
+            if (permission.status !== 'granted') {
+                return alert('Bạn cần cấp quyền truy cập thư viện ảnh');
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 1,
+                base64: true,
+            });
+
+            console.log('Image picker result:', result);
+            if (!result.canceled) {
+                const file = result.assets[0];
+                if (file.fileSize > 5 * 1024 * 1024) {
+                    return showModal("Ảnh phải nhỏ hơn 5MB");
+                }
+                setAvatar(file);
+            }
+        }
+    };
+
+    const showModal = (message) => {
+        setModalMessage(message);
+        setModalVisible(true);
+    };
+
+    const sendOtp = async () => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!data.email) return showModal("Vui lòng nhập email");
+        if (!emailRegex.test(data.email)) return showModal("Email không hợp lệ");
+
+        setLoading(true);
+        try {
+            const res = await axios.post(`http://localhost:5000/api/send-otp`, {
+                email: data.email,
+            });
+            if (res.data) {
+                showModal("Đã gửi OTP tới email");
+                setOtpSent(true);
+            }
+        } catch (err) {
+            showModal(err.response?.data?.message || "Lỗi khi gửi OTP");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRegister = async () => {
+        const { email, name, password, confirmPassword } = data;
+
+        if (!email || !name || !password || !confirmPassword || !otp)
+            return showModal("Vui lòng điền đầy đủ thông tin");
+
+        if (password !== confirmPassword) return showModal("Mật khẩu không khớp");
+        if (password.length < 4) return showModal("Mật khẩu tối thiểu 4 ký tự");
+
+        setLoading(true);
+        try {
+            // Xác minh OTP
+            const verify = await axios.post(`http://localhost:5000/api/verify-otp`, {
+                email,
+                otp,
+            });
+
+            if (!verify.data?.success) return showModal("OTP không hợp lệ hoặc đã hết hạn");
+
+            // Upload avatar nếu có
+            let avatarUrl = null;
+            if (avatar?.uri) {
+                let fileToUpload;
+
+                if (Platform.OS === "web") {
+                    fileToUpload = avatar.file; // sử dụng file object từ input
+                } else {
+                    fileToUpload = {
+                        uri: avatar.uri,
+                        name: avatar.fileName || "photo.jpg",
+                        type: avatar.mimeType || "image/jpeg",
+                    };
+                }
+
+                const upload = await uploadFileToCloud(fileToUpload);
+                avatarUrl = upload.secure_url;
+            }
+
+
+            // Đăng ký tài khoản
+            const register = await axios.post(`http://localhost:5000/api/register`, {
+                email,
+                name,
+                password,
+                profilePic: avatarUrl,
+            });
+            console.log("Phản hồi đăng ký:", register.data);
+
+            if (register.data?.success) {
+                showModal("Đăng ký thành công");
+                setTimeout(() => {
+                    setModalVisible(false);
+                    router.push("/sign-in");
+                }, 1500);
+            } else {
+                showModal(register.data.message || "Đăng ký thất bại");
+            }
+        } catch (err) {
+            console.log("Đăng ký lỗi:", err);
+            showModal(err.response?.data?.message || "Lỗi khi đăng ký");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
         <View className="flex-1 bg-white">
-            {/* Sử dụng HeaderOfSignIn với tiêu đề "Đăng ký" */}
-            <HeaderOfSignIn title="Đăng ký" />
-
-            {/* Dòng chữ thông báo dưới header */}
-            <View className="bg-[#f8f4f4] p-4">
-                <Text className="text-black">
-                    Vui lòng nhập thông tin để đăng ký tài khoản
-                </Text>
+            <HeaderOfSignIn title="Đăng Ký" className="mb-4" />
+            <View className="items-center px-6 mt-4">
+                <TouchableOpacity onPress={pickImage} className="items-center mb-6">
+                    {avatar?.uri ? (
+                        <Image source={{ uri: avatar.uri }} className="w-24 h-24 rounded-full mb-2" />
+                    ) : (
+                        <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center mb-2">
+                            <Text className="text-gray-500">Chọn ảnh</Text>
+                        </View>
+                    )}
+                    <Text className="text-blue-500 text-sm">Chọn ảnh đại diện</Text>
+                </TouchableOpacity>
             </View>
 
-            {/* Nội dung SignUp */}
-            <View className="flex-1 mt-10 items-center px-6">
-                {/* Input Số điện thoại */}
-                <TextInput
-                    value={phoneNumber}
-                    onChangeText={handlePhoneNumberChange} // Sử dụng hàm xử lý nhập số điện thoại
-                    placeholder="Số điện thoại"
-                    keyboardType="phone-pad"
-                    onFocus={() => setIsPhoneInputFocused(true)}
-                    onBlur={() => setIsPhoneInputFocused(false)}
-                    className={`h-12 w-full border-b-2 px-3 mb-5 text-base ${isPhoneInputFocused ? "border-blue-500" : "border-gray-400"}`}
-                    style={{ outline: "none" }}
-                />
-
-                {/* Input Mật khẩu */}
-                <View className="w-full mb-5 relative">
+            <View className="px-6">
+                <View className="flex-row items-center border-b border-gray-300 mb-4">
                     <TextInput
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholder="Mật khẩu"
-                        secureTextEntry={!isPasswordVisible}
-                        onFocus={() => setIsPasswordInputFocused(true)}
-                        onBlur={() => setIsPasswordInputFocused(false)}
-                        className={`h-12 w-full border-b-2 px-3 text-base ${isPasswordInputFocused ? "border-blue-500" : "border-gray-400"}`}
-                        style={{ outline: "none" }}
+                        className="flex-1 h-10 text-base px-2"
+                        placeholder="Email"
+                        value={data.email}
+                        onChangeText={(value) => handleChange("email", value)}
                     />
-
-                    {/* Nút hiển thị/ẩn mật khẩu */}
                     <TouchableOpacity
-                        onPress={handlePasswordVisibilityToggle}
-                        className="absolute right-3 top-3"
+                        className={`px-2 py-1 rounded ${data.email ? "bg-blue-500" : "bg-gray-300"}`}
+                        disabled={!data.email || loading}
+                        onPress={sendOtp}
                     >
-                        <Text className="text-gray-500 text-sm">
-                            {isPasswordVisible ? "ẨN" : "HIỆN"}
-                        </Text>
+                        <Text className="text-white text-xs">{otpSent ? "Gửi lại" : "Gửi OTP"}</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Input Xác nhận mật khẩu */}
-                <View className="w-full mb-5 relative">
+                {otpSent && (
                     <TextInput
-                        value={confirmPassword}
-                        onChangeText={handleConfirmPasswordChange}
-                        placeholder="Xác nhận mật khẩu"
-                        secureTextEntry={!isPasswordVisible}
-                        onFocus={() => setIsConfirmPasswordInputFocused(true)}
-                        onBlur={() => setIsConfirmPasswordInputFocused(false)}
-                        className={`h-12 w-full border-b-2 px-3 text-base ${isConfirmPasswordInputFocused ? "border-blue-500" : "border-gray-400"}`}
-                        style={{ outline: "none" }}
+                        className="border-b border-gray-300 mb-4 h-10 text-base px-2"
+                        placeholder="Nhập mã OTP"
+                        keyboardType="number-pad"
+                        value={otp}
+                        onChangeText={setOtp}
                     />
-                    {!isPasswordMatch && (
-                        <Text className="text-red-500 text-xs">Mật khẩu không khớp</Text>
-                    )}
+                )}
+
+                <TextInput
+                    className="border-b border-gray-300 mb-4 h-10 text-base px-2"
+                    placeholder="Họ và tên"
+                    value={data.name}
+                    onChangeText={(value) => handleChange("name", value)}
+                />
+
+                <View className="border-b border-gray-300 mb-4 flex-row items-center">
+                    <TextInput
+                        className="flex-1 h-10 text-base px-2"
+                        placeholder="Mật khẩu"
+                        secureTextEntry={!showPassword}
+                        value={data.password}
+                        onChangeText={(value) => handleChange("password", value)}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword((prev) => !prev)}>
+                        <Text className="text-blue-500 text-xs px-2">{showPassword ? "Ẩn" : "Hiện"}</Text>
+                    </TouchableOpacity>
                 </View>
 
-                {/* Ô Tích "Tôi đồng ý với các điều khoản sử dụng" */}
-                <View className="flex-row items-start w-full mb-5">
-                    <CheckBox
-                        value={isAgree}
-                        onValueChange={setIsAgree}
-                        color={isAgree ? "#007AFF" : undefined}
-                    />
-                    <Text className="ml-2 text-sm">
-                        Tôi đồng ý với{" "}
-                        <Text className="text-blue-500">các điều khoản sử dụng</Text>
-                    </Text>
-                </View>
-
-                {/* Nút Đăng ký */}
-                <CustomButton
-                    title="Đăng ký"
-                    handlePress={() => router.push("/chat")}
-                    containerStyles="bg-blue-500 py-3 w-4/5 mx-auto mb-3"
-                    textStyles="text-white text-lg font-bold text-center"
+                <TextInput
+                    className="border-b border-gray-300 mb-6 h-10 text-base px-2"
+                    placeholder="Xác nhận mật khẩu"
+                    secureTextEntry={!showPassword}
+                    value={data.confirmPassword}
+                    onChangeText={(value) => handleChange("confirmPassword", value)}
                 />
             </View>
+
+            <TouchableOpacity
+                className="bg-blue-500 rounded-full py-3 items-center w-4/5 mx-auto"
+                onPress={handleRegister}
+                disabled={loading || !otpSent}
+            >
+                {loading ? (
+                    <ActivityIndicator color="white" />
+                ) : (
+                    <Text className="text-white font-bold text-base">Đăng ký</Text>
+                )}
+            </TouchableOpacity>
+
+            <Modal
+                animationType="fade"
+                transparent
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <View className="flex-1 justify-center items-center bg-black/50">
+                    <View className="bg-white p-6 rounded-xl w-4/5 shadow-lg items-center">
+                        <Text className="text-base text-center mb-4">{modalMessage}</Text>
+                        <Pressable onPress={() => setModalVisible(false)} className="bg-blue-500 px-6 py-2 rounded-full">
+                            <Text className="text-white font-semibold">Đóng</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }

@@ -1,9 +1,7 @@
 import { useRef, useState } from "react";
 import { View, Image, FlatList, Dimensions, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CustomButton from "../components/CustomButton";
 import CustomLinkButton from "../components/CustomLinkButton";
-import { router, Link } from "expo-router";
 
 const backgrounds = [
   require("../assets/images/bg-1.jpg"),
@@ -20,7 +18,9 @@ export default function App() {
   const flatListRef = useRef(null);
 
   const handleScroll = (event) => {
-    const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const slideIndex = Math.round(contentOffsetX / width); // Dùng Math.round thay vì Math.floor
+    console.log("Current Index:", slideIndex); // Kiểm tra giá trị index
     setCurrentIndex(slideIndex);
   };
 
@@ -29,34 +29,35 @@ export default function App() {
     setCurrentIndex(index);
   };
 
-  // Hàm xử lý khi bấm nút đăng nhập
-  const handleLogin = () => {
-    console.log("Đăng nhập");
-  };
-
-  // Hàm xử lý khi bấm nút tạo tài khoản mới
-  const handleSignUp = () => {
-    console.log("Tạo tài khoản mới");
-  };
-
   return (
     <SafeAreaView className="flex-1 bg-white">
       {/* Hiển thị hình nền dạng Carousel */}
       <View className="flex-1 justify-center items-center">
         <FlatList
-          ref={flatListRef} // Gán ref vào FlatList
+          ref={flatListRef}
           data={backgrounds}
+          keyExtractor={(_, index) => index.toString()}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
+          onMomentumScrollEnd={handleScroll} // Xử lý khi cuộn xong
+          scrollEventThrottle={16}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
           renderItem={({ item }) => (
-            <Image source={item} className="w-screen h-[500px]" resizeMode="cover" />
+            <Image
+              source={item}
+              style={{ width: width, height: 500 }}
+              resizeMode="cover"
+            />
           )}
         />
       </View>
 
-      {/* Pagination dots (bấm để chuyển ảnh) */}
+      {/* Pagination dots */}
       <View className="flex-row justify-center mb-6">
         {backgrounds.map((_, index) => (
           <TouchableOpacity key={index} onPress={() => handleDotPress(index)}>

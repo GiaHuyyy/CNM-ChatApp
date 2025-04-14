@@ -4,9 +4,9 @@ const jwt = require("jsonwebtoken");
 
 async function loginUser(request, response) {
   try {
-    const { phone, password } = request.body;
+    const { email, password } = request.body;
 
-    const user = await UserModel.findOne({ phone });
+    const user = await UserModel.findOne({ email });
 
     if (!user) {
       return response.status(400).json({ message: "User not exist", error: true });
@@ -20,7 +20,7 @@ async function loginUser(request, response) {
 
     const tokenData = {
       _id: user._id,
-      phone: user.phone,
+      email: user.email,
     };
     const token = await jwt.sign(tokenData, process.env.JWT_SECRET_KEY, { expiresIn: "1h" });
 

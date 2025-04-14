@@ -1,12 +1,11 @@
 import { createBrowserRouter } from "react-router-dom";
 import App from "../App";
-// import RegisterPage from "../pages/RegisterPage";
-// import CheckPhonePage from "../pages/LoginWithPhonePage";
-// import CheckPasswordPage from "../pages/CheckPasswordPage";
-// import LoginWithQR from "../pages/LoginWithQR";
 import Home from "../pages/Home";
 import MessagePage from "../components/MessagePage";
 import AuthLayout from "../layout/AuthLayout";
+import BookPhonePage from "../components/BookPhonePage";
+import ListFriend from "../components/ListFriend";
+import ListInvite from "../components/ListInvite";
 
 const router = createBrowserRouter([
   {
@@ -17,45 +16,31 @@ const router = createBrowserRouter([
         path: "/auth",
         element: <AuthLayout />,
       },
-      // {
-      //   path: "/register",
-      //   element: (
-      //     <AuthLayout>
-      //       <RegisterPage />
-      //     </AuthLayout>
-      //   ),
-      // },
-      // {
-      //   path: "/qr",
-      //   element: (
-      //     <AuthLayout>
-      //       <LoginWithQR />
-      //     </AuthLayout>
-      //   ),
-      // },
-      // {
-      //   path: "/phone",
-      //   element: (
-      //     <AuthLayout>
-      //       <CheckPhonePage />
-      //     </AuthLayout>
-      //   ),
-      // },
-      // {
-      //   path: "/password",
-      //   element: (
-      //     <AuthLayout>
-      //       <CheckPasswordPage />
-      //     </AuthLayout>
-      //   ),
-      // },
       {
-        path: "",
+        path: "/chat",
         element: <Home />,
         children: [
           {
-            path: ":userId",
+            path: "/chat/:userId",
             element: <MessagePage />,
+          },
+        ],
+      },
+      {
+        path: "/bookphone",
+        element: <Home />,
+        children: [
+          {
+            path: "/bookphone",
+            element: <BookPhonePage />,
+          },
+          {
+            path: "/bookphone/listfriends",
+            element: <ListFriend />,
+          },
+          {
+            path: "/bookphone/listinvites",
+            element: <ListInvite />,
           },
         ],
       },

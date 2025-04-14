@@ -1,12 +1,12 @@
-import "./App.css";
 import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
-import GlobalProvider from "./context/GlobalProvider";
-import CallProvider from "./context/CallProvider";
-import IncomingCallDialog from "./components/calls/IncomingCallDialog";
-import CallInterface from "./components/calls/CallInterface";
-import CallingIndicator from "./components/calls/CallingIndicator";
+import "./App.css";
 import CallDebugger from "./components/calls/CallDebugger";
+import CallingIndicator from "./components/calls/CallingIndicator";
+import CallInterface from "./components/calls/CallInterface";
+import IncomingCallDialog from "./components/calls/IncomingCallDialog";
+import CallProvider from "./context/CallProvider";
+import GlobalProvider from "./context/GlobalProvider";
 
 function App() {
   return (

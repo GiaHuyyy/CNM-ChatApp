@@ -1,0 +1,905 @@
+openapi: 3.0.0
+info:
+  title: Chat App API
+  version: 1.0.0
+  description: API documentation for Chat Application
+
+servers:
+  - url: http://localhost:5000
+    description: Development server
+  - url: https://cnm-chatapp-server.onrender.com
+    description: Production server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+paths:
+  /api/send-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Send OTP to email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP sent successfully"
+                  email:
+                    type: string
+                    example: "baotran.060103@gmail.com"
+
+  /api/verify-otp:
+    post:
+      tags:
+        - Authentication
+      summary: Verify OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Xác thực thành công"
+
+  /api/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+                - otp
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                password:
+                  type: string
+                  example: "1111"
+                name:
+                  type: string
+                  example: "bewchan06"
+                profilePic:
+                  type: string
+                  example: "https://example.com/profile.jpg"
+                otp:
+                  type: string
+                  example: "123456"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đăng ký thành công"
+                  data:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      profilePic:
+                        type: string
+
+  /api/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                password:
+                  type: string
+                  example: "1111"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đăng nhập thành công"
+                  token:
+                    type: string
+
+  /api/user-details:
+    get:
+      tags:
+        - User
+      summary: Get current user details
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      profilePic:
+                        type: string
+
+  /api/logout:
+    get:
+      tags:
+        - Authentication
+      summary: Logout user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đăng xuất thành công"
+
+  /api/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Send password reset OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP đã được gửi đến email của bạn"
+
+  /api/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+                - newPassword
+              properties:
+                email:
+                  type: string
+                  example: "baotran.060103@gmail.com"
+                otp:
+                  type: string
+                  example: "123456"
+                newPassword:
+                  type: string
+                  example: "newpassword123"
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Mật khẩu đã được cập nhật thành công"
+
+  /api/update-user:
+    post:
+      tags:
+        - User
+      summary: Update user details
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "New Name"
+                profilePic:
+                  type: string
+                  example: "https://example.com/new-profile.jpg"
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "User updated successfully"
+
+  /api/search-user:
+    post:
+      tags:
+        - User
+      summary: Search for users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - search
+              properties:
+                search:
+                  type: string
+                  example: "john"
+      responses:
+        '200':
+          description: Users found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Users found"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        email:
+                          type: string
+                        name:
+                          type: string
+                        profilePic:
+                          type: string
+
+  /api/conversations:
+    get:
+      tags:
+        - Chat
+      summary: Get user conversations
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Conversations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  conversations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                        receiver:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                        lastMessage:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            seen:
+                              type: boolean
+                        unreadCount:
+                          type: number
+
+  /api/messages/{conversationId}:
+    get:
+      tags:
+        - Chat
+      summary: Get conversation messages
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema:
+            type: string
+          description: ID of the conversation
+      responses:
+        '200':
+          description: Messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        text:
+                          type: string
+                        imageUrl:
+                          type: string
+                        fileUrl:
+                          type: string
+                        seen:
+                          type: boolean
+                        seenBy:
+                          type: array
+                          items:
+                            type: string
+                        msgByUserId:
+                          type: string
+                        createdAt:
+                          type: string
+
+  /api/send-friend-request:
+    post:
+      tags:
+        - Friends
+      summary: Send a friend request
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - receiverId
+              properties:
+                receiverId:
+                  type: string
+                  example: "6507d6f099b1234567890123"
+      responses:
+        '200':
+          description: Friend request sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đã gửi lời mời kết bạn"
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      sender:
+                        type: string
+                      receiver:
+                        type: string
+                      status:
+                        type: string
+                        enum: [pending, accepted, rejected]
+
+  /api/respond-friend-request:
+    post:
+      tags:
+        - Friends
+      summary: Respond to a friend request
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - status
+              properties:
+                requestId:
+                  type: string
+                  example: "6507d6f099b1234567890123"
+                status:
+                  type: string
+                  enum: [accepted, rejected]
+      responses:
+        '200':
+          description: Friend request response successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      status:
+                        type: string
+
+  /api/friends:
+    get:
+      tags:
+        - Friends
+      summary: Get list of friends
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Friends list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+                        receiver:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+
+  /api/pending-friend-requests:
+    get:
+      tags:
+        - Friends
+      summary: Get pending friend requests
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Pending friend requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+                        status:
+                          type: string
+                          enum: [pending]
+                        createdAt:
+                          type: string
+                          format: date-time
+
+  /api/remove-friend:
+    post:
+      tags:
+        - Friends
+      summary: Remove a friend from friends list
+      description: Remove an existing friendship between two users. Only works for accepted friendships.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - friendId
+              properties:
+                friendId:
+                  type: string
+                  description: The ID of the friend to remove
+                  example: "6507d6f099b1234567890123"
+      responses:
+        '200':
+          description: Friend removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đã xóa khỏi danh sách bạn bè"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "friendId is required"
+        '403':
+          description: Unauthorized access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Unauthorized access"
+        '404':
+          description: Friend relationship not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không tìm thấy mối quan hệ bạn bè"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Internal server error"
+
+  /api/check-friend/{userId}:
+      get:
+        tags:
+          - Friends
+        summary: Check friend request status with a user
+        description: Check if there's any pending or accepted friend request between current user and target user
+        security:
+          - cookieAuth: []
+        parameters:
+          - in: path
+            name: userId
+            required: true
+            schema:
+              type: string
+            description: ID of the user to check friendship status with
+            example: "6507d6f099b1234567890123"
+        responses:
+          '200':
+            description: Friend status check successful
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+                      example: true
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [none, pending, accepted]
+                          description: Current friendship status
+                          example: "pending"
+                        requestId:
+                          type: string
+                          description: ID of the friend request if exists
+                          example: "6507d6f099b1234567890123"
+                        isSender:
+                          type: boolean
+                          description: Whether current user is the sender of the request
+                          example: true
+            '400':
+              description: Invalid user ID
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        example: "Invalid user ID"
+            '404':
+              description: User not found
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        example: "User not found"
+
+  /api/cancel-friend-request:
+      post:
+        tags:
+          - Friends
+        summary: Cancel a pending friend request
+        description: Cancel a friend request that you sent (only works for pending requests)
+        security:
+          - cookieAuth: []
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - requestId
+                  - receiverId
+                properties:
+                  requestId:
+                    type: string
+                    description: ID of the friend request to cancel
+                    example: "6507d6f099b1234567890123"
+                receiverId:
+                  type: string
+                  description: ID of the user who received the friend request
+                  example: "650a1b2c3d4e5f6789012345"
+            responses:
+              '200':
+                description: Friend request cancelled successfully
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        success:
+                          type: boolean
+                          example: true
+                        message:
+                          type: string
+                          example: "Đã hủy lời mời kết bạn thành công"
+                  data:
+                    type: object
+                    properties:
+                      requestId:
+                        type: string
+                        example: "6507d6f099b1234567890123"
+                      status:
+                        type: string
+                        example: "cancelled"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "requestId và receiverId là bắt buộc"
+        '403':
+          description: Unauthorized access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không có quyền hủy lời mời kết bạn này"
+        '404':
+          description: Friend request not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không tìm thấy lời mời kết bạn hoặc bạn không có quyền hủy"

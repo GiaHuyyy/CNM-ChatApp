@@ -55,10 +55,16 @@ export default function Home() {
 
       // Check if there's a conversation ID in the URL to join immediately
       const currentPath = location.pathname;
-      const conversationId = currentPath.substring(1); // Remove the leading slash
+
+      // Extract just the ID part without any prefixes
+      let conversationId = "";
+      if (currentPath.startsWith("/chat/")) {
+        conversationId = currentPath.substring(6); // Remove "/chat/"
+        console.log("Extracted conversation ID from URL:", conversationId);
+      }
 
       if (conversationId && conversationId !== "") {
-        console.log("Immediately joining room on connect:", conversationId);
+        console.log("Emitting joinRoom with ID:", conversationId);
         socketConnection.emit("joinRoom", conversationId);
       }
     });
@@ -90,11 +96,14 @@ export default function Home() {
     };
   }, [dispatch, setSocketConnection, location.pathname]);
 
-  const basePath = location.pathname === "/";
-
   const handleGroupCreated = (conversationId) => {
     console.log("Group created with ID:", conversationId);
+    // No need to navigate here, since the GroupChatModal now handles navigation
   };
+
+  // Determine what page we're on
+  const isBaseChatPath = location.pathname === "/chat";
+  const isBookphonePath = location.pathname.startsWith("/bookphone");
 
   return (
     <div className="flex h-screen">
@@ -102,25 +111,31 @@ export default function Home() {
       <section className="w-[408px] border-r border-gray-300 bg-white">
         {/* Main tab */}
         <Sidebar onGroupCreated={handleGroupCreated} />
-
-        {/*  */}
       </section>
 
-      {/* Message component */}
-      <section className={`flex-1 bg-white ${basePath && "hidden"}`}>
-        <Outlet />
-      </section>
+      {/* Content Area - Either Message or Empty Welcome */}
+      {!isBaseChatPath && !isBookphonePath ? (
+        <section className="flex-1 bg-white">
+          <Outlet />
+        </section>
+      ) : isBaseChatPath ? (
+        <div className="flex flex-1 flex-col items-center">
+          <h1 className="mt-20 text-center text-xl">
+            Chào mừng đến với <b>Z PC!</b>
+          </h1>
+          <p className="mt-5 w-1/2 text-center text-sm">
+            Khám phá những tiện ích hỗ trợ làm việc và trò chuyện cùng người thân, bạn bè được tối ưu hóa cho máy tính
+            của bạn.
+          </p>
+        </div>
+      ) : null}
 
-      {/* Default */}
-      <div className={`flex flex-1 flex-col items-center ${!basePath && "hidden"}`}>
-        <h1 className="mt-20 text-center text-xl">
-          Chào mừng đến với <b>Z PC!</b>
-        </h1>
-        <p className="mt-5 w-1/2 text-center text-sm">
-          Khám phá những tiện ích hỗ trợ làm việc và trò chuyện cùng người thân, bạn bè được tối ưu hóa cho máy tính của
-          bạn.
-        </p>
-      </div>
+      {/* Render BookPhone component when on bookphone routes - positioned directly next to Sidebar */}
+      {isBookphonePath && (
+        <section className="flex-1 bg-white">
+          <Outlet />
+        </section>
+      )}
     </div>
   );
 }
