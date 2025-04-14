@@ -126,9 +126,134 @@ const getPendingRequests = async (req, res) => {
   }
 };
 
+// Remove friend
+const removeFriend = async (req, res) => {
+  try {
+    const { friendId } = req.body;
+    const userId = req.user._id;
+
+    const friendRecord = await FriendModel.findOne({
+      $or: [
+        { sender: userId, receiver: friendId, status: "accepted" },
+        { sender: friendId, receiver: userId, status: "accepted" }
+      ]
+    });
+
+    if (!friendRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy mối quan hệ bạn bè"
+      });
+    }
+
+    await FriendModel.findByIdAndDelete(friendRecord._id);
+
+    res.status(200).json({
+      success: true,
+      message: "Đã xóa khỏi danh sách bạn bè"
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Check friend request status
+const checkFriendStatus = async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user._id;
+
+    const friendRequest = await FriendModel.findOne({
+      $or: [
+        { sender: currentUserId, receiver: targetUserId },
+        { sender: targetUserId, receiver: currentUserId }
+      ]
+    });
+
+    if (!friendRequest) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "none",
+          requestId: null,
+          isSender: false
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        status: friendRequest.status,
+        requestId: friendRequest._id,
+        isSender: friendRequest.sender.toString() === currentUserId.toString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Cancel friend request
+const cancelFriendRequest = async (req, res) => {
+  try {
+    const { requestId, receiverId } = req.body;
+    const userId = req.user._id;
+
+    // Validate required fields
+    if (!requestId || !receiverId) {
+      return res.status(400).json({
+        success: false,
+        message: "requestId và receiverId là bắt buộc"
+      });
+    }
+
+    // Find the friend request
+    const friendRequest = await FriendModel.findOne({
+      _id: requestId,
+      sender: userId,
+      receiver: receiverId,
+      status: "pending"
+    });
+
+    if (!friendRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy lời mời kết bạn hoặc bạn không có quyền hủy"
+      });
+    }
+
+    // Delete the friend request
+    await FriendModel.findByIdAndDelete(requestId);
+
+    res.status(200).json({
+      success: true,
+      message: "Đã hủy lời mời kết bạn thành công",
+      data: {
+        requestId: requestId,
+        status: "cancelled"
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   sendFriendRequest,
   respondToFriendRequest,
   getFriendList,
-  getPendingRequests  // Add this
+  getPendingRequests,
+  removeFriend,
+  checkFriendStatus,
+  cancelFriendRequest
 };

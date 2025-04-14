@@ -1,11 +1,80 @@
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import Images from "../constants/images";
 import { faAddressCard, faEdit } from "@fortawesome/free-regular-svg-icons";
-import PropTypes from "prop-types";
 import { faBan, faTriangleExclamation, faUserGroup } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import axios from "axios";
+import PropTypes from "prop-types";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import Images from "../constants/images";
 
 export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose }) {
+  const [isSending, setIsSending] = useState(false);
+  const [hasSentRequest, setHasSentRequest] = useState(false);
+  const [friendStatus, setFriendStatus] = useState(null);
+
+  useEffect(() => {
+    const checkFriendStatus = async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/api/check-friend/${dataUser._id}`,
+          { withCredentials: true }
+        );
+        
+        if (response.data.success) {
+          setFriendStatus(response.data.data);
+          setHasSentRequest(response.data.data.status === 'pending' && response.data.data.isSender);
+        }
+      } catch (error) {
+        console.error("Error checking friend status:", error);
+      }
+    };
+    
+    if (!isUser) {
+      checkFriendStatus();
+    }
+  }, [dataUser._id, isUser]);
+
+  const handleFriendRequest = async () => {
+    try {
+      setIsSending(true);
+      if (friendStatus?.status === 'pending' && friendStatus?.isSender) {
+        // Hủy lời mời kết bạn
+        const response = await axios.post(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/api/cancel-friend-request`,
+          { 
+            requestId: friendStatus.requestId,
+            receiverId: dataUser._id 
+          },
+          { withCredentials: true }
+        );
+        if (response.data.success) {
+          toast.success(response.data.message);
+          setFriendStatus(null);
+          setHasSentRequest(false);
+        }
+      } else {
+        // Gửi lời mời kết bạn
+        const response = await axios.post(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-friend-request`,
+          { receiverId: dataUser._id },
+          { withCredentials: true }
+        );
+        toast.success(response.data.message);
+        setFriendStatus({
+          status: 'pending',
+          isSender: true,
+          requestId: response.data.data._id
+        });
+        setHasSentRequest(true);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Có lỗi xảy ra");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <div className="max-h-[570px] overflow-y-auto">
       <div className="h-[171px] w-full">
@@ -22,11 +91,35 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
 
       {!isUser && (
         <div className="flex justify-center gap-x-2 px-4 pb-4">
-          <button className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold hover:bg-[#c6cad2]">
-            Kết bạn
-          </button>
+          {friendStatus?.status === 'accepted' ? (
+            <button 
+              className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold"
+              disabled
+            >
+              Bạn bè
+            </button>
+          ) : (
+            <button 
+              className={`flex h-8 flex-1 items-center justify-center rounded-[3px] text-sm font-semibold disabled:opacity-50 
+                ${hasSentRequest 
+                  ? 'bg-[#ffebeb] text-[#ad0000] hover:bg-[#ffdbdb]' 
+                  : 'bg-[#e5e7eb] hover:bg-[#c6cad2]'
+                }`}
+              onClick={handleFriendRequest}
+              disabled={isSending || (friendStatus?.status === 'pending' && !friendStatus?.isSender)}
+            >
+              {isSending 
+                ? "Đang xử lý..." 
+                : friendStatus?.status === 'pending'
+                  ? friendStatus.isSender 
+                    ? "Hủy lời mời"
+                    : "Đã nhận lời mời"
+                  : "Kết bạn"
+              }
+            </button>
+          )}
           <Link
-            to={"/" + dataUser?._id}
+            to={"/chat/" + dataUser?._id}
             onClick={onClose}
             className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#dbebff] text-sm font-semibold text-[#0045ad] hover:bg-[#c7e0ff]"
           >

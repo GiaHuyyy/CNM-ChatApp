@@ -15,7 +15,10 @@ const {
   sendFriendRequest, 
   respondToFriendRequest, 
   getFriendList,
-  getPendingRequests 
+  getPendingRequests,
+  removeFriend,
+  checkFriendStatus,
+  cancelFriendRequest 
 } = require("../controller/friendController");
 const { protect } = require('../middleware/authMiddleware');
 const { handleFileUpload } = require("../controller/uploadFile");
@@ -65,4 +68,8 @@ router.get("/pending-friend-requests", protect, getPendingRequests);  // Add thi
 // File upload route
 router.post("/upload-file", handleFileUpload);
 
+// Friend routes
+router.get("/check-friend/:userId", protect, checkFriendStatus);
+router.post("/remove-friend", protect, removeFriend);
+router.post("/cancel-friend-request", protect, cancelFriendRequest);
 module.exports = router;
