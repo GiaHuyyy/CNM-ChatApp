@@ -109,8 +109,8 @@ export default function GroupChatModal({ isOpen, onClose, onGroupCreated }) {
             // If onGroupCreated callback exists, call it
             if (onGroupCreated) onGroupCreated(response.conversationId);
 
-            // Use React Router's navigate
-            navigate(`/${response.conversationId}`);
+            // Use React Router's navigate with new path prefix
+            navigate(`/chat/${response.conversationId}`);
           }
         } else {
           toast.error(response.message || "Không thể tạo nhóm chat");

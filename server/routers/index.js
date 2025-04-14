@@ -11,6 +11,17 @@ const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
 const forgotPassword = require("../controller/forgotPassword");
 const resetPassword = require("../controller/resetPassword");
+const { 
+  sendFriendRequest, 
+  respondToFriendRequest, 
+  getFriendList,
+  getPendingRequests,
+  removeFriend,
+  checkFriendStatus,
+  cancelFriendRequest 
+} = require("../controller/friendController");
+const { protect } = require('../middleware/authMiddleware');
+const { handleFileUpload } = require("../controller/uploadFile");
 
 const router = express.Router();
 
@@ -35,12 +46,12 @@ router.get("/debug/otps", async (req, res) => {
     const otps = await OTPModel.find({});
     res.json({
       count: otps.length,
-      otps: otps
+      otps: otps,
     });
   } catch (error) {
     res.status(500).json({
       error: "Failed to fetch OTPs",
-      details: error.message
+      details: error.message,
     });
   }
 });
@@ -49,4 +60,16 @@ router.get("/debug/otps", async (req, res) => {
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 
+// Friend routes - add protect middleware
+router.post("/send-friend-request", protect, sendFriendRequest);
+router.post("/respond-friend-request", protect, respondToFriendRequest);
+router.get("/friends", protect, getFriendList);
+router.get("/pending-friend-requests", protect, getPendingRequests);  // Add this route
+// File upload route
+router.post("/upload-file", handleFileUpload);
+
+// Friend routes
+router.get("/check-friend/:userId", protect, checkFriendStatus);
+router.post("/remove-friend", protect, removeFriend);
+router.post("/cancel-friend-request", protect, cancelFriendRequest);
 module.exports = router;

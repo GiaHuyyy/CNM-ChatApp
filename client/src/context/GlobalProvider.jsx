@@ -3,10 +3,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 const GlobalContext = createContext();
 
-// Export the context hook
 export const useGlobalContext = () => useContext(GlobalContext);
 
-// Create the provider component
 const GlobalProvider = ({ children }) => {
   const [isLoginWithEmail, setIsLoginWithEmail] = useState(() => {
     const savedState = localStorage.getItem("authState");
@@ -15,6 +13,16 @@ const GlobalProvider = ({ children }) => {
   const [isLoginWithPhone, setIsLoginWithPhone] = useState(false);
   const [socketConnection, setSocketConnection] = useState(null);
   const [seenMessage, setSeenMessage] = useState(false);
+  const [notifications, setNotifications] = useState(0);
+
+  // Add notification update function
+  const updateNotifications = (count) => {
+    setNotifications(count);
+    // Update favicon or title if needed
+    requestAnimationFrame(() => {
+      document.title = count > 0 ? `(${count}) Chat App` : "Chat App";
+    });
+  };
 
   // Add this function to fetch room data after connection is established
   const handleSocketConnection = (socket) => {
@@ -72,6 +80,20 @@ const GlobalProvider = ({ children }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (socketConnection) {
+      // Add handler for friend request updates
+      socketConnection.on("receiveFriendRequest", (data) => {
+        // Force socket to check for updates
+        socketConnection.emit("checkPendingRequests");
+      });
+
+      return () => {
+        socketConnection.off("receiveFriendRequest");
+      };
+    }
+  }, [socketConnection]);
+
   return (
     <GlobalContext.Provider 
       value={{ 
@@ -82,7 +104,9 @@ const GlobalProvider = ({ children }) => {
         socketConnection,
         setSocketConnection,
         seenMessage,
-        setSeenMessage
+        setSeenMessage,
+        notifications,
+        updateNotifications  // Add new notification values
       }}
     >
       {children}

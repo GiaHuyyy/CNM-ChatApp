@@ -15,6 +15,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import commingSoon from "../helpers/commingSoon";
 import { format } from "date-fns";
+import ImageViewerModal from "./ImageViewerModal";
 
 // Action Group Button component
 const ActionGroupButton = ({ icon, title, handleOnClick }) => {
@@ -76,16 +77,20 @@ SidebarSection.propTypes = {
 };
 
 // MediaItem component
-const MediaItem = ({ message, type }) => {
+const MediaItem = ({ message, type, handleImageClick }) => {
   if (type === "photo") {
     return (
-      <button key={message._id} className="h-[72px] overflow-hidden hover:opacity-80">
+      <button
+        key={message._id}
+        className="h-[72px] overflow-hidden hover:opacity-80"
+        onClick={() => handleImageClick(message.imageUrl || message.fileUrl)}
+      >
         {message.imageUrl && <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />}
         {message.fileUrl &&
           (message.fileUrl.endsWith(".mp4") ||
             message.fileUrl.endsWith(".webm") ||
             message.fileUrl.endsWith(".ogg")) && (
-            <video controls className="rounded-[3px] object-contain">
+            <video className="rounded-[3px] object-contain">
               <source src={message.fileUrl} type="video/mp4" />
               Your browser does not support the video tag.
             </video>
@@ -124,9 +129,9 @@ const MediaItem = ({ message, type }) => {
         <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
 
         <div className="flex flex-1 flex-col items-start pl-3">
-          <span className="break-words text-sm">{message.text}</span>
+          <span className="w-[270px] truncate text-sm">{message.text}</span>
           <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-            <span className="font-medium text-blue-500">{message.text.slice(8)}</span>
+            <span className="max-w-[220px] truncate font-medium text-blue-500">{message.text.slice(7)}</span>
             <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
           </div>
         </div>
@@ -156,6 +161,14 @@ export default function RightSidebar({
   setShowContextMenu,
 }) {
   const [activeTab, setActiveTab] = useState("Anh/Video");
+
+  const [showImageModal, setShowImageModal] = useState(false);
+const [selectedImage, setSelectedImage] = useState("");
+
+const handleImageClick = (imageUrl) => {
+  setSelectedImage(imageUrl);
+  setShowImageModal(true);
+};
 
   const handleContextMenuChange = (menu) => {
     setShowContextMenu(menu);
@@ -262,7 +275,7 @@ export default function RightSidebar({
             activeTab="Anh/Video"
           >
             {photoVideoMessages.slice(0, 8).map((message) => (
-              <MediaItem key={message._id} message={message} type="photo" />
+              <MediaItem key={message._id} message={message} type="photo" handleImageClick={handleImageClick} />
             ))}
           </SidebarSection>
 
@@ -380,6 +393,8 @@ export default function RightSidebar({
           {renderTabContent()}
         </div>
       )}
+
+      {showImageModal && <ImageViewerModal fileUrl={selectedImage} onClose={() => setShowImageModal(false)} />}
     </div>
   );
 }

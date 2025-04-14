@@ -65,7 +65,7 @@ export default function LoginPage() {
         toast.success(response.data.message || "Login successful");
 
         // Navigate to home page
-        navigate("/", { replace: true });
+        navigate("/chat", { replace: true });
       } else {
         toast.error(response.data.message || "Login failed");
       }
