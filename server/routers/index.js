@@ -10,6 +10,13 @@ const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
 const forgotPassword = require("../controller/forgotPassword");
 const resetPassword = require("../controller/resetPassword");
+const { 
+  sendFriendRequest, 
+  respondToFriendRequest, 
+  getFriendList,
+  getPendingRequests 
+} = require("../controller/friendController");
+const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -46,5 +53,11 @@ router.get("/debug/otps", async (req, res) => {
 // Password reset routes
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
+
+// Friend routes - add protect middleware
+router.post("/send-friend-request", protect, sendFriendRequest);
+router.post("/respond-friend-request", protect, respondToFriendRequest);
+router.get("/friends", protect, getFriendList);
+router.get("/pending-friend-requests", protect, getPendingRequests);  // Add this route
 
 module.exports = router;

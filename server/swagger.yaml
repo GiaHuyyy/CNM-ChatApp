@@ -302,3 +302,355 @@ paths:
                   message:
                     type: string
                     example: "Mật khẩu đã được cập nhật thành công"
+
+  /api/update-user:
+    post:
+      tags:
+        - User
+      summary: Update user details
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "New Name"
+                profilePic:
+                  type: string
+                  example: "https://example.com/new-profile.jpg"
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "User updated successfully"
+
+  /api/search-user:
+    post:
+      tags:
+        - User
+      summary: Search for users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - search
+              properties:
+                search:
+                  type: string
+                  example: "john"
+      responses:
+        '200':
+          description: Users found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Users found"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        email:
+                          type: string
+                        name:
+                          type: string
+                        profilePic:
+                          type: string
+
+  /api/conversations:
+    get:
+      tags:
+        - Chat
+      summary: Get user conversations
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Conversations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  conversations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                        receiver:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                        lastMessage:
+                          type: object
+                          properties:
+                            text:
+                              type: string
+                            seen:
+                              type: boolean
+                        unreadCount:
+                          type: number
+
+  /api/messages/{conversationId}:
+    get:
+      tags:
+        - Chat
+      summary: Get conversation messages
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema:
+            type: string
+          description: ID of the conversation
+      responses:
+        '200':
+          description: Messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        text:
+                          type: string
+                        imageUrl:
+                          type: string
+                        fileUrl:
+                          type: string
+                        seen:
+                          type: boolean
+                        seenBy:
+                          type: array
+                          items:
+                            type: string
+                        msgByUserId:
+                          type: string
+                        createdAt:
+                          type: string
+
+  /api/send-friend-request:
+    post:
+      tags:
+        - Friends
+      summary: Send a friend request
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - receiverId
+              properties:
+                receiverId:
+                  type: string
+                  example: "6507d6f099b1234567890123"
+      responses:
+        '200':
+          description: Friend request sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đã gửi lời mời kết bạn"
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      sender:
+                        type: string
+                      receiver:
+                        type: string
+                      status:
+                        type: string
+                        enum: [pending, accepted, rejected]
+
+  /api/respond-friend-request:
+    post:
+      tags:
+        - Friends
+      summary: Respond to a friend request
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - status
+              properties:
+                requestId:
+                  type: string
+                  example: "6507d6f099b1234567890123"
+                status:
+                  type: string
+                  enum: [accepted, rejected]
+      responses:
+        '200':
+          description: Friend request response successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      status:
+                        type: string
+
+  /api/friends:
+    get:
+      tags:
+        - Friends
+      summary: Get list of friends
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Friends list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+                        receiver:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+
+  /api/pending-friend-requests:
+    get:
+      tags:
+        - Friends
+      summary: Get pending friend requests
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Pending friend requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        sender:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            name:
+                              type: string
+                            email:
+                              type: string
+                            profilePic:
+                              type: string
+                        status:
+                          type: string
+                          enum: [pending]
+                        createdAt:
+                          type: string
+                          format: date-time
