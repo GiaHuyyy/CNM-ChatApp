@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 import { faAddressBook, faImage, faMessage, faSquareCheck } from "@fortawesome/free-regular-svg-icons";
 import {
@@ -15,16 +15,16 @@ import {
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useSelector } from "react-redux";
+import axios from "axios";
 import PropTypes from "prop-types";
-import EditUserDetails from "./EditUserDetails";
+import { useSelector } from "react-redux";
+import { useGlobalContext } from "../context/GlobalProvider";
+import commingSoon from "../helpers/commingSoon";
+import AddFriend from "./AddFriend";
 import DropdownAvatar from "./DropdownAvatar";
 import DropdownSetting from "./DropdownSetting";
-import AddFriend from "./AddFriend";
+import EditUserDetails from "./EditUserDetails";
 import GroupChatModal from "./GroupChatModal";
-import axios from "axios";
-import commingSoon from "../helpers/commingSoon";
-import { useGlobalContext } from "../context/GlobalProvider";
 
 export default function Sidebar({ onGroupCreated }) {
   const user = useSelector((state) => state.user);
@@ -88,17 +88,22 @@ export default function Sidebar({ onGroupCreated }) {
     };
   }, [dropdownSettingRef, buttonSettingRef]);
 
-  const ButtonTab = ({ icon, styles, isActive, isRef, title, handleClick }) => {
+  const ButtonTab = ({ icon, styles, isActive, isRef, title, handleClick, notificationCount }) => {
     return (
       <button
         ref={isRef ? buttonSettingRef : null}
-        className={`flex h-12 w-12 items-center justify-center rounded-md text-2xl ${
+        className={`flex h-12 w-12 items-center justify-center rounded-md text-2xl relative ${
           isActive ? "bg-[#00000040]" : ""
         } text-white hover:bg-[#38383840] ${styles}`}
         onClick={handleClick}
         title={title}
       >
         <FontAwesomeIcon icon={icon} />
+        {notificationCount > 0 && (
+          <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs">
+            {notificationCount}
+          </div>
+        )}
       </button>
     );
   };
@@ -110,8 +115,42 @@ export default function Sidebar({ onGroupCreated }) {
     handleClick: PropTypes.func,
     isRef: PropTypes.bool,
     title: PropTypes.string,
+    notificationCount: PropTypes.number,
   };
 
+  // Add state for friend requests count
+  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
+
+  // Add useEffect to fetch friend requests count
+  useEffect(() => {
+    const fetchFriendRequestsCount = async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`,
+          { withCredentials: true }
+        );
+        setFriendRequestsCount(response.data.data.length);
+      } catch (error) {
+        console.error("Error fetching friend requests:", error);
+      }
+    };
+
+    fetchFriendRequestsCount();
+    
+    // Set up interval to check for new requests
+    const interval = setInterval(fetchFriendRequestsCount, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update the ButtonTab for bookphone
+  <ButtonTab
+    title="Danh bạ"
+    icon={faAddressBook}
+    isActive={openTab === "bookphone"}
+    handleClick={() => handleOpenTab("bookphone")}
+    notificationCount={friendRequestsCount}
+  />
   const handleOpenTab = (tab) => {
     setOpenTab(tab);
     // Navigate to the corresponding route based on the tab
@@ -222,6 +261,7 @@ export default function Sidebar({ onGroupCreated }) {
                 icon={faAddressBook}
                 isActive={openTab === "bookphone"}
                 handleClick={() => handleOpenTab("bookphone")}
+                notificationCount={friendRequestsCount}
               />
               <ButtonTab title="Todo" icon={faSquareCheck} handleClick={commingSoon} />
             </div>
@@ -531,10 +571,15 @@ export default function Sidebar({ onGroupCreated }) {
               <NavLink
                 to="/bookphone/listinvites"
                 className={({ isActive }) =>
-                  `rounded-lg px-4 py-2 ${isActive ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`
+                  `relative rounded-lg px-4 py-2 ${isActive ? "bg-blue-100 text-blue-700" : "hover:bg-gray-100"}`
                 }
               >
                 Lời mời kết bạn
+                {friendRequestsCount > 0 && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                    {friendRequestsCount}
+                  </span>
+                )}
               </NavLink>
             </div>
           </div>
