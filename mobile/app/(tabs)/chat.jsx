@@ -2,16 +2,20 @@ import React, { useEffect, useState } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { setOnlineUser } from "../redux/userSlice";
 import axios from "axios";
+import { useNavigation } from "@react-navigation/native";
+import { setUser, setToken } from "../redux/userSlice";
 
 export default function Chat() {
   const dispatch = useDispatch();
-  const { setSocketConnection } = useGlobalContext();
+  const navigation = useNavigation();
+  const user = useSelector((state) => state.user);
+  const { setSocketConnection, setSeenMessage } = useGlobalContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -19,7 +23,28 @@ export default function Chat() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [socketConnection, setSocketConnectionState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/api/user-details", {
+          withCredentials: true,
+        });
+        dispatch(setUser(response?.data?.data));
+        console.log("User details fetched:", response.data.data);
+      } catch (error) {
+        console.error("Error fetching user info:", error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    setTimeout(() => {
+      fetchUserDetails();
+    }, 100);
+  }, []);
   useEffect(() => {
     const connectSocket = async () => {
       try {
@@ -41,6 +66,7 @@ export default function Chat() {
         });
 
         setSocketConnection(socketConnection);
+        setSocketConnectionState(socketConnection);
 
         return () => {
           console.log("❌ Disconnecting socket");
@@ -53,6 +79,22 @@ export default function Chat() {
 
     connectSocket();
   }, [dispatch, setSocketConnection]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      if (socketConnection) {
+        socketConnection.emit("sidebar", user?._id);
+        console.log("Socket emit sidebar: ", user);
+        socketConnection.on("conversation", (data) => {
+          console.log("Conversation: ", data);
+
+          if (data) {
+            setAllUsers(data);
+          }
+        });
+      }
+    }, 100);
+  }, [socketConnection, user?._id]);
 
   useEffect(() => {
     const fetchFriendRequestsCount = async () => {
@@ -68,9 +110,9 @@ export default function Chat() {
     };
 
     fetchFriendRequestsCount();
-    
+
     const interval = setInterval(fetchFriendRequestsCount, 30000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -85,14 +127,16 @@ export default function Chat() {
         console.error("Error loading recent searches:", error);
       }
     };
-    
+
+
     loadRecentSearches();
   }, []);
 
   const saveToRecentSearches = async (query, result = null) => {
     try {
       if (!query.trim()) return;
-      
+
+
       const searchItem = {
         id: Date.now().toString(),
         query,
@@ -104,11 +148,11 @@ export default function Chat() {
           isGroup: !!result.isGroup
         } : null
       };
-      
-      const updatedSearches = [searchItem, ...recentSearches.filter(item => 
+
+      const updatedSearches = [searchItem, ...recentSearches.filter(item =>
         item.query.toLowerCase() !== query.toLowerCase()
       )].slice(0, 10);
-      
+
       setRecentSearches(updatedSearches);
       await AsyncStorage.setItem('recentSearches', JSON.stringify(updatedSearches));
     } catch (error) {
@@ -163,7 +207,6 @@ export default function Chat() {
 
             const results = response?.data?.data || [];
             setSearchResults(results);
-            
             if (results.length > 0) {
               saveToRecentSearches(searchQuery, results[0]);
             }
@@ -182,7 +225,7 @@ export default function Chat() {
         setIsSearching(false);
       }
     };
-    
+
     fetchSearchResults();
   }, [searchQuery]);
 
@@ -197,7 +240,7 @@ export default function Chat() {
   };
 
   const renderSearchResult = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       className="flex-row items-center p-3 border-b border-gray-100"
       onPress={() => {
         console.log("Selected:", item);
@@ -225,8 +268,89 @@ export default function Chat() {
     </TouchableOpacity>
   );
 
+  const navigateToChat = (chatId) => {
+    navigation.navigate('Messages', { chatId });
+  };
+
+  const renderConversationItem = ({ item: chatItem }) => (
+    <TouchableOpacity
+      className="flex-row items-center px-4 py-3 border-b border-gray-100"
+      onPress={() => {
+        setAllUsers(prev =>
+          prev.map(item => item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item)
+        );
+        setSeenMessage(true);
+        navigateToChat(chatItem?.userDetails?._id);
+      }}
+    >
+      <View className="relative">
+        <Image
+          source={{ uri: chatItem?.userDetails?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem?.userDetails?.name || "User")}` }}
+          className="w-12 h-12 rounded-full"
+        />
+        {chatItem?.isGroup && (
+          <View className="absolute bottom-0 right-0 bg-blue-500 rounded-full h-4 w-4 items-center justify-center">
+            <FontAwesomeIcon icon={faUsers} size={10} color="#fff" />
+          </View>
+        )}
+      </View>
+
+      <View className="ml-3 flex-1 overflow-hidden">
+        <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
+        <Text numberOfLines={1} className="text-gray-500 text-sm">
+          {chatItem?.isGroup ? (
+            <>
+              {chatItem?.latestMessage?.msgByUserId === user?._id ? (
+                <>Bạn: </>
+              ) : (
+                <>
+                  {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
+                    ?.name + ":" || ""}
+                </>
+              )}
+            </>
+          ) : (
+            <>{chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? "Bạn: " : ""}</>
+          )}
+          {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
+          {chatItem?.latestMessage?.imageUrl && (
+            <>
+              <FontAwesomeIcon icon={faImage} size={15} color="#ccc" />
+              {chatItem?.latestMessage?.fileName
+                ? ` ${chatItem?.latestMessage?.fileName}`
+                : " Hình ảnh"}
+            </>
+          )}
+          {chatItem?.latestMessage?.fileUrl && (
+            <>
+              <FontAwesomeIcon icon={faFilePen} size={15} color="#ccc" />
+              {chatItem?.latestMessage?.fileName}
+            </>
+          )}
+        </Text>
+      </View>
+
+      <View className="items-end">
+        <Text className="text-xs text-gray-500">
+          {chatItem?.latestMessage?.createdAt &&
+            new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }
+        </Text>
+        {chatItem?.unseenMessages > 0 && (
+          <View className="bg-red-700 rounded-full h-5 w-5 items-center justify-center mt-1">
+            <Text className="text-white text-xs">{chatItem?.unseenMessages}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <View className="flex-1 bg-white">
+      {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-10 pb-3 bg-blue-500">
         <View className="flex-row items-center bg-white rounded-full px-3 py-1 flex-1 mr-2">
           <FontAwesomeIcon icon={faMagnifyingGlass} size={16} color="#888" />
@@ -258,6 +382,7 @@ export default function Chat() {
         </TouchableOpacity>
       </View>
 
+      {/* Recent Searches */}
       {isSearchFocused && searchQuery.length === 0 && recentSearches.length > 0 && (
         <View className="flex-1 bg-white">
           <View className="flex-row justify-between items-center py-2 px-4 bg-gray-100">
@@ -266,25 +391,28 @@ export default function Chat() {
               <FontAwesomeIcon icon={faTrash} size={16} color="#666" />
             </TouchableOpacity>
           </View>
-          
           <FlatList
             data={recentSearches}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-row items-center p-3 border-b border-gray-100 justify-between"
                 onPress={() => searchFromHistory(item.query)}
               >
                 <View className="flex-row items-center flex-1">
                   <FontAwesomeIcon icon={faHistory} size={16} color="#888" className="mr-3" />
-                  
                   {item.firstResult ? (
                     <View className="flex-row items-center flex-1">
                       {item.firstResult.profilePic ? (
-                        <Image source={{ uri: item.firstResult.profilePic }} className="w-8 h-8 rounded-full mr-3" />
+                        <Image
+                          source={{ uri: item.firstResult.profilePic }}
+                          className="w-8 h-8 rounded-full mr-3"
+                        />
                       ) : (
                         <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-3">
-                          <Text className="text-white font-bold">{(item.firstResult.name || "")?.charAt(0)?.toUpperCase()}</Text>
+                          <Text className="text-white font-bold">
+                            {(item.firstResult.name || "")?.charAt(0)?.toUpperCase()}
+                          </Text>
                         </View>
                       )}
                       <View className="flex-1">
@@ -296,8 +424,7 @@ export default function Chat() {
                     <Text className="text-gray-700">{item.query}</Text>
                   )}
                 </View>
-                
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={(e) => {
                     e.stopPropagation();
                     removeSearchItem(item.id);
@@ -312,6 +439,7 @@ export default function Chat() {
         </View>
       )}
 
+      {/* Search Results */}
       {searchResults.length > 0 && (
         <View className="flex-1 bg-white">
           <FlatList
@@ -334,15 +462,50 @@ export default function Chat() {
         </View>
       )}
 
+      {/* Loading State */}
       {searchLoading && !searchResults.length && (
         <View className="p-4 items-center justify-center">
           <Text className="text-gray-500">Đang tìm kiếm...</Text>
         </View>
       )}
 
+      {/* Conversation List */}
       {!searchResults.length && !searchLoading && !isSearchFocused && (
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-gray-500">Danh sách chat sẽ hiển thị ở đây</Text>
+        <View className="flex-1">
+          <View className="flex-row items-center border-b border-gray-300 px-4">
+            <View className="h-8">
+              <TouchableOpacity className="mr-3 h-full border-b-2 border-blue-500">
+                <Text className="text-[13px] font-semibold text-blue-500">Tất cả</Text>
+              </TouchableOpacity>
+            </View>
+            <View>
+              <TouchableOpacity>
+                <Text className="text-[13px] font-semibold text-gray-500">Chưa đọc</Text>
+              </TouchableOpacity>
+            </View>
+            <View className="ml-auto flex-row items-center">
+              <TouchableOpacity className="flex-row items-center gap-x-2 pl-2 pr-1">
+                <Text className="text-[13px]">Phân loại</Text>
+                <FontAwesomeIcon icon={faAngleDown} size={12} />
+              </TouchableOpacity>
+              <TouchableOpacity className="ml-4">
+                <FontAwesomeIcon icon={faEllipsis} size={12} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {allUsers.length > 0 ? (
+            <FlatList
+              data={allUsers}
+              renderItem={renderConversationItem}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={{ flexGrow: 1 }}
+            />
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              <Text className="text-gray-500">Không có cuộc hội thoại nào</Text>
+            </View>
+          )}
         </View>
       )}
     </View>
