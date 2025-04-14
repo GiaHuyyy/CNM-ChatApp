@@ -14,10 +14,10 @@ if (typeof window !== "undefined" && !window.Buffer) {
   };
 }
 
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { useGlobalContext } from "./GlobalProvider";
 import { toast } from "sonner";
+import { useGlobalContext } from "./GlobalProvider";
 
 // Create a better WebRTC wrapper to fix audio issues
 const createPeerConnection = (config) => {
@@ -187,10 +187,19 @@ const createPeerConnection = (config) => {
   };
 };
 
+
 const CallContext = createContext();
 
-export const useCallContext = () => useContext(CallContext);
+// Export the hook separately before the component
+export const useCallContext = () => {
+  const context = useContext(CallContext);
+  if (!context) {
+    throw new Error("useCallContext must be used within a CallProvider");
+  }
+  return context;
+};
 
+// Export the provider as default
 export default function CallProvider({ children }) {
   const { socketConnection } = useGlobalContext();
   const user = useSelector((state) => state.user);

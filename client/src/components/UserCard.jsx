@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import Images from "../constants/images";
+import { socket } from "../socket";  // Add this import
 
 export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose }) {
   const [isSending, setIsSending] = useState(false);
@@ -39,7 +40,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
     try {
       setIsSending(true);
       if (friendStatus?.status === 'pending' && friendStatus?.isSender) {
-        // Hủy lời mời kết bạn
+        // Cancel friend request
         const response = await axios.post(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/cancel-friend-request`,
           { 
@@ -49,24 +50,38 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
           { withCredentials: true }
         );
         if (response.data.success) {
+          // Emit socket event for cancellation
+          socket.emit("cancelFriendRequest", {
+            receiverId: dataUser._id,
+            requestId: friendStatus.requestId
+          });
+          
           toast.success(response.data.message);
           setFriendStatus(null);
           setHasSentRequest(false);
         }
       } else {
-        // Gửi lời mời kết bạn
+        // Send friend request
         const response = await axios.post(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-friend-request`,
           { receiverId: dataUser._id },
           { withCredentials: true }
         );
-        toast.success(response.data.message);
-        setFriendStatus({
-          status: 'pending',
-          isSender: true,
-          requestId: response.data.data._id
-        });
-        setHasSentRequest(true);
+        if (response.data.success) {
+          // Emit socket event for new request
+          socket.emit("sendFriendRequest", {
+            receiverId: dataUser._id,
+            requestId: response.data.data._id
+          });
+          
+          toast.success(response.data.message);
+          setFriendStatus({
+            status: 'pending',
+            isSender: true,
+            requestId: response.data.data._id
+          });
+          setHasSentRequest(true);
+        }
       }
     } catch (error) {
       toast.error(error.response?.data?.message || "Có lỗi xảy ra");
