@@ -1,13 +1,14 @@
 import { faAngleLeft, faCaretDown, faClose, faHeadset } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import PropTypes from "prop-types";
-import Images from "../constants/images";
-import { useState } from "react";
 import axios from "axios";
+import PropTypes from "prop-types";
+import { useState } from "react";
 import { toast } from "sonner";
+import Images from "../constants/images";
 import UserCard from "./UserCard";
 
 export default function AddFriend({ onClose }) {
+  const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);

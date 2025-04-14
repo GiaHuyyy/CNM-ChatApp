@@ -654,3 +654,250 @@ paths:
                         createdAt:
                           type: string
                           format: date-time
+
+  /api/remove-friend:
+    post:
+      tags:
+        - Friends
+      summary: Remove a friend from friends list
+      description: Remove an existing friendship between two users. Only works for accepted friendships.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - friendId
+              properties:
+                friendId:
+                  type: string
+                  description: The ID of the friend to remove
+                  example: "6507d6f099b1234567890123"
+      responses:
+        '200':
+          description: Friend removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Đã xóa khỏi danh sách bạn bè"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "friendId is required"
+        '403':
+          description: Unauthorized access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Unauthorized access"
+        '404':
+          description: Friend relationship not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không tìm thấy mối quan hệ bạn bè"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Internal server error"
+
+  /api/check-friend/{userId}:
+      get:
+        tags:
+          - Friends
+        summary: Check friend request status with a user
+        description: Check if there's any pending or accepted friend request between current user and target user
+        security:
+          - cookieAuth: []
+        parameters:
+          - in: path
+            name: userId
+            required: true
+            schema:
+              type: string
+            description: ID of the user to check friendship status with
+            example: "6507d6f099b1234567890123"
+        responses:
+          '200':
+            description: Friend status check successful
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+                      example: true
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [none, pending, accepted]
+                          description: Current friendship status
+                          example: "pending"
+                        requestId:
+                          type: string
+                          description: ID of the friend request if exists
+                          example: "6507d6f099b1234567890123"
+                        isSender:
+                          type: boolean
+                          description: Whether current user is the sender of the request
+                          example: true
+            '400':
+              description: Invalid user ID
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        example: "Invalid user ID"
+            '404':
+              description: User not found
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        example: "User not found"
+
+  /api/cancel-friend-request:
+      post:
+        tags:
+          - Friends
+        summary: Cancel a pending friend request
+        description: Cancel a friend request that you sent (only works for pending requests)
+        security:
+          - cookieAuth: []
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - requestId
+                  - receiverId
+                properties:
+                  requestId:
+                    type: string
+                    description: ID of the friend request to cancel
+                    example: "6507d6f099b1234567890123"
+                receiverId:
+                  type: string
+                  description: ID of the user who received the friend request
+                  example: "650a1b2c3d4e5f6789012345"
+            responses:
+              '200':
+                description: Friend request cancelled successfully
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        success:
+                          type: boolean
+                          example: true
+                        message:
+                          type: string
+                          example: "Đã hủy lời mời kết bạn thành công"
+                  data:
+                    type: object
+                    properties:
+                      requestId:
+                        type: string
+                        example: "6507d6f099b1234567890123"
+                      status:
+                        type: string
+                        example: "cancelled"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "requestId và receiverId là bắt buộc"
+        '403':
+          description: Unauthorized access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không có quyền hủy lời mời kết bạn này"
+        '404':
+          description: Friend request not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Không tìm thấy lời mời kết bạn hoặc bạn không có quyền hủy"
