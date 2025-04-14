@@ -162,8 +162,8 @@ export default function MessagePage() {
       socketConnection.off("groupMessage");
       socketConnection.off("error");
 
-      console.log("Joining room:", params.userId);
-      // Immediately join the room
+      console.log("Joining room with ID:", params.userId);
+      // Send only the actual user ID, not the full path
       socketConnection.emit("joinRoom", params.userId);
 
       // Set timeout for fetching data
@@ -197,7 +197,7 @@ export default function MessagePage() {
           id: groupData?._id,
           name: groupData?.name,
           isGroup: groupData?.isGroup,
-          membersCount: groupData?.members?.length || 0
+          membersCount: groupData?.members?.length || 0,
         });
         setAllMessages(groupData?.messages || []);
         setConversation(groupData);
@@ -474,7 +474,7 @@ export default function MessagePage() {
         socketConnection.once("leftGroup", (response) => {
           if (response.success) {
             toast.success(response.message);
-            navigate("/");
+            navigate("/chat");
           } else {
             toast.error(response.message);
           }
@@ -503,7 +503,7 @@ export default function MessagePage() {
         socketConnection.once("conversationDeleted", (response) => {
           if (response.success) {
             toast.success(response.message);
-            navigate("/");
+            navigate("/chat");
           } else {
             toast.error(response.message);
           }
@@ -593,7 +593,9 @@ export default function MessagePage() {
     (message) => message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")),
   );
 
-  const linkMessages = allMessages.filter((message) => message.text.startsWith("https") || message.text.startsWith("http"));
+  const linkMessages = allMessages.filter(
+    (message) => message.text.startsWith("https") || message.text.startsWith("http"),
+  );
 
   const isSystemNotification = (messageText) => {
     if (!messageText) return false;
@@ -1003,7 +1005,7 @@ export default function MessagePage() {
                                 </div>
                               )}
                               <div>
-                                {(message.text.startsWith("https") || message.text.startsWith("http"))? (
+                                {message.text.startsWith("https") || message.text.startsWith("http") ? (
                                   <a
                                     href={message.text}
                                     target="_blank"
