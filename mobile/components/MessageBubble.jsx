@@ -18,8 +18,10 @@ const MessageBubble = ({
   const messageRef = useRef(null);
   
   // Xử lý khi người dùng chọn emoji
-  const handleEmojiSelect = (emoji) => {
-    onReaction(message._id, emoji);
+  const handleEmojiSelect = (emojiData) => {
+    if (onReaction && message._id) {
+      onReaction(message._id, emojiData.emoji);
+    }
     setShowEmojiPicker(false);
   };
 
@@ -107,7 +109,13 @@ const MessageBubble = ({
 
           {/* Emoji Picker */}
           {showEmojiPicker && (
-            <View className={`absolute ${isCurrentUser ? 'right-0' : 'left-0'} bottom-full`}>
+            <View 
+              className={`
+                absolute z-50 
+                ${isCurrentUser ? 'right-0' : 'left-0'} 
+                bottom-full mb-2
+              `}
+            >
               <EmojiReactionPicker
                 onSelectEmoji={handleEmojiSelect}
                 style={{
