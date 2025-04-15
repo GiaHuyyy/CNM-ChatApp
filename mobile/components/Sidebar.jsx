@@ -377,7 +377,7 @@ export default function Sidebar({ onGroupCreated }) {
                       <NavLink
                         to={"/chat/" + chatItem?.userDetails?._id}
                         key={chatItem?._id}
-                        className="flex h-[74px] items-center px-4 hover:bg-[#f1f2f4]"
+                        className="flex h-[74px] items-center px-4 hover:bg-[#f1f2f4] relative"
                         onClick={() => {
                           // Immediately update the UI to show 0 unseen messages
                           setAllUsers((prev) =>
@@ -398,60 +398,25 @@ export default function Sidebar({ onGroupCreated }) {
                               <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
                             </div>
                           )}
+                          
+                          {/* Badge hiển thị số tin nhắn chưa đọc */}
+                          {chatItem?.unseenMessages > 0 && (
+                            <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                              {chatItem.unseenMessages > 99 ? '99+' : chatItem.unseenMessages}
+                            </div>
+                          )}
                         </div>
                         <div className="ml-3 flex-1 overflow-hidden">
-                          <p className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</p>
-                          <p className="max-w-48 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#5a6981]">
-                            {/* Group chat message with sender name */}
-                            {chatItem?.isGroup ? (
-                              <>
-                                {/* If it's your message, show "Bạn: " */}
-                                {chatItem?.latestMessage?.msgByUserId === user._id ? (
-                                  <>Bạn: </>
-                                ) : (
-                                  /* Otherwise show sender's name - find the sender from members array */
-                                  <>
-                                    {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
-                                      ?.name + ":" || ""}
-                                  </>
-                                )}
-                              </>
-                            ) : (
-                              /* For direct chats, keep existing behavior */
-                              <>{chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? "Bạn: " : ""}</>
-                            )}
-                            {/* The actual message content - unchanged */}
-                            {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
-                            {chatItem?.latestMessage?.imageUrl && (
-                              <>
-                                <FontAwesomeIcon icon={faImage} width={15} className="text-[#ccc]" />
-                                {chatItem?.latestMessage?.fileName
-                                  ? ` ${chatItem?.latestMessage?.fileName}`
-                                  : " Hình ảnh"}
-                              </>
-                            )}
-                            {chatItem?.latestMessage?.fileUrl && (
-                              <>
-                                <FontAwesomeIcon icon={faFilePen} width={15} className="text-[#ccc]" />
-                                {chatItem?.latestMessage?.fileName}
-                              </>
-                            )}
+                          <p className={`text-[15px] ${chatItem?.unseenMessages > 0 ? 'font-bold' : 'font-semibold'}`}>
+                            {chatItem?.userDetails?.name}
                           </p>
-                        </div>
-                        <div className="flex flex-col items-center gap-y-1">
-                          <p className="text-xs text-[#5a6981]">
-                            {chatItem?.latestMessage?.createdAt &&
-                              new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                          </p>
-                          {chatItem?.unseenMessages > 0 && (
-                            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-red-700">
-                              <span className="mr-[1px] mt-[1px] text-[10px] text-white">
-                                {chatItem?.unseenMessages}
-                              </span>
-                            </div>
+                          {/* Hiển thị tin nhắn cuối cùng nếu có */}
+                          {chatItem?.latestMessage && (
+                            <p className={`text-sm text-gray-500 truncate ${chatItem?.unseenMessages > 0 ? 'font-semibold' : ''}`}>
+                              {chatItem.latestMessage.text || 
+                               (chatItem.latestMessage.imageUrl ? '🖼️ Hình ảnh' : '') ||
+                               (chatItem.latestMessage.fileUrl ? '📎 Tệp đính kèm' : '')}
+                            </p>
                           )}
                         </div>
                       </NavLink>
