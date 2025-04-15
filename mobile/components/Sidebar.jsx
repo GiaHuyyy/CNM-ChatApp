@@ -53,6 +53,8 @@ export default function Sidebar({ onGroupCreated }) {
 
   const [openTab, setOpenTab] = useState("chat");
 
+  const [selectedChatTab, setSelectedChatTab] = useState("all");
+
   const toggleDropdownSetting = () => {
     setDropdownSettingVisible(!dropdownSettingVisible);
     setDropdownAvatarVisible(false);
@@ -218,6 +220,13 @@ export default function Sidebar({ onGroupCreated }) {
     navigate(`/chat/${conversationId}`);
   };
 
+  const getFilteredChats = () => {
+    if (selectedChatTab === "unread") {
+      return allUsers.filter(chat => chat.unseenMessages > 0);
+    }
+    return allUsers;
+  };
+
   return (
     <nav className="flex h-full">
       {/* Main tabs */}
@@ -344,23 +353,32 @@ export default function Sidebar({ onGroupCreated }) {
                 <div className="flex h-8 items-center border-b border-gray-300 px-4">
                   <div className="h-full">
                     <button
-                      className="mr-3 h-full border-b-[2px] border-[#005ae0] text-[13px] font-semibold text-[#005ae0]"
-                      onClick={commingSoon}
+                      className={`mr-3 h-full border-b-[2px] text-[13px] font-semibold ${
+                        selectedChatTab === "all"
+                          ? "border-[#005ae0] text-[#005ae0]"
+                          : "border-transparent text-[#5a6981]"
+                      }`}
+                      onClick={() => setSelectedChatTab("all")}
                     >
                       Tất cả
                     </button>
-                    <button className="text-[13px] font-semibold text-[#5a6981]" onClick={commingSoon}>
+                    <button
+                      className={`text-[13px] font-semibold ${
+                        selectedChatTab === "unread"
+                          ? "border-b-[2px] border-[#005ae0] text-[#005ae0]"
+                          : "text-[#5a6981]"
+                      }`}
+                      onClick={() => setSelectedChatTab("unread")}
+                    >
                       Chưa đọc
                     </button>
                   </div>
                   <div className="ml-auto flex items-center gap-x-4">
                     <button className="flex items-center gap-x-2 pl-2 pr-1">
-                      <span className="text-[13px]" onClick={commingSoon}>
-                        Phân loại
-                      </span>
+                      <span className="text-[13px]">Phân loại</span>
                       <FontAwesomeIcon icon={faAngleDown} width={12} />
                     </button>
-                    <button onClick={commingSoon}>
+                    <button>
                       <FontAwesomeIcon icon={faEllipsis} width={12} />
                     </button>
                   </div>
@@ -368,20 +386,27 @@ export default function Sidebar({ onGroupCreated }) {
 
                 {/* Chat list */}
                 <div className="scrollbar h-[calc(100%-2rem)] overflow-y-auto">
-                  {allUsers.length === 0 ? (
+                  {getFilteredChats().length === 0 ? (
                     <div className="flex h-[calc(100%-4rem)] items-center justify-center">
-                      <p className="mt-3 text-sm text-[#5a6981]">Không có tin nhắn nào</p>
+                      <p className="mt-3 text-sm text-[#5a6981]">
+                        {selectedChatTab === "unread" 
+                          ? "Không có tin nhắn chưa đọc"
+                          : "Không có tin nhắn nào"}
+                      </p>
                     </div>
                   ) : (
-                    allUsers.map((chatItem) => (
+                    getFilteredChats().map((chatItem) => (
                       <NavLink
                         to={"/chat/" + chatItem?.userDetails?._id}
                         key={chatItem?._id}
-                        className="flex h-[74px] items-center px-4 hover:bg-[#f1f2f4] relative"
+                        className={({ isActive }) => `
+                          flex h-[74px] items-center px-4 hover:bg-[#f1f2f4] relative
+                          ${isActive ? 'bg-[#f1f2f4]' : ''}
+                        `}
                         onClick={() => {
-                          // Immediately update the UI to show 0 unseen messages
+                          // Cập nhật UI và đánh dấu đã đọc
                           setAllUsers((prev) =>
-                            prev.map((item) => (item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item)),
+                            prev.map((item) => (item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item))
                           );
                           setSeenMessage(true);
                         }}
@@ -391,32 +416,60 @@ export default function Sidebar({ onGroupCreated }) {
                           <img
                             src={chatItem?.userDetails?.profilePic}
                             alt={chatItem?.userDetails?.name}
-                            className={`h-12 w-12 rounded-full object-cover`}
+                            className="h-12 w-12 rounded-full object-cover"
                           />
+                          {/* Group indicator */}
                           {chatItem?.isGroup && (
                             <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
                               <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
                             </div>
                           )}
                           
-                          {/* Badge hiển thị số tin nhắn chưa đọc */}
+                          {/* Unread messages badge */}
                           {chatItem?.unseenMessages > 0 && (
-                            <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                            <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white shadow-sm">
                               {chatItem.unseenMessages > 99 ? '99+' : chatItem.unseenMessages}
                             </div>
                           )}
                         </div>
+
+                        {/* Chat details */}
                         <div className="ml-3 flex-1 overflow-hidden">
-                          <p className={`text-[15px] ${chatItem?.unseenMessages > 0 ? 'font-bold' : 'font-semibold'}`}>
-                            {chatItem?.userDetails?.name}
-                          </p>
-                          {/* Hiển thị tin nhắn cuối cùng nếu có */}
-                          {chatItem?.latestMessage && (
-                            <p className={`text-sm text-gray-500 truncate ${chatItem?.unseenMessages > 0 ? 'font-semibold' : ''}`}>
-                              {chatItem.latestMessage.text || 
-                               (chatItem.latestMessage.imageUrl ? '🖼️ Hình ảnh' : '') ||
-                               (chatItem.latestMessage.fileUrl ? '📎 Tệp đính kèm' : '')}
+                          {/* Chat name */}
+                          <div className="flex items-center justify-between">
+                            <p className={`text-[15px] ${chatItem?.unseenMessages > 0 ? 'font-bold' : 'font-semibold'}`}>
+                              {chatItem?.userDetails?.name}
                             </p>
+                            {/* Timestamp */}
+                            {chatItem?.latestMessage?.createdAt && (
+                              <p className="text-xs text-gray-500">
+                                {new Date(chatItem.latestMessage.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Latest message preview */}
+                          {chatItem?.latestMessage && (
+                            <div className="flex items-center gap-x-1">
+                              {/* Sender name for group chats */}
+                              {chatItem.isGroup && chatItem.latestMessage.msgByUserId && (
+                                <span className={`text-sm ${chatItem.unseenMessages > 0 ? 'font-semibold' : ''}`}>
+                                  {chatItem.latestMessage.msgByUserId === user._id 
+                                    ? 'Bạn: '
+                                    : `${chatItem.members?.find(m => m._id === chatItem.latestMessage.msgByUserId)?.name || ''}: `}
+                                </span>
+                              )}
+                              
+                              {/* Message content */}
+                              <p className={`text-sm text-gray-500 truncate flex-1 ${chatItem.unseenMessages > 0 ? 'font-semibold' : ''}`}>
+                                {chatItem.latestMessage.text || 
+                                 (chatItem.latestMessage.imageUrl ? '🖼️ Hình ảnh' : '') ||
+                                 (chatItem.latestMessage.fileUrl ? '📎 Tệp đính kèm' : '')}
+                              </p>
+                            </div>
                           )}
                         </div>
                       </NavLink>
