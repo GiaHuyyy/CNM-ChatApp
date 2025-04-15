@@ -21,6 +21,8 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
     "expo": "~52.0.7",
+    "expo-av": "^15.0.2",
+    "expo-document-picker": "^13.0.3",
     "expo-image-picker": "~16.0.6",
     "expo-media-library": "~17.0.6",
     "expo-router": "~4.0.7",
