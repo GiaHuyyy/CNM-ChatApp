@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import { Video } from 'expo-av';
+import MessageBubble from '../../components/MessageBubble';
 
 export default function Chat() {
   const dispatch = useDispatch();
@@ -650,65 +651,86 @@ export default function Chat() {
     pickFunction();
   };
 
+  const handleMessageReaction = async (messageId, emoji) => {
+    try {
+      if (!socketConnection) return;
+
+      // Gửi reaction đến server
+      socketConnection.emit('messageReaction', {
+        messageId,
+        emoji: emoji.emoji,
+        userId: user._id
+      });
+
+      // Cập nhật UI ngay lập tức (optimistic update)
+      setMessages(prevMessages => 
+        prevMessages.map(msg => {
+          if (msg._id === messageId) {
+            // Kiểm tra xem người dùng đã reaction chưa
+            const existingReactionIndex = msg.reactions?.findIndex(
+              r => r.userId === user._id
+            );
+
+            let newReactions = [...(msg.reactions || [])];
+            
+            if (existingReactionIndex > -1) {
+              // Nếu đã có reaction, cập nhật emoji mới
+              newReactions[existingReactionIndex] = {
+                emoji: emoji.emoji,
+                userId: user._id
+              };
+            } else {
+              // Nếu chưa có, thêm reaction mới
+              newReactions.push({
+                emoji: emoji.emoji,
+                userId: user._id
+              });
+            }
+
+            return {
+              ...msg,
+              reactions: newReactions
+            };
+          }
+          return msg;
+        })
+      );
+    } catch (error) {
+      console.error('Error sending reaction:', error);
+      // Hiển thị thông báo lỗi nếu cần
+    }
+  };
+
+  useEffect(() => {
+    if (!socketConnection) return;
+
+    socketConnection.on('messageReactionUpdate', ({ messageId, reactions }) => {
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg._id === messageId ? { ...msg, reactions } : msg
+        )
+      );
+    });
+
+    return () => {
+      socketConnection.off('messageReactionUpdate');
+    };
+  }, [socketConnection]);
+
   const renderMessage = ({ item }) => {
     const isCurrentUser = item.msgByUserId === user._id;
-    const hasImage = item.imageUrl && item.imageUrl.length > 0;
-    const hasFile = item.fileUrl && item.fileUrl.length > 0;
-    const isVideo = hasFile && (item.fileUrl.endsWith('.mp4') || item.fileUrl.endsWith('.webm') || item.fileUrl.endsWith('.mov'));
-    const isDocument = hasFile && !isVideo && (item.fileUrl.endsWith('.pdf') || item.fileUrl.endsWith('.docx'));
-
+    
     return (
-      <View className={`flex-row my-1 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-        {!isCurrentUser && (
-          <Image
-            source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}` }}
-            className="w-8 h-8 rounded-full mr-2"
-          />
-        )}
-        <View className={`px-3 py-2 rounded-lg ${isCurrentUser ? 'bg-[#dbebff]' : 'bg-gray-200'} ${(hasImage || isVideo) ? 'w-[40%]' : 'max-w-[70%]'}`}>
-          {hasImage && (
-            <TouchableOpacity onPress={() => handleImageClick(item.imageUrl)}>
-              <Image
-                source={{ uri: item.imageUrl }}
-                className="w-full h-40 mb-2 rounded"
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          )}
-          {isVideo && (
-            <Video
-              source={{ uri: item.fileUrl }}
-              style={{ width: '100%', height: 200, marginBottom: 8 }}
-              useNativeControls
-              resizeMode="contain"
-              shouldPlay={false}
-            />
-          )}
-          {isDocument && (
-            <TouchableOpacity
-              className="flex-row items-center bg-white p-2 rounded mb-2"
-              onPress={() => Linking.openURL(item.fileUrl)}
-            >
-              <FontAwesomeIcon
-                icon={item.fileUrl.endsWith('.pdf') ? faFileAlt : faFilePen}
-                size={20}
-                color="#555"
-              />
-              <Text className="ml-2 text-sm text-blue-600" numberOfLines={1}>
-                {item.fileName || "Document"}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {item.text && (
-            <Text className={isCurrentUser ? 'text-black' : 'text-black'}>
-              {item.text}
-            </Text>
-          )}
-          <Text className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'} mt-1`}>
-            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
-      </View>
+      <MessageBubble
+        message={item}
+        isCurrentUser={isCurrentUser}
+        onReaction={handleMessageReaction}
+        userProfilePic={
+          isCurrentUser
+            ? user.profilePic
+            : chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`
+        }
+      />
     );
   };
 
