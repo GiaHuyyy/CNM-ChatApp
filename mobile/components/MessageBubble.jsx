@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, Image, Animated, Linking, Modal, SafeAreaView, Dimensions, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, Image, Animated, Linking, Modal, SafeAreaView, Dimensions, Platform, Alert, Clipboard } from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
@@ -33,7 +33,9 @@ const MessageBubble = ({
   onEditMessage,
   onDeleteMessage,
   onImagePress,
-  onVideoPress
+  onVideoPress,
+  senderName = "",
+  isGroupChat = false
 }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredMessage, setHoveredMessage] = useState(null);
@@ -140,19 +142,27 @@ const MessageBubble = ({
       message.fileUrl.endsWith('.docx'));
   const hasFile = hasImage || hasVideo || hasDocument;
 
+  const isSystemMessage = message.text && (
+    message.text.includes("đã tạo nhóm") ||
+    message.text.includes("đã thêm") ||
+    message.text.includes("vào nhóm") ||
+    message.text.includes("đã rời khỏi nhóm") ||
+    message.text.includes("đã xóa")
+  );
+
   const containerClass = isCurrentUser
     ? 'flex-row-reverse'
     : 'flex-row';
 
   const bubbleClass = isCurrentUser
-    ? 'bg-#e0ecfc rounded-t-2xl rounded-bl-2xl rounded-br-md ml-2'
+    ? 'bg-[#ebecf0] rounded-t-2xl rounded-bl-2xl rounded-br-md ml-2'
     : 'bg-gray-200 rounded-t-2xl rounded-br-2xl rounded-bl-md mr-2';
 
   const textClass = isCurrentUser
     ? 'text-black'
     : 'text-gray-800';
 
-  const mediaWidthClass = hasFile ? 'w-[200px]' : '';
+  const mediaWidthClass = hasFile ? 'min-w-[150px]' : '';
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -191,7 +201,15 @@ const MessageBubble = ({
               "Ứng dụng không thể mở URL này. Bạn có muốn sao chép liên kết không?",
               [
                 { text: "Hủy", style: "cancel" },
-                { text: "Sao chép", onPress: () => Clipboard.setString(message.fileUrl) }
+                {
+                  text: "Sao chép",
+                  onPress: () => {
+                    if (Clipboard && Clipboard.setString) {
+                      Clipboard.setString(message.fileUrl);
+                      Alert.alert("Thành công", "Đã sao chép liên kết vào clipboard");
+                    }
+                  }
+                }
               ]
             );
           }
@@ -229,6 +247,16 @@ const MessageBubble = ({
     </TouchableOpacity>
   );
 
+  if (isSystemMessage) {
+    return (
+      <View className="flex justify-center my-3 px-4">
+        <View className="bg-white rounded-full px-3 py-1 self-center shadow-sm">
+          <Text className="text-xs text-gray-500">{message.text}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="mb-3 px-4">
       <View className={`${containerClass} items-end`}>
@@ -239,7 +267,7 @@ const MessageBubble = ({
           />
         )}
 
-        <View className={`max-w-[75%] relative ${hasFile ? 'min-w-[150px]' : ''}`}>
+        <View className={`max-w-[75%] relative ${hasFile ? mediaWidthClass : ''}`}>
           <Pressable
             onPressIn={() => setHoveredMessage(message._id)}
             onPressOut={() => setHoveredMessage(null)}
@@ -250,6 +278,10 @@ const MessageBubble = ({
               ${bubbleClass}
             `}
           >
+            {isGroupChat && !isCurrentUser && senderName && (
+              <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
+            )}
+
             {hasImage && (
               <TouchableOpacity
                 onPress={handleImageView}
@@ -294,7 +326,7 @@ const MessageBubble = ({
               </Text>
             )}
 
-            <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'}`}>
+            <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-gray-500' : 'text-gray-500'}`}>
               {new Date(message.createdAt).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit'
@@ -303,6 +335,14 @@ const MessageBubble = ({
                 <Text className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</Text>
               )}
             </Text>
+
+            {message.reactions && message.reactions.length > 0 && (
+              <View className="absolute -bottom-5 right-2 bg-white rounded-full px-2 py-1 shadow-sm flex-row">
+                {message.reactions.map((reaction, index) => (
+                  <Text key={`${reaction.userId}-${index}`} className="text-sm">{reaction.emoji}</Text>
+                ))}
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={() => handleQuickLike(message._id)}
@@ -331,7 +371,7 @@ const MessageBubble = ({
                 <TouchableOpacity
                   className="p-2 bg-white rounded-full shadow-sm"
                   onPress={() => {
-                    onEditMessage(message);
+                    onEditMessage && onEditMessage(message);
                     setShowActionMenu(false);
                   }}
                 >
@@ -344,7 +384,7 @@ const MessageBubble = ({
                 <TouchableOpacity
                   className="p-2 bg-white rounded-full shadow-sm"
                   onPress={() => {
-                    onDeleteMessage(message._id);
+                    onDeleteMessage && onDeleteMessage(message._id);
                     setShowActionMenu(false);
                   }}
                 >
@@ -380,7 +420,6 @@ const MessageBubble = ({
         </View>
       </View>
 
-      {/* Image Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -411,7 +450,6 @@ const MessageBubble = ({
         </SafeAreaView>
       </Modal>
 
-      {/* Video Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -448,7 +486,6 @@ const MessageBubble = ({
         </SafeAreaView>
       </Modal>
 
-      {/* Document Preview Modal (basic info & download option) */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -503,6 +540,7 @@ MessageBubble.propTypes = {
     imageUrl: PropTypes.string,
     fileUrl: PropTypes.string,
     fileName: PropTypes.string,
+    msgByUserId: PropTypes.string.isRequired,
     reactions: PropTypes.arrayOf(
       PropTypes.shape({
         emoji: PropTypes.string.isRequired,
@@ -516,7 +554,9 @@ MessageBubble.propTypes = {
   onEditMessage: PropTypes.func,
   onDeleteMessage: PropTypes.func,
   onImagePress: PropTypes.func,
-  onVideoPress: PropTypes.func
+  onVideoPress: PropTypes.func,
+  senderName: PropTypes.string,
+  isGroupChat: PropTypes.bool
 };
 
 export default MessageBubble;
