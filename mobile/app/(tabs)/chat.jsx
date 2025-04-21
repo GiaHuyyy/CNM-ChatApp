@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,7 +14,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import { Video } from 'expo-av';
-import MessageBubble from '../../components/MessageBubble';
 
 export default function Chat() {
   const dispatch = useDispatch();
@@ -48,6 +47,15 @@ export default function Chat() {
 
   // Add state for media options menu visibility
   const [showMediaOptions, setShowMediaOptions] = useState(false);
+
+  // Group chat states
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [allAvailableUsers, setAllAvailableUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
+  const [currentGroupInfo, setCurrentGroupInfo] = useState(null);
 
   useEffect(() => {
     const fetchUserDetails = async () => {
@@ -324,8 +332,25 @@ export default function Chat() {
     );
     setSeenMessage(true);
 
+    // Clear any existing messages to prevent showing old messages while loading
+    setMessages([]);
+
     if (socketConnection) {
-      socketConnection.emit("joinRoom", chatItem?.userDetails?._id);
+      // Make sure we disconnect from any previous room first
+      if (selectedChat?.userDetails?._id) {
+        socketConnection.emit("leaveRoom", selectedChat.userDetails._id);
+      }
+
+      const isGroup = chatItem.isGroup || chatItem.userDetails?.isGroup;
+      console.log("Joining chat:", chatItem.userDetails._id, "isGroup:", isGroup);
+      socketConnection.emit("joinRoom", chatItem.userDetails._id);
+
+      // Mark messages as seen immediately
+      if (isGroup) {
+        socketConnection.emit("seenGroup", chatItem.userDetails._id);
+      } else {
+        socketConnection.emit("seen", chatItem.userDetails._id);
+      }
     }
   };
 
@@ -338,21 +363,83 @@ export default function Chat() {
   useEffect(() => {
     if (!socketConnection || !selectedChat) return;
 
-    socketConnection.on("messageUser", (payload) => {
+    // Clear any existing listeners to prevent duplicates
+    socketConnection.off("messageUser");
+    socketConnection.off("message");
+    socketConnection.off("groupMessage");
+    socketConnection.off("error");
+
+    // Define handlers with proper debugging
+    const handleMessageUser = (payload) => {
       console.log("Received user data:", payload);
       setChatUser(payload);
       setIsChatLoading(false);
-    });
+    };
 
-    socketConnection.on("message", (conversation) => {
-      console.log("Received messages:", conversation?.messages?.length || 0);
-      setMessages(conversation?.messages || []);
+    const handleMessage = (conversation) => {
+      console.log("Received direct messages:", conversation?.messages?.length || 0);
+      if (conversation && Array.isArray(conversation.messages)) {
+        setMessages(conversation.messages);
+
+        // Mark messages as seen
+        if (conversation.messages.length > 0 && socketConnection) {
+          socketConnection.emit("seen", selectedChat.userDetails?._id);
+        }
+      } else {
+        setMessages([]);
+      }
       setIsChatLoading(false);
-    });
+    };
 
+    const handleGroupMessage = (groupData) => {
+      console.log("Received group messages:", groupData?.messages?.length || 0);
+
+      if (groupData && Array.isArray(groupData.messages)) {
+        setMessages(groupData.messages);
+
+        // Update chat user with group information
+        setChatUser({
+          _id: groupData._id,
+          name: groupData.name || "Group Chat",
+          profilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupData.name || "Group")}&background=random`,
+          isGroup: true,
+          members: groupData.members || [],
+          groupAdmin: groupData.groupAdmin,
+        });
+
+        // Mark messages as seen for group
+        if (groupData.messages.length > 0 && socketConnection) {
+          socketConnection.emit("seenGroup", groupData._id);
+        }
+      } else {
+        setMessages([]);
+      }
+      setIsChatLoading(false);
+    };
+
+    const handleError = (error) => {
+      console.error("Socket error:", error);
+      setIsChatLoading(false);
+      Alert.alert("Error", error.message || "Failed to load conversation");
+    };
+
+    // Register event handlers
+    socketConnection.on("messageUser", handleMessageUser);
+    socketConnection.on("message", handleMessage);
+    socketConnection.on("groupMessage", handleGroupMessage);
+    socketConnection.on("error", handleError);
+
+    // Join the room - emit appropriate event based on whether it's a group
+    const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
+    console.log("Joining room:", selectedChat?.userDetails?._id, "isGroup:", isGroup);
+    socketConnection.emit("joinRoom", selectedChat?.userDetails?._id);
+
+    // Cleanup function
     return () => {
-      socketConnection.off("messageUser");
-      socketConnection.off("message");
+      socketConnection.off("messageUser", handleMessageUser);
+      socketConnection.off("message", handleMessage);
+      socketConnection.off("groupMessage", handleGroupMessage);
+      socketConnection.off("error", handleError);
     };
   }, [socketConnection, selectedChat]);
 
@@ -361,6 +448,21 @@ export default function Chat() {
       messagesEndRef.current.scrollToEnd({ animated: true });
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!socketConnection) return;
+
+    // Listen for new message notifications when not in that chat
+    socketConnection.on("newMessageNotification", (data) => {
+      console.log("New message notification:", data);
+      // Update the conversation list to show new messages
+      socketConnection.emit("sidebar", user?._id);
+    });
+
+    return () => {
+      socketConnection.off("newMessageNotification");
+    };
+  }, [socketConnection, user]);
 
   const takePhoto = async () => {
     try {
@@ -556,7 +658,6 @@ export default function Chat() {
 
       if (selectedFile) {
         console.log("Preparing to upload file:", selectedFile.name);
-
         try {
           if (!selectedFile.uri) {
             throw new Error("File has no URI");
@@ -614,24 +715,48 @@ export default function Chat() {
 
       const isImage = selectedFile?.type?.startsWith('image/') || selectedFile?.mimeType?.startsWith('image/');
 
-      const newMessage = {
-        sender: user._id,
-        receiver: selectedChat?.userDetails?._id,
-        text: messageText,
-        imageUrl: isImage ? fileUrl : "",
-        fileUrl: !isImage && fileUrl ? fileUrl : "",
-        fileName: fileName,
-        msgByUserId: user?._id,
-      };
+      // Check if this is a group chat
+      const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
-      console.log("Sending message with data:", {
-        hasText: !!messageText.trim(),
-        hasFileUrl: !!fileUrl,
-        isImage,
-        receiverId: selectedChat?.userDetails?._id
-      });
+      if (isGroup) {
+        // Send message to a group
+        const groupMessage = {
+          conversationId: selectedChat.userDetails?._id,
+          text: messageText,
+          imageUrl: isImage ? fileUrl : "",
+          fileUrl: !isImage && fileUrl ? fileUrl : "",
+          fileName: fileName,
+          msgByUserId: user?._id,
+        };
 
-      socketConnection.emit("newMessage", newMessage);
+        console.log("Sending group message:", {
+          conversationId: selectedChat.userDetails?._id,
+          hasText: !!messageText.trim(),
+          hasFile: !!fileUrl,
+        });
+
+        socketConnection.emit("newGroupMessage", groupMessage);
+      } else {
+        // Send direct message
+        const newMessage = {
+          sender: user._id,
+          receiver: selectedChat?.userDetails?._id,
+          text: messageText,
+          imageUrl: isImage ? fileUrl : "",
+          fileUrl: !isImage && fileUrl ? fileUrl : "",
+          fileName: fileName,
+          msgByUserId: user?._id,
+        };
+
+        console.log("Sending direct message:", {
+          receiver: selectedChat?.userDetails?._id,
+          hasText: !!messageText.trim(),
+          hasFile: !!fileUrl,
+        });
+
+        socketConnection.emit("newMessage", newMessage);
+      }
+
       setMessageText("");
       setSelectedFile(null);
       setIsUploading(false);
@@ -651,86 +776,92 @@ export default function Chat() {
     pickFunction();
   };
 
-  const handleMessageReaction = async (messageId, emoji) => {
-    try {
-      if (!socketConnection) return;
-
-      // Gửi reaction đến server
-      socketConnection.emit('messageReaction', {
-        messageId,
-        emoji: emoji.emoji,
-        userId: user._id
-      });
-
-      // Cập nhật UI ngay lập tức (optimistic update)
-      setMessages(prevMessages => 
-        prevMessages.map(msg => {
-          if (msg._id === messageId) {
-            // Kiểm tra xem người dùng đã reaction chưa
-            const existingReactionIndex = msg.reactions?.findIndex(
-              r => r.userId === user._id
-            );
-
-            let newReactions = [...(msg.reactions || [])];
-            
-            if (existingReactionIndex > -1) {
-              // Nếu đã có reaction, cập nhật emoji mới
-              newReactions[existingReactionIndex] = {
-                emoji: emoji.emoji,
-                userId: user._id
-              };
-            } else {
-              // Nếu chưa có, thêm reaction mới
-              newReactions.push({
-                emoji: emoji.emoji,
-                userId: user._id
-              });
-            }
-
-            return {
-              ...msg,
-              reactions: newReactions
-            };
-          }
-          return msg;
-        })
-      );
-    } catch (error) {
-      console.error('Error sending reaction:', error);
-      // Hiển thị thông báo lỗi nếu cần
-    }
-  };
-
-  useEffect(() => {
-    if (!socketConnection) return;
-
-    socketConnection.on('messageReactionUpdate', ({ messageId, reactions }) => {
-      setMessages(prevMessages =>
-        prevMessages.map(msg =>
-          msg._id === messageId ? { ...msg, reactions } : msg
-        )
-      );
-    });
-
-    return () => {
-      socketConnection.off('messageReactionUpdate');
-    };
-  }, [socketConnection]);
-
   const renderMessage = ({ item }) => {
+    // Check if this is a system message for groups
+    if (item.text && (
+      item.text.includes("đã tạo nhóm") ||
+      item.text.includes("đã thêm") ||
+      item.text.includes("vào nhóm") ||
+      item.text.includes("đã rời khỏi nhóm")
+    )) {
+      return (
+        <View className="flex justify-center my-1">
+          <View className="bg-white rounded-full px-3 py-1 self-center">
+            <Text className="text-xs text-gray-500">{item.text}</Text>
+          </View>
+        </View>
+      );
+    }
+
     const isCurrentUser = item.msgByUserId === user._id;
-    
+    const hasImage = item.imageUrl && item.imageUrl.length > 0;
+    const hasFile = item.fileUrl && item.fileUrl.length > 0;
+    const isVideo = hasFile && (item.fileUrl.endsWith('.mp4') || item.fileUrl.endsWith('.webm') || item.fileUrl.endsWith('.mov'));
+    const isDocument = hasFile && !isVideo && (item.fileUrl.endsWith('.pdf') || item.fileUrl.endsWith('.docx'));
+
+    // Get sender info for group chats
+    let senderName = "";
+    if (selectedChat?.isGroup && !isCurrentUser) {
+      const sender = selectedChat.members?.find(m => m._id === item.msgByUserId);
+      senderName = sender?.name || "Unknown";
+    }
+
     return (
-      <MessageBubble
-        message={item}
-        isCurrentUser={isCurrentUser}
-        onReaction={handleMessageReaction}
-        userProfilePic={
-          isCurrentUser
-            ? user.profilePic
-            : chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`
-        }
-      />
+      <View className={`flex-row my-1 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+        {!isCurrentUser && (
+          <Image
+            source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}` }}
+            className="w-8 h-8 rounded-full mr-2"
+          />
+        )}
+        <View className={`px-3 py-2 rounded-lg ${isCurrentUser ? 'bg-[#ebecf0]' : 'bg-gray-200'} ${(hasImage || isVideo) ? 'w-[40%]' : 'max-w-[70%]'}`}>
+          {selectedChat?.isGroup && !isCurrentUser && (
+            <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
+          )}
+
+          {hasImage && (
+            <TouchableOpacity onPress={() => handleImageClick(item.imageUrl)}>
+              <Image
+                source={{ uri: item.imageUrl }}
+                className="w-full h-40 mb-2 rounded"
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          )}
+          {isVideo && (
+            <Video
+              source={{ uri: item.fileUrl }}
+              style={{ width: '100%', height: 200, marginBottom: 8 }}
+              useNativeControls
+              resizeMode="contain"
+              shouldPlay={false}
+            />
+          )}
+          {isDocument && (
+            <TouchableOpacity
+              className="flex-row items-center bg-white p-2 rounded mb-2"
+              onPress={() => Linking.openURL(item.fileUrl)}
+            >
+              <FontAwesomeIcon
+                icon={item.fileUrl.endsWith('.pdf') ? faFileAlt : faFilePen}
+                size={20}
+                color="#555"
+              />
+              <Text className="ml-2 text-sm text-blue-600" numberOfLines={1}>
+                {item.fileName || "Document"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {item.text && (
+            <Text className={isCurrentUser ? 'text-black' : 'text-black'}>
+              {item.text}
+            </Text>
+          )}
+          <Text className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'} mt-1`}>
+            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+      </View>
     );
   };
 
@@ -738,6 +869,7 @@ export default function Chat() {
     <TouchableOpacity
       className="flex-row items-center px-4 py-3 border-b border-gray-100"
       onPress={() => handleSelectChat(chatItem)}
+      onLongPress={() => chatItem.isGroup && handleShowGroupInfo(chatItem)}
     >
       <View className="relative">
         <Image
@@ -803,6 +935,156 @@ export default function Chat() {
     </TouchableOpacity>
   );
 
+  const loadUsersForGroup = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const response = await axios.get("http://localhost:5000/api/all-friends", {
+        withCredentials: true,
+      });
+      setAllAvailableUsers(response.data.data || []);
+    } catch (error) {
+      console.error("Error loading friends:", error);
+      Alert.alert("Error", "Could not load friends list");
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  const toggleUserSelection = (userId) => {
+    if (selectedUsers.includes(userId)) {
+      setSelectedUsers(selectedUsers.filter(id => id !== userId));
+    } else {
+      setSelectedUsers([...selectedUsers, userId]);
+    }
+  };
+
+  const handleCreateGroup = () => {
+    if (!groupName.trim()) {
+      Alert.alert("Error", "Please enter a group name");
+      return;
+    }
+
+    if (selectedUsers.length < 2) {
+      Alert.alert("Error", "Please select at least 2 users");
+      return;
+    }
+
+    if (socketConnection) {
+      socketConnection.emit("createGroupChat", {
+        name: groupName,
+        members: [...selectedUsers, user._id],
+        creator: user._id
+      });
+
+      socketConnection.once("groupCreated", (response) => {
+        if (response.success) {
+          Alert.alert("Success", response.message);
+          setShowCreateGroupModal(false);
+          setGroupName("");
+          setSelectedUsers([]);
+        } else {
+          Alert.alert("Error", response.message || "Could not create group");
+        }
+      });
+    }
+  };
+
+  const handleAddMembersToGroup = (groupId) => {
+    if (selectedUsers.length === 0) {
+      Alert.alert("Error", "Please select users to add");
+      return;
+    }
+
+    if (socketConnection) {
+      socketConnection.emit("addMembersToGroup", {
+        groupId: groupId,
+        newMembers: selectedUsers,
+        addedBy: user._id
+      });
+
+      socketConnection.once("membersAddedToGroup", (response) => {
+        if (response.success) {
+          Alert.alert("Success", response.message);
+          setSelectedUsers([]);
+          setShowGroupInfoModal(false);
+        } else {
+          Alert.alert("Error", response.message || "Could not add members");
+        }
+      });
+    }
+  };
+
+  const handleRemoveMember = (groupId, memberId) => {
+    Alert.alert(
+      "Remove Member",
+      "Are you sure you want to remove this member?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            if (socketConnection) {
+              socketConnection.emit("removeMemberFromGroup", {
+                groupId: groupId,
+                memberId: memberId,
+                adminId: user._id
+              });
+
+              socketConnection.once("memberRemovedFromGroup", (response) => {
+                if (response.success) {
+                  Alert.alert("Success", response.message);
+                  if (selectedChat && selectedChat._id === groupId) {
+                    socketConnection.emit("joinRoom", groupId);
+                  }
+                } else {
+                  Alert.alert("Error", response.message || "Could not remove member");
+                }
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLeaveGroup = (groupId) => {
+    Alert.alert(
+      "Leave Group",
+      "Are you sure you want to leave this group?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: () => {
+            if (socketConnection) {
+              socketConnection.emit("leaveGroup", {
+                groupId: groupId,
+                userId: user._id
+              });
+
+              socketConnection.once("leftGroup", (response) => {
+                if (response.success) {
+                  Alert.alert("Success", response.message);
+                  handleBackToList();
+                } else {
+                  Alert.alert("Error", response.message || "Could not leave group");
+                }
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleShowGroupInfo = (group) => {
+    setCurrentGroupInfo(group);
+    setShowGroupInfoModal(true);
+    loadUsersForGroup();
+  };
+
   return (
     <View className="flex-1 bg-white">
       {/* Header */}
@@ -827,7 +1109,10 @@ export default function Chat() {
           <TouchableOpacity className="mx-1">
             <FontAwesomeIcon icon={faQrcode} size={18} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity className="ml-1">
+          <TouchableOpacity
+            className="ml-1"
+            onPress={() => setShowCreateGroupModal(true)}
+          >
             <FontAwesomeIcon icon={faPlus} size={18} color="white" />
             {friendRequestsCount > 0 && (
               <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-5 h-5 items-center justify-center">
@@ -845,20 +1130,25 @@ export default function Chat() {
             {chatUser && (
               <>
                 <Image
-                  source={{ uri: chatUser?.profilePic }}
+                  source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "Group")}` }}
                   className="w-9 h-9 rounded-full mr-2"
                 />
                 <View>
                   <Text className="text-white font-semibold">{chatUser?.name}</Text>
                   <Text className="text-white text-xs opacity-80">
-                    {chatUser?.online ? 'Đang hoạt động' : 'Không hoạt động'}
+                    {selectedChat.isGroup
+                      ? `${selectedChat.members?.length || 0} members`
+                      : (chatUser?.online ? 'Đang hoạt động' : 'Không hoạt động')}
                   </Text>
                 </View>
               </>
             )}
           </View>
           <View className="flex-row">
-            <TouchableOpacity className="mr-4">
+            <TouchableOpacity
+              className="mr-4"
+              onPress={() => selectedChat.isGroup && handleShowGroupInfo(selectedChat)}
+            >
               <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
             </TouchableOpacity>
           </View>
@@ -1127,6 +1417,186 @@ export default function Chat() {
           )}
         </>
       )}
+
+      {/* Create Group Modal */}
+      <Modal
+        visible={showCreateGroupModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCreateGroupModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
+          <View className="bg-white w-[90%] rounded-xl p-5">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-lg font-bold">Create New Group</Text>
+              <TouchableOpacity onPress={() => setShowCreateGroupModal(false)}>
+                <FontAwesomeIcon icon={faTimes} size={20} color="#555" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              className="border border-gray-300 rounded-lg p-2 mb-4"
+              placeholder="Group Name"
+              value={groupName}
+              onChangeText={setGroupName}
+            />
+
+            <Text className="font-semibold mb-2">Select Members ({selectedUsers.length}/20):</Text>
+
+            {isLoadingUsers ? (
+              <ActivityIndicator size="small" color="#0084ff" />
+            ) : (
+              <FlatList
+                data={allAvailableUsers}
+                keyExtractor={(item) => item._id}
+                style={{ maxHeight: 300 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    className={`flex-row items-center p-2 border-b border-gray-100 ${selectedUsers.includes(item._id) ? 'bg-blue-50' : ''}`}
+                    onPress={() => toggleUserSelection(item._id)}
+                  >
+                    <Image
+                      source={{ uri: item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}` }}
+                      className="w-10 h-10 rounded-full"
+                    />
+                    <Text className="ml-3 flex-1">{item.name}</Text>
+                    {selectedUsers.includes(item._id) && (
+                      <View className="h-6 w-6 bg-blue-500 rounded-full items-center justify-center">
+                        <FontAwesomeIcon icon={faCheck} size={12} color="white" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={() => (
+                  <Text className="text-center text-gray-500 py-4">No friends available</Text>
+                )}
+              />
+            )}
+
+            <TouchableOpacity
+              className={`mt-4 py-3 rounded-lg items-center ${groupName.trim() && selectedUsers.length >= 2 ? 'bg-blue-500' : 'bg-gray-300'
+                }`}
+              onPress={handleCreateGroup}
+              disabled={!groupName.trim() || selectedUsers.length < 2}
+            >
+              <Text className="text-white font-semibold">Create Group</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Group Info Modal */}
+      <Modal
+        visible={showGroupInfoModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowGroupInfoModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
+          <View className="bg-white w-[90%] rounded-xl p-5 max-h-[80%]">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-lg font-bold">Group Info</Text>
+              <TouchableOpacity onPress={() => setShowGroupInfoModal(false)}>
+                <FontAwesomeIcon icon={faTimes} size={20} color="#555" />
+              </TouchableOpacity>
+            </View>
+
+            {currentGroupInfo && (
+              <>
+                <View className="items-center mb-4">
+                  <Image
+                    source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentGroupInfo.name || "Group")}&background=random` }}
+                    className="w-20 h-20 rounded-full mb-2"
+                  />
+                  <Text className="text-lg font-bold">{currentGroupInfo.name}</Text>
+                  <Text className="text-sm text-gray-500">{currentGroupInfo.members?.length || 0} members</Text>
+                </View>
+
+                <View className="border-t border-b border-gray-200 py-4 mb-4">
+                  <Text className="font-semibold mb-2">Members:</Text>
+                  <FlatList
+                    data={currentGroupInfo.members}
+                    keyExtractor={(item) => item._id || item}
+                    style={{ maxHeight: 200 }}
+                    renderItem={({ item }) => {
+                      const memberId = item._id || item;
+                      const isCurrentUser = memberId === user._id;
+                      const isAdmin = currentGroupInfo.groupAdmin === memberId || currentGroupInfo.groupAdmin?._id === memberId;
+
+                      return (
+                        <View className="flex-row items-center justify-between py-2">
+                          <View className="flex-row items-center">
+                            <Image
+                              source={{ uri: item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "User")}` }}
+                              className="w-8 h-8 rounded-full mr-2"
+                            />
+                            <Text>{item.name || (isCurrentUser ? 'You' : 'User')}</Text>
+                            {isAdmin && (
+                              <View className="ml-2 px-2 py-0.5 bg-blue-100 rounded">
+                                <Text className="text-xs text-blue-600">Admin</Text>
+                              </View>
+                            )}
+                            {isCurrentUser && !isAdmin && (
+                              <View className="ml-2 px-2 py-0.5 bg-gray-100 rounded">
+                                <Text className="text-xs text-gray-600">You</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          {isAdmin && !isCurrentUser && (
+                            <TouchableOpacity
+                              className="px-2 py-1 bg-red-500 rounded"
+                              onPress={() => handleRemoveMember(currentGroupInfo._id, memberId)}
+                            >
+                              <Text className="text-white text-xs">Remove</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    }}
+                  />
+                </View>
+
+                <View className="flex-row justify-between">
+                  {currentGroupInfo.groupAdmin === user._id || currentGroupInfo.groupAdmin?._id === user._id ? (
+                    <>
+                      <TouchableOpacity
+                        className="bg-blue-500 px-4 py-2 rounded-lg"
+                        onPress={() => {
+                          setShowGroupInfoModal(false);
+                          loadUsersForGroup();
+                        }}
+                      >
+                        <Text className="text-white">Add Members</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        className="bg-red-500 px-4 py-2 rounded-lg"
+                        onPress={() => {
+                          setShowGroupInfoModal(false);
+                          handleDeleteConversation();
+                        }}
+                      >
+                        <Text className="text-white">Delete Group</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      className="bg-red-500 px-4 py-2 rounded-lg"
+                      onPress={() => {
+                        setShowGroupInfoModal(false);
+                        handleLeaveGroup(currentGroupInfo._id);
+                      }}
+                    >
+                      <Text className="text-white">Leave Group</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Image viewer modal */}
       <Modal
