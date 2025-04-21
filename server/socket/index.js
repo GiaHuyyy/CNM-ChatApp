@@ -12,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [process.env.FRONTEND_URL, 'http://localhost:8081'],
+    origin: [process.env.FRONTEND_URL, 'http://localhost:8081', 'http://192.168.1.204:8081'],
     credentials: true,
   },
 });
