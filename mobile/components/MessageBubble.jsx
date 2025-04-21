@@ -1,39 +1,47 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, Image, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, Image, Animated, Linking, Modal, SafeAreaView, Dimensions, Platform, Alert } from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { 
-  faFaceSmile, 
-  faThumbsUp 
+import {
+  faFaceSmile,
+  faThumbsUp
 } from '@fortawesome/free-regular-svg-icons';
 import {
   faEllipsisVertical,
   faQuoteRight,
   faShare,
   faPencil,
-  faTrash
+  faTrash,
+  faPlay,
+  faFileAlt,
+  faFilePdf,
+  faFileWord,
+  faFileImage,
+  faFileVideo,
+  faTimes,
+  faDownload,
+  faExpand
 } from '@fortawesome/free-solid-svg-icons';
 import EmojiReactionPicker from './EmojiReactionPicker';
+import { Video } from 'expo-av';
 
-const MessageBubble = ({ 
-  message, 
-  isCurrentUser, 
+const MessageBubble = ({
+  message,
+  isCurrentUser,
   onReaction,
   userProfilePic,
   onEditMessage,
-  onDeleteMessage 
+  onDeleteMessage,
+  onImagePress,
+  onVideoPress
 }) => {
-  // States để quản lý hiển thị các menu
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredMessage, setHoveredMessage] = useState(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
 
-  // Animation value cho emoji picker
   const emojiPickerAnim = useRef(new Animated.Value(0)).current;
 
-  // Xử lý hiển thị emoji picker với animation
   const toggleEmojiPicker = (show) => {
-    // Hủy timer ẩn nếu đang có
     if (emojiPickerTimer.current) {
       clearTimeout(emojiPickerTimer.current);
     }
@@ -57,11 +65,9 @@ const MessageBubble = ({
     }
   };
 
-  // Timer refs
   const emojiPickerTimer = useRef(null);
   const actionMenuTimer = useRef(null);
 
-  // Xử lý khi người dùng chọn emoji
   const handleEmojiSelect = (emojiData) => {
     if (onReaction && message._id) {
       onReaction(message._id, emojiData.emoji);
@@ -69,14 +75,12 @@ const MessageBubble = ({
     toggleEmojiPicker(false);
   };
 
-  // Xử lý thả cảm xúc nhanh
   const handleQuickLike = (messageId) => {
     if (onReaction) {
       onReaction(messageId, '👍');
     }
   };
 
-  // Xử lý hiển thị menu hành động
   const handleShowActionMenu = () => {
     if (actionMenuTimer.current) {
       clearTimeout(actionMenuTimer.current);
@@ -84,14 +88,12 @@ const MessageBubble = ({
     setShowActionMenu(true);
   };
 
-  // Xử lý ẩn menu hành động
   const handleHideActionMenu = () => {
     actionMenuTimer.current = setTimeout(() => {
       setShowActionMenu(false);
-    }, 300); // Delay 300ms để tránh menu biến mất quá nhanh
+    }, 300);
   };
 
-  // Cleanup timers khi component unmount
   useEffect(() => {
     return () => {
       if (emojiPickerTimer.current) {
@@ -103,26 +105,133 @@ const MessageBubble = ({
     };
   }, []);
 
-  // Tính toán các class cho container chính của tin nhắn
+  const getFileIcon = (fileName) => {
+    if (!fileName) return faFileAlt;
+
+    const extension = fileName.split('.').pop().toLowerCase();
+
+    switch (extension) {
+      case 'pdf':
+        return faFilePdf;
+      case 'doc':
+      case 'docx':
+        return faFileWord;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return faFileImage;
+      case 'mp4':
+      case 'mov':
+      case 'webm':
+        return faFileVideo;
+      default:
+        return faFileAlt;
+    }
+  };
+
+  const hasImage = message.imageUrl && message.imageUrl.length > 0;
+  const hasVideo = message.fileUrl &&
+    (message.fileUrl.endsWith('.mp4') ||
+      message.fileUrl.endsWith('.mov') ||
+      message.fileUrl.endsWith('.webm'));
+  const hasDocument = message.fileUrl && !hasVideo &&
+    (message.fileUrl.endsWith('.pdf') ||
+      message.fileUrl.endsWith('.doc') ||
+      message.fileUrl.endsWith('.docx'));
+  const hasFile = hasImage || hasVideo || hasDocument;
+
   const containerClass = isCurrentUser
-    ? 'flex-row-reverse' // Tin nhắn của người dùng hiện tại sẽ hiển thị bên phải
-    : 'flex-row';       // Tin nhắn của người khác sẽ hiển thị bên trái
+    ? 'flex-row-reverse'
+    : 'flex-row';
 
-  // Tính toán các class cho bubble tin nhắn
   const bubbleClass = isCurrentUser
-    ? 'bg-blue-500 rounded-t-2xl rounded-bl-2xl rounded-br-md ml-2' // Bo góc cho tin nhắn gửi
-    : 'bg-gray-200 rounded-t-2xl rounded-br-2xl rounded-bl-md mr-2'; // Bo góc cho tin nhắn nhận
+    ? 'bg-#e0ecfc rounded-t-2xl rounded-bl-2xl rounded-br-md ml-2'
+    : 'bg-gray-200 rounded-t-2xl rounded-br-2xl rounded-bl-md mr-2';
 
-  // Tính toán class cho text
   const textClass = isCurrentUser
-    ? 'text-white'     // Chữ màu trắng cho tin nhắn gửi
-    : 'text-gray-800'; // Chữ màu đen cho tin nhắn nhận
+    ? 'text-black'
+    : 'text-gray-800';
+
+  const mediaWidthClass = hasFile ? 'w-[200px]' : '';
+
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+
+  const videoRef = useRef(null);
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
+
+  const handleImageView = () => {
+    if (onImagePress) {
+      onImagePress(message.imageUrl);
+    } else {
+      setShowImageModal(true);
+    }
+  };
+
+  const handleVideoView = () => {
+    if (onVideoPress) {
+      onVideoPress(message.fileUrl);
+    } else {
+      setShowVideoModal(true);
+    }
+  };
+
+  const handleDocumentView = () => {
+    try {
+      Linking.canOpenURL(message.fileUrl)
+        .then(supported => {
+          if (supported) {
+            return Linking.openURL(message.fileUrl);
+          } else {
+            console.log("Cannot open URL:", message.fileUrl);
+            Alert.alert(
+              "Không thể mở tài liệu",
+              "Ứng dụng không thể mở URL này. Bạn có muốn sao chép liên kết không?",
+              [
+                { text: "Hủy", style: "cancel" },
+                { text: "Sao chép", onPress: () => Clipboard.setString(message.fileUrl) }
+              ]
+            );
+          }
+        })
+        .catch(err => {
+          console.error("Error opening document URL:", err);
+          setShowDocumentModal(true);
+        });
+    } catch (error) {
+      console.error("Error in handleDocumentView:", error);
+      setShowDocumentModal(true);
+    }
+  };
+
+  const renderDocumentPreview = () => (
+    <TouchableOpacity
+      onPress={handleDocumentView}
+      className="mb-2 flex-row items-center p-2 bg-white bg-opacity-30 rounded-md"
+    >
+      <View className="w-10 h-10 rounded-md bg-white bg-opacity-50 flex items-center justify-center mr-2">
+        <FontAwesomeIcon
+          icon={getFileIcon(message.fileName)}
+          size={20}
+          color={isCurrentUser ? "#fff" : "#333"}
+        />
+      </View>
+      <View className="flex-1">
+        <Text className={`text-sm font-medium ${textClass}`} numberOfLines={1}>
+          {message.fileName || "Document"}
+        </Text>
+        <Text className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'}`}>
+          Nhấn để tải xuống
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View className="mb-3 px-4">
-      {/* Container chính với flex direction dựa theo người gửi */}
       <View className={`${containerClass} items-end`}>
-        {/* Avatar chỉ hiển thị cho tin nhắn của người khác */}
         {!isCurrentUser && (
           <Image
             source={{ uri: userProfilePic }}
@@ -130,9 +239,7 @@ const MessageBubble = ({
           />
         )}
 
-        {/* Container cho tin nhắn và reactions */}
-        <View className="max-w-[75%] relative">
-          {/* Bubble tin nhắn */}
+        <View className={`max-w-[75%] relative ${hasFile ? 'min-w-[150px]' : ''}`}>
           <Pressable
             onPressIn={() => setHoveredMessage(message._id)}
             onPressOut={() => setHoveredMessage(null)}
@@ -143,12 +250,50 @@ const MessageBubble = ({
               ${bubbleClass}
             `}
           >
-            {/* Nội dung tin nhắn */}
-            <Text className={`text-base ${textClass}`}>
-              {message.text}
-            </Text>
+            {hasImage && (
+              <TouchableOpacity
+                onPress={handleImageView}
+                className="mb-2"
+              >
+                <Image
+                  source={{ uri: message.imageUrl }}
+                  className="w-full h-[200px] rounded-md"
+                  resizeMode="cover"
+                />
+                <View className="absolute bottom-2 right-2 p-1 bg-black bg-opacity-50 rounded-full">
+                  <FontAwesomeIcon icon={faExpand} size={12} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            )}
 
-            {/* Thời gian gửi */}
+            {hasVideo && (
+              <TouchableOpacity
+                onPress={handleVideoView}
+                className="mb-2 relative"
+              >
+                <Video
+                  source={{ uri: message.fileUrl }}
+                  className="w-full h-[200px] rounded-md"
+                  useNativeControls={false}
+                  resizeMode="cover"
+                  shouldPlay={false}
+                />
+                <View className="absolute inset-0 flex items-center justify-center">
+                  <View className="w-12 h-12 rounded-full bg-black bg-opacity-50 flex items-center justify-center">
+                    <FontAwesomeIcon icon={faPlay} size={20} color="#fff" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {hasDocument && renderDocumentPreview()}
+
+            {message.text && (
+              <Text className={`text-base ${textClass}`}>
+                {message.text}
+              </Text>
+            )}
+
             <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'}`}>
               {new Date(message.createdAt).toLocaleTimeString([], {
                 hour: '2-digit',
@@ -159,7 +304,6 @@ const MessageBubble = ({
               )}
             </Text>
 
-            {/* Nút thả cảm xúc nhanh */}
             <TouchableOpacity
               onPress={() => handleQuickLike(message._id)}
               onLongPress={() => toggleEmojiPicker(true)}
@@ -169,23 +313,22 @@ const MessageBubble = ({
                 rounded-full bg-white px-1 py-[3px]
               `}
             >
-              <FontAwesomeIcon 
-                icon={faThumbsUp} 
-                size={14} 
+              <FontAwesomeIcon
+                icon={faThumbsUp}
+                size={14}
                 color="#8b8b8b"
               />
             </TouchableOpacity>
 
-            {/* Menu hành động khi hover */}
             {showActionMenu && isCurrentUser && (
-              <View 
+              <View
                 className={`
                   absolute ${isCurrentUser ? '-left-20' : '-right-20'} 
                   top-1/2 -translate-y-1/2
                   flex-row items-center gap-x-1
                 `}
               >
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="p-2 bg-white rounded-full shadow-sm"
                   onPress={() => {
                     onEditMessage(message);
@@ -198,7 +341,7 @@ const MessageBubble = ({
                     color="#666"
                   />
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="p-2 bg-white rounded-full shadow-sm"
                   onPress={() => {
                     onDeleteMessage(message._id);
@@ -215,9 +358,8 @@ const MessageBubble = ({
             )}
           </Pressable>
 
-          {/* Emoji Picker với animation */}
           {showEmojiPicker && (
-            <Animated.View 
+            <Animated.View
               className={`
                 absolute z-50 
                 ${isCurrentUser ? 'right-0' : 'left-0'} 
@@ -237,6 +379,117 @@ const MessageBubble = ({
           )}
         </View>
       </View>
+
+      {/* Image Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showImageModal}
+        onRequestClose={() => setShowImageModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+          <TouchableOpacity
+            className="absolute top-10 right-5 z-10 p-2"
+            onPress={() => setShowImageModal(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+          </TouchableOpacity>
+
+          <Image
+            source={{ uri: message.imageUrl }}
+            className="w-full h-3/4"
+            resizeMode="contain"
+          />
+
+          <TouchableOpacity
+            className="mt-5 flex-row items-center bg-blue-500 px-4 py-2 rounded-full"
+            onPress={() => Linking.openURL(message.imageUrl)}
+          >
+            <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+            <Text className="text-white font-semibold">Tải xuống</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Video Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showVideoModal}
+        onRequestClose={() => setShowVideoModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+          <TouchableOpacity
+            className="absolute top-10 right-5 z-10 p-2"
+            onPress={() => setShowVideoModal(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+          </TouchableOpacity>
+
+          <View className="w-full h-3/4 justify-center items-center">
+            <Video
+              ref={videoRef}
+              source={{ uri: message.fileUrl }}
+              style={{ width: screenWidth * 0.9, height: screenHeight * 0.5 }}
+              useNativeControls
+              resizeMode="contain"
+              shouldPlay={true}
+              isLooping={false}
+            />
+          </View>
+
+          <TouchableOpacity
+            className="mt-5 flex-row items-center bg-blue-500 px-4 py-2 rounded-full"
+            onPress={() => Linking.openURL(message.fileUrl)}
+          >
+            <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+            <Text className="text-white font-semibold">Tải xuống</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Document Preview Modal (basic info & download option) */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showDocumentModal}
+        onRequestClose={() => setShowDocumentModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-black bg-opacity-90 justify-center items-center">
+          <View className="bg-white w-4/5 rounded-xl p-6">
+            <TouchableOpacity
+              className="absolute top-2 right-2"
+              onPress={() => setShowDocumentModal(false)}
+            >
+              <FontAwesomeIcon icon={faTimes} size={18} color="#555" />
+            </TouchableOpacity>
+
+            <View className="items-center p-4">
+              <FontAwesomeIcon
+                icon={getFileIcon(message.fileName)}
+                size={60}
+                color="#2563eb"
+              />
+              <Text className="text-lg font-bold mt-4 text-center">{message.fileName || "Document"}</Text>
+              <Text className="text-sm text-gray-500 mb-6">Không thể hiển thị trực tiếp tài liệu này</Text>
+
+              <TouchableOpacity
+                className="flex-row items-center bg-blue-500 px-6 py-3 rounded-full mb-2"
+                onPress={() => {
+                  Linking.openURL(message.fileUrl)
+                    .catch(err => {
+                      console.error("Error opening URL:", err);
+                      Alert.alert("Lỗi", "Không thể mở tài liệu này");
+                    });
+                }}
+              >
+                <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                <Text className="text-white font-semibold">Tải xuống</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 };
@@ -244,9 +497,12 @@ const MessageBubble = ({
 MessageBubble.propTypes = {
   message: PropTypes.shape({
     _id: PropTypes.string.isRequired,
-    text: PropTypes.string.isRequired,
+    text: PropTypes.string,
     createdAt: PropTypes.string.isRequired,
     isEdited: PropTypes.bool,
+    imageUrl: PropTypes.string,
+    fileUrl: PropTypes.string,
+    fileName: PropTypes.string,
     reactions: PropTypes.arrayOf(
       PropTypes.shape({
         emoji: PropTypes.string.isRequired,
@@ -259,6 +515,8 @@ MessageBubble.propTypes = {
   userProfilePic: PropTypes.string.isRequired,
   onEditMessage: PropTypes.func,
   onDeleteMessage: PropTypes.func,
+  onImagePress: PropTypes.func,
+  onVideoPress: PropTypes.func
 };
 
-export default MessageBubble; 
+export default MessageBubble;
