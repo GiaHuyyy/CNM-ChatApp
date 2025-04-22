@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -15,6 +15,10 @@ import * as DocumentPicker from 'expo-document-picker';
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import { Video } from 'expo-av';
 import MessageBubble from "../../components/MessageBubble";
+import ConfirmationModal from "../../components/ConfirmationModal";
+import CreateGroupChat from "../../components/CreateGroupChat";
+import GroupChatItem from "../../components/GroupChatItem";
+import GroupInfoModal from "../../components/GroupInfoModal";
 
 export default function Chat() {
   const dispatch = useDispatch();
@@ -51,12 +55,10 @@ export default function Chat() {
 
   // Group chat states
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState([]);
-  const [allAvailableUsers, setAllAvailableUsers] = useState([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [currentGroupInfo, setCurrentGroupInfo] = useState(null);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [searchGroupUsers, setSearchGroupUsers] = useState("");
 
   // Add state for tracking which message is being edited
   const [editingMessage, setEditingMessage] = useState(null);
@@ -70,6 +72,14 @@ export default function Chat() {
 
   // Add state to track if all conversations should be shown
   const [showAllConversations, setShowAllConversations] = useState(false);
+
+  // Add these new states for improved group management
+  const [confirmModal, setConfirmModal] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    action: null
+  });
 
   // Enhanced initialization effect that runs only once on app load
   useEffect(() => {
@@ -587,6 +597,36 @@ export default function Chat() {
     };
   }, [socketConnection, user]);
 
+  // Update the global socket connection setup to add debugging for group-related events
+  useEffect(() => {
+    if (!socketConnection || !user?._id) return;
+
+    // Add a listener for member removal response
+    socketConnection.on("memberRemovedFromGroup", (response) => {
+      console.log("Received memberRemovedFromGroup event:", response);
+      if (response.success) {
+        refreshConversations();
+      }
+    });
+
+    // Add a listener for being removed from a group
+    socketConnection.on("removedFromGroup", (data) => {
+      console.log("You were removed from a group:", data);
+
+      // If you are viewing that group, go back to conversation list
+      if (selectedChat?.userDetails?._id === data.groupId) {
+        handleBackToList();
+      }
+
+      refreshConversations();
+    });
+
+    return () => {
+      socketConnection.off("memberRemovedFromGroup");
+      socketConnection.off("removedFromGroup");
+    };
+  }, [socketConnection, user?._id, selectedChat]);
+
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -925,7 +965,6 @@ export default function Chat() {
     }
   };
 
-  // Fix the handleDeleteMessage function to ensure it works properly
   const handleDeleteMessage = (messageId) => {
     console.log("Handling message deletion for ID:", messageId);
 
@@ -951,15 +990,12 @@ export default function Chat() {
 
       console.log("Sending delete payload:", deletePayload);
 
-      // Emit event and set up listener for response in one operation
       socketConnection.emit("deleteMessage", deletePayload);
 
-      // Set up a specific one-time listener for deletion response
       socketConnection.once("messageDeleted", (response) => {
         console.log("Server response to deletion:", response);
         if (response.success) {
           console.log("Message deleted successfully");
-          // Optional: Update the local messages list to reflect the deletion
           setMessages(prev => prev.filter(msg => msg._id !== messageId));
         } else {
           console.error("Failed to delete message:", response.message);
@@ -972,7 +1008,6 @@ export default function Chat() {
     }
   };
 
-  // Add the handleAddReaction function to handle emoji reactions
   const handleAddReaction = (messageId, emoji) => {
     console.log("Adding reaction:", emoji, "to message:", messageId);
 
@@ -1036,7 +1071,7 @@ export default function Chat() {
         userProfilePic={chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`}
         onEditMessage={handleEditMessage}
         onDeleteMessage={handleDeleteMessage}
-        onReaction={handleAddReaction} // Now properly defined
+        onReaction={handleAddReaction}
         senderName={senderName}
         isGroupChat={selectedChat?.isGroup}
         onImagePress={(imageUrl) => handleImageClick(imageUrl)}
@@ -1044,241 +1079,190 @@ export default function Chat() {
     );
   };
 
-  const renderConversationItem = ({ item: chatItem }) => (
-    <TouchableOpacity
-      className="flex-row items-center px-4 py-3 border-b border-gray-100"
-      onPress={() => handleSelectChat(chatItem)}
-      onLongPress={() => chatItem.isGroup && handleShowGroupInfo(chatItem)}
-    >
-      <View className="relative">
-        <Image
-          source={{ uri: chatItem?.userDetails?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem?.userDetails?.name || "User")}` }}
-          className="w-12 h-12 rounded-full"
+  const refreshConversations = () => {
+    if (socketConnection && user?._id) {
+      console.log("Refreshing conversations for user:", user._id);
+      socketConnection.emit("sidebar", user._id);
+    }
+  };
+
+  const renderConversationItem = ({ item: chatItem }) => {
+    // Check if this is a group chat
+    if (chatItem.isGroup || chatItem.userDetails?.isGroup) {
+      return (
+        <GroupChatItem
+          group={chatItem}
+          onPress={handleSelectChat}
+          currentUserId={user?._id}
+          onLongPress={handleShowGroupInfo}
         />
-        {chatItem?.isGroup && (
-          <View className="absolute bottom-0 right-0 bg-blue-500 rounded-full h-4 w-4 items-center justify-center">
-            <FontAwesomeIcon icon={faUsers} size={10} color="#fff" />
-          </View>
-        )}
-      </View>
-      <View className="ml-3 flex-1 overflow-hidden">
-        <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
-        <Text numberOfLines={1} className="text-gray-500 text-sm">
-          {chatItem?.isGroup ? (
-            <>
-              {chatItem?.latestMessage?.msgByUserId === user?._id ? (
-                <Text>Bạn: </Text>
-              ) : (
+      );
+    }
+
+    // Original code for direct chat items
+    return (
+      <TouchableOpacity
+        className="flex-row items-center px-4 py-3 border-b border-gray-100"
+        onPress={() => handleSelectChat(chatItem)}
+      >
+        <View className="relative">
+          <Image
+            source={{ uri: chatItem?.userDetails?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem?.userDetails?.name || "User")}` }}
+            className="w-12 h-12 rounded-full"
+          />
+        </View>
+        <View className="ml-3 flex-1 overflow-hidden">
+          <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
+          <Text numberOfLines={1} className="text-gray-500 text-sm">
+            {chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? <Text>Bạn: </Text> : null}
+            {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
+            {chatItem?.latestMessage?.imageUrl && (
+              <>
+                <FontAwesomeIcon icon={faImage} size={15} color="#ccc" />
                 <Text>
-                  {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
-                    ?.name + ":" || ""}
+                  {chatItem?.latestMessage?.fileName
+                    ? ` ${chatItem?.latestMessage?.fileName}`
+                    : " Hình ảnh"}
                 </Text>
-              )}
-            </>
-          ) : (
-            <>{chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? <Text>Bạn: </Text> : null}</>
+              </>
+            )}
+            {chatItem?.latestMessage?.fileUrl && (
+              <>
+                <FontAwesomeIcon icon={faFilePen} size={15} color="#ccc" />
+                <Text>{chatItem?.latestMessage?.fileName}</Text>
+              </>
+            )}
+          </Text>
+        </View>
+        <View className="items-end">
+          <Text className="text-xs text-gray-500">
+            {chatItem?.latestMessage?.createdAt &&
+              new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+          </Text>
+          {chatItem?.unseenMessages > 0 && (
+            <View className="bg-red-700 rounded-full h-5 w-5 items-center justify-center mt-1">
+              <Text className="text-white text-xs">{chatItem?.unseenMessages}</Text>
+            </View>
           )}
-          {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
-          {chatItem?.latestMessage?.imageUrl && (
-            <>
-              <FontAwesomeIcon icon={faImage} size={15} color="#ccc" />
-              <Text>
-                {chatItem?.latestMessage?.fileName
-                  ? ` ${chatItem?.latestMessage?.fileName}`
-                  : " Hình ảnh"}
-              </Text>
-            </>
-          )}
-          {chatItem?.latestMessage?.fileUrl && (
-            <>
-              <FontAwesomeIcon icon={faFilePen} size={15} color="#ccc" />
-              <Text>{chatItem?.latestMessage?.fileName}</Text>
-            </>
-          )}
-        </Text>
-      </View>
-      <View className="items-end">
-        <Text className="text-xs text-gray-500">
-          {chatItem?.latestMessage?.createdAt &&
-            new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-        </Text>
-        {chatItem?.unseenMessages > 0 && (
-          <View className="bg-red-700 rounded-full h-5 w-5 items-center justify-center mt-1">
-            <Text className="text-white text-xs">{chatItem?.unseenMessages}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-
-  const loadUsersForGroup = async () => {
-    setIsLoadingUsers(true);
-    try {
-      const response = await axios.get("http://localhost:5000/api/all-friends", {
-        withCredentials: true,
-      });
-      setAllAvailableUsers(response.data.data || []);
-    } catch (error) {
-      console.error("Error loading friends:", error);
-      Alert.alert("Error", "Could not load friends list");
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
-
-  const toggleUserSelection = (userId) => {
-    if (selectedUsers.includes(userId)) {
-      setSelectedUsers(selectedUsers.filter(id => id !== userId));
-    } else {
-      setSelectedUsers([...selectedUsers, userId]);
-    }
-  };
-
-  const handleCreateGroup = () => {
-    if (!groupName.trim()) {
-      Alert.alert("Error", "Please enter a group name");
-      return;
-    }
-
-    if (selectedUsers.length < 2) {
-      Alert.alert("Error", "Please select at least 2 users");
-      return;
-    }
-
-    if (socketConnection) {
-      socketConnection.emit("createGroupChat", {
-        name: groupName,
-        members: [...selectedUsers, user._id],
-        creator: user._id
-      });
-
-      socketConnection.once("groupCreated", (response) => {
-        if (response.success) {
-          Alert.alert("Success", response.message);
-          setShowCreateGroupModal(false);
-          setGroupName("");
-          setSelectedUsers([]);
-        } else {
-          Alert.alert("Error", response.message || "Could not create group");
-        }
-      });
-    }
-  };
-
-  const handleAddMembersToGroup = (groupId) => {
-    if (selectedUsers.length === 0) {
-      Alert.alert("Error", "Please select users to add");
-      return;
-    }
-
-    if (socketConnection) {
-      socketConnection.emit("addMembersToGroup", {
-        groupId: groupId,
-        newMembers: selectedUsers,
-        addedBy: user._id
-      });
-
-      socketConnection.once("membersAddedToGroup", (response) => {
-        if (response.success) {
-          Alert.alert("Success", response.message);
-          setSelectedUsers([]);
-          setShowGroupInfoModal(false);
-        } else {
-          Alert.alert("Error", response.message || "Could not add members");
-        }
-      });
-    }
-  };
-
-  const handleRemoveMember = (groupId, memberId) => {
-    Alert.alert(
-      "Remove Member",
-      "Are you sure you want to remove this member?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            if (socketConnection) {
-              socketConnection.emit("removeMemberFromGroup", {
-                groupId: groupId,
-                memberId: memberId,
-                adminId: user._id
-              });
-
-              socketConnection.once("memberRemovedFromGroup", (response) => {
-                if (response.success) {
-                  Alert.alert("Success", response.message);
-                  if (selectedChat && selectedChat._id === groupId) {
-                    socketConnection.emit("joinRoom", groupId);
-                  }
-                } else {
-                  Alert.alert("Error", response.message || "Could not remove member");
-                }
-              });
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleLeaveGroup = (groupId) => {
-    Alert.alert(
-      "Leave Group",
-      "Are you sure you want to leave this group?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: () => {
-            if (socketConnection) {
-              socketConnection.emit("leaveGroup", {
-                groupId: groupId,
-                userId: user._id
-              });
-
-              socketConnection.once("leftGroup", (response) => {
-                if (response.success) {
-                  Alert.alert("Success", response.message);
-                  handleBackToList();
-                } else {
-                  Alert.alert("Error", response.message || "Could not leave group");
-                }
-              });
-            }
-          }
-        }
-      ]
+        </View>
+      </TouchableOpacity>
     );
   };
 
   const handleShowGroupInfo = (group) => {
     setCurrentGroupInfo(group);
     setShowGroupInfoModal(true);
-    loadUsersForGroup();
   };
 
-  // Create a filtered conversations list based on the showAllConversations state
+  const handleLeaveGroup = (groupId) => {
+    if (!socketConnection || !groupId) return;
+
+    setConfirmModal({
+      visible: true,
+      title: "Rời khỏi nhóm",
+      message: "Bạn có chắc muốn rời khỏi nhóm chat này?",
+      action: () => {
+        socketConnection.emit("leaveGroup", {
+          groupId: groupId,
+          userId: user._id
+        });
+
+        socketConnection.once("leftGroup", (response) => {
+          if (response.success) {
+            Alert.alert("Thành công", response.message);
+            handleBackToList();
+            refreshConversations();
+          } else {
+            Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm");
+          }
+        });
+      }
+    });
+  };
+
+  const handleDeleteGroup = (groupId) => {
+    if (!socketConnection || !groupId) return;
+
+    setConfirmModal({
+      visible: true,
+      title: "Xóa nhóm",
+      message: "Bạn có chắc muốn xóa nhóm chat này? Hành động này không thể hoàn tác.",
+      action: () => {
+        socketConnection.emit("deleteGroup", {
+          groupId: groupId,
+          adminId: user._id
+        });
+
+        socketConnection.once("groupDeleted", (response) => {
+          if (response.success) {
+            Alert.alert("Thành công", response.message);
+            handleBackToList();
+            refreshConversations();
+          } else {
+            Alert.alert("Lỗi", response.message || "Không thể xóa nhóm");
+          }
+        });
+      }
+    });
+  };
+
+  const renderCreateGroupModal = () => (
+    <CreateGroupChat
+      visible={showCreateGroupModal}
+      onClose={() => setShowCreateGroupModal(false)}
+      socketConnection={socketConnection}
+      userId={user?._id}
+      onGroupCreated={refreshConversations}
+    />
+  );
+
+  const renderGroupInfoModal = () => (
+    <GroupInfoModal
+      visible={showGroupInfoModal}
+      onClose={() => {
+        setShowGroupInfoModal(false);
+        // Force refresh conversations when modal closes
+        setTimeout(() => refreshConversations(), 500);
+      }}
+      group={currentGroupInfo}
+      currentUserId={user?._id}
+      onLeaveGroup={() => handleLeaveGroup(currentGroupInfo?._id)}
+      onDeleteGroup={() => handleDeleteGroup(currentGroupInfo?._id)}
+      socketConnection={socketConnection}
+    />
+  );
+
+  const renderConfirmationModal = () => (
+    <ConfirmationModal
+      visible={confirmModal.visible}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      onConfirm={() => {
+        if (confirmModal.action) {
+          confirmModal.action();
+        }
+        setConfirmModal({ ...confirmModal, visible: false });
+      }}
+      onCancel={() => setConfirmModal({ ...confirmModal, visible: false })}
+      type="warning"
+    />
+  );
+
   const displayedConversations = useMemo(() => {
     if (!Array.isArray(allUsers)) return [];
 
-    // Sort by latest message timestamp if available
     const sortedConversations = [...allUsers].sort((a, b) => {
       const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
       const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
-      return timeB - timeA; // Sort in descending order (newest first)
+      return timeB - timeA;
     });
 
     return showAllConversations ? sortedConversations : sortedConversations.slice(0, 7);
   }, [allUsers, showAllConversations]);
 
-  // Function to toggle showing all conversations
   const toggleShowAllConversations = () => {
     setShowAllConversations(prevState => !prevState);
   };
@@ -1624,7 +1608,6 @@ export default function Chat() {
                     contentContainerStyle={{ flexGrow: 1 }}
                   />
 
-                  {/* Only show the "View All" button if there are more than 10 conversations and not already showing all */}
                   {(Array.isArray(allUsers) && allUsers.length > 10) && (
                     <TouchableOpacity
                       className="py-3 border-t border-gray-200 items-center bg-gray-50"
@@ -1646,185 +1629,10 @@ export default function Chat() {
         </>
       )}
 
-      {/* Create Group Modal */}
-      <Modal
-        visible={showCreateGroupModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCreateGroupModal(false)}
-      >
-        <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
-          <View className="bg-white w-[90%] rounded-xl p-5">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-lg font-bold">Create New Group</Text>
-              <TouchableOpacity onPress={() => setShowCreateGroupModal(false)}>
-                <FontAwesomeIcon icon={faTimes} size={20} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              className="border border-gray-300 rounded-lg p-2 mb-4"
-              placeholder="Group Name"
-              value={groupName}
-              onChangeText={setGroupName}
-            />
-
-            <Text className="font-semibold mb-2">Select Members ({selectedUsers.length}/20):</Text>
-
-            {isLoadingUsers ? (
-              <ActivityIndicator size="small" color="#0084ff" />
-            ) : (
-              <FlatList
-                data={allAvailableUsers}
-                keyExtractor={(item) => item._id}
-                style={{ maxHeight: 300 }}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    className={`flex-row items-center p-2 border-b border-gray-100 ${selectedUsers.includes(item._id) ? 'bg-blue-50' : ''}`}
-                    onPress={() => toggleUserSelection(item._id)}
-                  >
-                    <Image
-                      source={{ uri: item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}` }}
-                      className="w-10 h-10 rounded-full"
-                    />
-                    <Text className="ml-3 flex-1">{item.name}</Text>
-                    {selectedUsers.includes(item._id) && (
-                      <View className="h-6 w-6 bg-blue-500 rounded-full items-center justify-center">
-                        <FontAwesomeIcon icon={faCheck} size={12} color="white" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={() => (
-                  <Text className="text-center text-gray-500 py-4">No friends available</Text>
-                )}
-              />
-            )}
-
-            <TouchableOpacity
-              className={`mt-4 py-3 rounded-lg items-center ${groupName.trim() && selectedUsers.length >= 2 ? 'bg-blue-500' : 'bg-gray-300'
-                }`}
-              onPress={handleCreateGroup}
-              disabled={!groupName.trim() || selectedUsers.length < 2}
-            >
-              <Text className="text-white font-semibold">Create Group</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Group Info Modal */}
-      <Modal
-        visible={showGroupInfoModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowGroupInfoModal(false)}
-      >
-        <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
-          <View className="bg-white w-[90%] rounded-xl p-5 max-h-[80%]">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-lg font-bold">Group Info</Text>
-              <TouchableOpacity onPress={() => setShowGroupInfoModal(false)}>
-                <FontAwesomeIcon icon={faTimes} size={20} color="#555" />
-              </TouchableOpacity>
-            </View>
-
-            {currentGroupInfo && (
-              <>
-                <View className="items-center mb-4">
-                  <Image
-                    source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentGroupInfo.name || "Group")}&background=random` }}
-                    className="w-20 h-20 rounded-full mb-2"
-                  />
-                  <Text className="text-lg font-bold">{currentGroupInfo.name}</Text>
-                  <Text className="text-sm text-gray-500">{currentGroupInfo.members?.length || 0} members</Text>
-                </View>
-
-                <View className="border-t border-b border-gray-200 py-4 mb-4">
-                  <Text className="font-semibold mb-2">Members:</Text>
-                  <FlatList
-                    data={currentGroupInfo.members}
-                    keyExtractor={(item) => item._id || item}
-                    style={{ maxHeight: 200 }}
-                    renderItem={({ item }) => {
-                      const memberId = item._id || item;
-                      const isCurrentUser = memberId === user._id;
-                      const isAdmin = currentGroupInfo.groupAdmin === memberId || currentGroupInfo.groupAdmin?._id === memberId;
-
-                      return (
-                        <View className="flex-row items-center justify-between py-2">
-                          <View className="flex-row items-center">
-                            <Image
-                              source={{ uri: item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "User")}` }}
-                              className="w-8 h-8 rounded-full mr-2"
-                            />
-                            <Text>{item.name || (isCurrentUser ? 'You' : 'User')}</Text>
-                            {isAdmin && (
-                              <View className="ml-2 px-2 py-0.5 bg-blue-100 rounded">
-                                <Text className="text-xs text-blue-600">Admin</Text>
-                              </View>
-                            )}
-                            {isCurrentUser && !isAdmin && (
-                              <View className="ml-2 px-2 py-0.5 bg-gray-100 rounded">
-                                <Text className="text-xs text-gray-600">You</Text>
-                              </View>
-                            )}
-                          </View>
-
-                          {isAdmin && !isCurrentUser && (
-                            <TouchableOpacity
-                              className="px-2 py-1 bg-red-500 rounded"
-                              onPress={() => handleRemoveMember(currentGroupInfo._id, memberId)}
-                            >
-                              <Text className="text-white text-xs">Remove</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      );
-                    }}
-                  />
-                </View>
-
-                <View className="flex-row justify-between">
-                  {currentGroupInfo.groupAdmin === user._id || currentGroupInfo.groupAdmin?._id === user._id ? (
-                    <>
-                      <TouchableOpacity
-                        className="bg-blue-500 px-4 py-2 rounded-lg"
-                        onPress={() => {
-                          setShowGroupInfoModal(false);
-                          loadUsersForGroup();
-                        }}
-                      >
-                        <Text className="text-white">Add Members</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        className="bg-red-500 px-4 py-2 rounded-lg"
-                        onPress={() => {
-                          setShowGroupInfoModal(false);
-                          handleDeleteConversation();
-                        }}
-                      >
-                        <Text className="text-white">Delete Group</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <TouchableOpacity
-                      className="bg-red-500 px-4 py-2 rounded-lg"
-                      onPress={() => {
-                        setShowGroupInfoModal(false);
-                        handleLeaveGroup(currentGroupInfo._id);
-                      }}
-                    >
-                      <Text className="text-white">Leave Group</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      {/* Add all modals at the end of the component */}
+      {renderCreateGroupModal()}
+      {renderGroupInfoModal()}
+      {renderConfirmationModal()}
 
       {/* Image viewer modal */}
       <Modal
