@@ -23,7 +23,7 @@ export default function SignIn() {
     }
 
     setIsLoading(true);
-
+    console.log(BACKEND_URL)
     try {
       const response = await axios.post(
         `${BACKEND_URL}/api/login`,
