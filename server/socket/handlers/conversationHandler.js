@@ -2,7 +2,8 @@ const { ConversationModel, MessageModel } = require("../../models/ConversationMo
 const UserModel = require("../../models/UserModel");
 const getConversation = require("../../helpers/getConversation");
 
-const conversationHandler = (io, socket, userId, onlineUser) => { // Add onlineUser parameter
+const conversationHandler = (io, socket, userId, onlineUser) => {
+  // Add onlineUser parameter
   socket.on("joinRoom", async (targetUserId) => {
     try {
       if (targetUserId === "chat" || targetUserId === "") {
@@ -121,43 +122,177 @@ const conversationHandler = (io, socket, userId, onlineUser) => { // Add onlineU
   });
 
   // Delete conversation
-  socket.on("deleteConversation", async (conversationId) => {
+  socket.on("deleteConversation", async (data) => {
     try {
-      const conversation = await ConversationModel.findById(conversationId);
-      
+      // Extract conversation ID from data
+      let conversationId = typeof data === "object" ? data.conversationId : data;
+      let requestingUserId = typeof data === "object" ? data.userId : userId;
+
+      if (!conversationId) {
+        socket.emit("error", { message: "Missing conversation ID" });
+        return;
+      }
+
+      // For one-on-one chats: find conversation between users
+      // For group chats: find conversation directly by ID
+      const mongoose = require("mongoose");
+
+      // Try to find a group chat first
+      let conversation = await ConversationModel.findOne({
+        _id: conversationId,
+        isGroup: true,
+      });
+
+      if (!conversation) {
+        // Not a group - look for one-on-one conversation
+        conversation = await ConversationModel.findOne({
+          $or: [
+            { sender: requestingUserId, receiver: conversationId },
+            { sender: conversationId, receiver: requestingUserId },
+          ],
+          isGroup: false,
+        });
+      }
+
       if (!conversation) {
         socket.emit("error", { message: "Cuộc trò chuyện không tồn tại" });
         return;
       }
 
-      // Delete all messages in the conversation
+      // Get affected users for notification
+      const affectedUserIds = conversation.isGroup
+        ? conversation.members.map((id) => id.toString())
+        : [conversation.sender.toString(), conversation.receiver.toString()];
+
+      // Delete messages
       await MessageModel.deleteMany({ _id: { $in: conversation.messages } });
 
-      // Delete the conversation itself
-      await ConversationModel.findByIdAndDelete(conversationId);
+      // Delete the conversation
+      await ConversationModel.findByIdAndDelete(conversation._id);
 
-      // Update sidebar for involved users
-      if (conversation.isGroup) {
-        for (const memberId of conversation.members) {
-          const memberConversations = await getConversation(memberId.toString());
-          io.to(memberId.toString()).emit("conversation", memberConversations);
-        }
-      } else {
-        const senderConversations = await getConversation(conversation.sender.toString());
-        const receiverConversations = await getConversation(conversation.receiver.toString());
+      // Notify requester
+      socket.emit("conversationDeleted", {
+        success: true,
+        message: "Đã xóa cuộc trò chuyện thành công",
+        conversationId: conversation._id,
+      });
 
-        io.to(conversation.sender.toString()).emit("conversation", senderConversations);
-        io.to(conversation.receiver.toString()).emit("conversation", receiverConversations);
+      // Update sidebars for affected users
+      for (const userId of affectedUserIds) {
+        const userConversations = await getConversation(userId, true);
+        io.to(userId).emit("conversation", userConversations);
+      }
+    } catch (error) {
+      socket.emit("error", {
+        message: "Có lỗi xảy ra khi xóa cuộc trò chuyện",
+        details: error.message,
+      });
+    }
+  });
+
+  // Leave group
+  socket.on("leaveGroup", async (data) => {
+    try {
+      const { groupId, userId: requestingUserId } = data;
+
+      // Use provided userId or default to socket's userId
+      const userIdToUse = requestingUserId || userId;
+
+      // Find the group conversation
+      const groupConversation = await ConversationModel.findById(groupId);
+
+      if (!groupConversation || !groupConversation.isGroup) {
+        socket.emit("leftGroup", {
+          success: false,
+          message: "Nhóm không tồn tại",
+        });
+        return;
       }
 
-      socket.emit("conversationDeleted", { success: true });
+      // Check if user is a member of the group
+      const isMember = groupConversation.members.some((memberId) => memberId.toString() === userIdToUse.toString());
+
+      if (!isMember) {
+        socket.emit("leftGroup", {
+          success: false,
+          message: "Bạn không phải là thành viên của nhóm này",
+        });
+        return;
+      }
+
+      // Check if user is the admin
+      const isAdmin = groupConversation.groupAdmin.toString() === userIdToUse.toString();
+
+      if (isAdmin) {
+        socket.emit("leftGroup", {
+          success: false,
+          message: "Quản trị viên không thể rời nhóm. Bạn phải chuyển quyền quản trị hoặc xóa nhóm.",
+        });
+        return;
+      }
+
+      // Remove user from the group members
+      await ConversationModel.findByIdAndUpdate(groupId, {
+        $pull: { members: userIdToUse },
+      });
+
+      // Get user details for notification
+      const leavingUser = await UserModel.findById(userIdToUse);
+
+      if (!leavingUser) {
+        socket.emit("leftGroup", {
+          success: true,
+          message: "Bạn đã rời khỏi nhóm, nhưng có lỗi khi tạo thông báo.",
+        });
+        return;
+      }
+
+      // Create a notification message
+      const notificationMessage = await MessageModel.create({
+        text: `${leavingUser.name} đã rời khỏi nhóm`,
+        msgByUserId: userIdToUse,
+      });
+
+      // Add notification to conversation
+      await ConversationModel.findByIdAndUpdate(groupId, {
+        $push: { messages: notificationMessage._id },
+      });
+
+      // Get updated group
+      const updatedGroup = await ConversationModel.findById(groupId)
+        .populate("members")
+        .populate("messages")
+        .populate("groupAdmin");
+
+      // Notify remaining members
+      for (const member of updatedGroup.members) {
+        const memberId = typeof member === "object" ? member._id.toString() : member.toString();
+
+        // Send updated group data
+        io.to(memberId).emit("groupMessage", updatedGroup);
+
+        // Update sidebar
+        const memberConversations = await getConversation(memberId);
+        io.to(memberId).emit("conversation", memberConversations);
+      }
+
+      // Update conversation list for the user who left
+      const userIdStr = userIdToUse.toString();
+      const userConversations = await getConversation(userIdStr);
+      io.to(userIdStr).emit("conversation", userConversations);
+
+      socket.emit("leftGroup", {
+        success: true,
+        message: "Bạn đã rời khỏi nhóm",
+      });
     } catch (error) {
-      console.error("Error deleting conversation:", error);
-      socket.emit("error", { message: "Có lỗi xảy ra khi xóa cuộc trò chuyện" });
+      console.error("Error leaving group:", error);
+      socket.emit("leftGroup", {
+        success: false,
+        message: "Có lỗi xảy ra khi rời nhóm",
+      });
     }
   });
 };
 
 module.exports = conversationHandler;
-
-

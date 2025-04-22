@@ -16,10 +16,20 @@ const groupHandler = (io, socket, userId) => {
         return;
       }
 
+      // Get creator details for welcome message
+      const creatorUser = await UserModel.findById(creator);
+      if (!creatorUser) {
+        socket.emit("groupCreated", {
+          success: false,
+          message: "Không thể tìm thấy thông tin người tạo nhóm",
+        });
+        return;
+      }
+
       const memberIds = members.map((id) => (typeof id === "object" ? id.toString() : id));
 
       const welcomeMessage = await MessageModel.create({
-        text: `${user.name} đã tạo nhóm "${name}"`,
+        text: `${creatorUser.name} đã tạo nhóm "${name}"`,
         msgByUserId: creator,
       });
 
@@ -104,9 +114,7 @@ const groupHandler = (io, socket, userId) => {
     try {
       const { groupId, newMembers, addedBy } = data;
 
-      const groupConversation = await ConversationModel.findById(groupId)
-        .populate("members")
-        .populate("groupAdmin");
+      const groupConversation = await ConversationModel.findById(groupId).populate("members").populate("groupAdmin");
 
       if (!groupConversation || !groupConversation.isGroup) {
         socket.emit("membersAddedToGroup", {
@@ -157,9 +165,7 @@ const groupHandler = (io, socket, userId) => {
         seenBy: [addedBy],
       });
 
-      await ConversationModel.findByIdAndUpdate(groupId, 
-        { $push: { messages: notificationMessage._id } }
-      );
+      await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
 
       // Notify all members including new ones
       const updatedGroup = await ConversationModel.findById(groupId)
@@ -216,10 +222,7 @@ const groupHandler = (io, socket, userId) => {
       const memberToRemove = await UserModel.findById(memberId);
       const admin = await UserModel.findById(adminId);
 
-      await ConversationModel.findByIdAndUpdate(
-        groupId,
-        { $pull: { members: memberId } }
-      );
+      await ConversationModel.findByIdAndUpdate(groupId, { $pull: { members: memberId } });
 
       const notificationMessage = await MessageModel.create({
         text: `${admin.name} đã xóa ${memberToRemove.name} khỏi nhóm`,
@@ -227,10 +230,7 @@ const groupHandler = (io, socket, userId) => {
         seenBy: [adminId],
       });
 
-      await ConversationModel.findByIdAndUpdate(
-        groupId,
-        { $push: { messages: notificationMessage._id } }
-      );
+      await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
 
       const updatedGroup = await ConversationModel.findById(groupId)
         .populate("messages")
@@ -238,8 +238,8 @@ const groupHandler = (io, socket, userId) => {
         .populate("groupAdmin");
 
       const remainingMembers = groupConversation.members
-        .filter(id => id.toString() !== memberId.toString())
-        .map(id => id.toString());
+        .filter((id) => id.toString() !== memberId.toString())
+        .map((id) => id.toString());
 
       for (const currentMemberId of remainingMembers) {
         io.to(currentMemberId).emit("groupMessage", updatedGroup);
