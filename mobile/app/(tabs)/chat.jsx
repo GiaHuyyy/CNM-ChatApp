@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import { Video } from 'expo-av';
+import MessageBubble from "../../components/MessageBubble";
 
 export default function Chat() {
   const dispatch = useDispatch();
@@ -56,6 +57,12 @@ export default function Chat() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [currentGroupInfo, setCurrentGroupInfo] = useState(null);
+
+  // Add state for tracking which message is being edited
+  const [editingMessage, setEditingMessage] = useState(null);
+
+  // Add a ref for the input field
+  const inputRef = useRef(null);
 
   useEffect(() => {
     const fetchUserDetails = async () => {
@@ -444,9 +451,8 @@ export default function Chat() {
   }, [socketConnection, selectedChat]);
 
   useEffect(() => {
-    if (messagesEndRef.current && messages.length > 0) {
-      // Scroll to end without animation when first loading messages
-      messagesEndRef.current.scrollToEnd({ animated: false });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollToEnd({ animated: true });
     }
   }, [messages]);
 
@@ -653,6 +659,23 @@ export default function Chat() {
     setIsUploading(selectedFile ? true : false);
 
     try {
+      // Check if we're editing a message
+      if (editingMessage) {
+        // If editing, emit the editMessage event
+        socketConnection.emit("editMessage", {
+          messageId: editingMessage._id,
+          conversationId: selectedChat.userDetails?._id,
+          text: messageText,
+          userId: user._id,
+          isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
+        });
+
+        // Clear editing state
+        setEditingMessage(null);
+        setMessageText("");
+        return;
+      }
+
       let fileUrl = "";
       let fileName = "";
       let fileType = "";
@@ -777,8 +800,40 @@ export default function Chat() {
     pickFunction();
   };
 
+  const handleEditMessage = (message) => {
+    console.log("Editing message:", message);
+    setEditingMessage(message);
+    setMessageText(message.text || "");
+    if (inputRef && inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const handleDeleteMessage = (messageId) => {
+    Alert.alert(
+      "Xóa tin nhắn",
+      "Bạn có chắc chắn muốn xóa tin nhắn này?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: () => {
+            if (socketConnection) {
+              socketConnection.emit("deleteMessage", {
+                messageId,
+                conversationId: selectedChat.userDetails?._id,
+                userId: user._id,
+                isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderMessage = ({ item }) => {
-    // Check if this is a system message for groups
     if (item.text && (
       item.text.includes("đã tạo nhóm") ||
       item.text.includes("đã thêm") ||
@@ -795,74 +850,21 @@ export default function Chat() {
     }
 
     const isCurrentUser = item.msgByUserId === user._id;
-    const hasImage = item.imageUrl && item.imageUrl.length > 0;
-    const hasFile = item.fileUrl && item.fileUrl.length > 0;
-    const isVideo = hasFile && (item.fileUrl.endsWith('.mp4') || item.fileUrl.endsWith('.webm') || item.fileUrl.endsWith('.mov'));
-    const isDocument = hasFile && !isVideo && (item.fileUrl.endsWith('.pdf') || item.fileUrl.endsWith('.docx'));
-
-    // Get sender info for group chats
-    let senderName = "";
-    if (selectedChat?.isGroup && !isCurrentUser) {
-      const sender = selectedChat.members?.find(m => m._id === item.msgByUserId);
-      senderName = sender?.name || "Unknown";
-    }
+    const senderName = selectedChat?.isGroup && !isCurrentUser
+      ? selectedChat.members?.find(m => m._id === item.msgByUserId)?.name || "Unknown"
+      : "";
 
     return (
-      <View className={`flex-row my-1 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-        {!isCurrentUser && (
-          <Image
-            source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}` }}
-            className="w-8 h-8 rounded-full mr-2"
-          />
-        )}
-        <View className={`px-3 py-2 rounded-lg ${isCurrentUser ? 'bg-[#e3f2fd]' : 'bg-gray-200'} ${(hasImage || isVideo) ? 'w-[40%]' : 'max-w-[70%]'}`}>
-          {selectedChat?.isGroup && !isCurrentUser && (
-            <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
-          )}
-
-          {hasImage && (
-            <TouchableOpacity onPress={() => handleImageClick(item.imageUrl)}>
-              <Image
-                source={{ uri: item.imageUrl }}
-                className="w-full h-40 mb-2 rounded"
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          )}
-          {isVideo && (
-            <Video
-              source={{ uri: item.fileUrl }}
-              style={{ width: '100%', height: 200, marginBottom: 8 }}
-              useNativeControls
-              resizeMode="contain"
-              shouldPlay={false}
-            />
-          )}
-          {isDocument && (
-            <TouchableOpacity
-              className="flex-row items-center bg-white p-2 rounded mb-2"
-              onPress={() => Linking.openURL(item.fileUrl)}
-            >
-              <FontAwesomeIcon
-                icon={item.fileUrl.endsWith('.pdf') ? faFileAlt : faFilePen}
-                size={20}
-                color="#555"
-              />
-              <Text className="ml-2 text-sm text-blue-600" numberOfLines={1}>
-                {item.fileName || "Document"}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {item.text && (
-            <Text className={isCurrentUser ? 'text-black' : 'text-black'}>
-              {item.text}
-            </Text>
-          )}
-          <Text className={`text-xs ${isCurrentUser ? 'text-blue-600' : 'text-gray-500'} mt-1`}>
-            {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
-      </View>
+      <MessageBubble
+        message={item}
+        isCurrentUser={isCurrentUser}
+        userProfilePic={chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`}
+        onEditMessage={handleEditMessage}
+        onDeleteMessage={handleDeleteMessage}
+        senderName={senderName}
+        isGroupChat={selectedChat?.isGroup}
+        onImagePress={(imageUrl) => handleImageClick(imageUrl)}
+      />
     );
   };
 
@@ -884,16 +886,14 @@ export default function Chat() {
         )}
       </View>
       <View className="ml-3 flex-1 overflow-hidden">
-        <Text className={`text-[15px] ${chatItem?.unseenMessages > 0 ? 'font-bold' : 'font-semibold'}`}>
-          {chatItem?.userDetails?.name}
-        </Text>
-        <Text numberOfLines={1} className={`text-sm ${chatItem?.unseenMessages > 0 ? 'font-semibold text-black' : 'text-gray-500'}`}>
+        <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
+        <Text numberOfLines={1} className="text-gray-500 text-sm">
           {chatItem?.isGroup ? (
             <>
               {chatItem?.latestMessage?.msgByUserId === user?._id ? (
                 <Text>Bạn: </Text>
               ) : (
-                <Text className={chatItem?.unseenMessages > 0 ? 'font-semibold' : ''}>
+                <Text>
                   {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
                     ?.name + ":" || ""}
                 </Text>
@@ -922,7 +922,7 @@ export default function Chat() {
         </Text>
       </View>
       <View className="items-end">
-        <Text className={`text-xs ${chatItem?.unseenMessages > 0 ? 'font-semibold text-black' : 'text-gray-500'}`}>
+        <Text className="text-xs text-gray-500">
           {chatItem?.latestMessage?.createdAt &&
             new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
               hour: '2-digit',
@@ -1290,15 +1290,9 @@ export default function Chat() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={(item) => item._id}
-              contentContainerStyle={{ padding: 10 }}
-              onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
+              contentContainerStyle={{ paddingVertical: 15 }}
+              onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: true })}
               onLayout={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
-              initialScrollIndex={messages.length - 1}
-              getItemLayout={(data, index) => ({
-                length: 100, // Approximate height of each message
-                offset: 100 * index,
-                index,
-              })}
             />
           )}
 
@@ -1312,6 +1306,21 @@ export default function Chat() {
                 </TouchableOpacity>
               </View>
               <View className="mt-2">{renderFilePreview()}</View>
+            </View>
+          )}
+
+          {/* Add editing indicator above message input */}
+          {editingMessage && (
+            <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
+              <Text className="text-blue-600 font-medium">Đang chỉnh sửa tin nhắn</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setEditingMessage(null);
+                  setMessageText("");
+                }}
+              >
+                <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1362,8 +1371,9 @@ export default function Chat() {
               )}
             </View>
             <TextInput
+              ref={inputRef}
               className="flex-1 bg-white rounded-full px-4 py-2 mr-2"
-              placeholder="Aa"
+              placeholder={editingMessage ? "Chỉnh sửa tin nhắn..." : "Aa"}
               value={messageText}
               onChangeText={setMessageText}
               multiline
