@@ -83,6 +83,10 @@ const messageSchema = new mongoose.Schema(
       originalFile: String,
       originalFileName: String,
     },
+    isShared: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
