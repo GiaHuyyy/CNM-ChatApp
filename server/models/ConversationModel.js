@@ -65,6 +65,17 @@ const messageSchema = new mongoose.Schema(
         default: 0,
       },
     },
+    replyTo: {
+      messageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+      },
+      text: String,
+      sender: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    },
   },
   {
     timestamps: true,

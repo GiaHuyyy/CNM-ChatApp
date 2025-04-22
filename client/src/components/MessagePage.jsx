@@ -23,10 +23,11 @@ import {
   faPhone,
   faPlus,
   faQuoteRight,
-  faShare,
   faTrash,
   faUsers,
   faVideo,
+  faReply,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { useSelector } from "react-redux";
 import PropTypes from "prop-types";
@@ -143,6 +144,7 @@ export default function MessagePage() {
 
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null);
 
   useEffect(() => {
     if (!socketConnection) {
@@ -363,6 +365,13 @@ export default function MessagePage() {
           fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
           fileName: selectedFile?.name || "",
           msgByUserId: user?._id,
+          replyTo: replyingTo
+            ? {
+                messageId: replyingTo._id,
+                text: replyingTo.text,
+                sender: replyingTo.msgByUserId,
+              }
+            : null,
         };
         socketConnection.emit("newGroupMessage", groupMessage);
       } else {
@@ -374,6 +383,13 @@ export default function MessagePage() {
           fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
           fileName: selectedFile?.name || "",
           msgByUserId: user?._id,
+          replyTo: replyingTo
+            ? {
+                messageId: replyingTo._id,
+                text: replyingTo.text,
+                sender: replyingTo.msgByUserId,
+              }
+            : null,
         };
         socketConnection.emit("newMessage", newMessage);
       }
@@ -381,6 +397,7 @@ export default function MessagePage() {
 
     setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
     setSelectedFile(null);
+    setReplyingTo(null);
     handleClearUploadFile();
   };
 
@@ -407,15 +424,60 @@ export default function MessagePage() {
   };
 
   const getSenderInfo = (senderId) => {
+    if (!senderId) return { name: "Unknown", profilePic: "" };
+
+    // Convert senderId to string for consistent comparison
+    const senderIdStr =
+      typeof senderId === "object"
+        ? senderId._id
+          ? senderId._id.toString()
+          : senderId.toString()
+        : senderId.toString();
+
+    // For direct messages: if not current user, it must be the other person
+    if (!dataUser.isGroup) {
+      const currentUserIdStr =
+        typeof user._id === "object" ? (user._id ? user._id.toString() : user._id.toString()) : user._id.toString();
+
+      if (senderIdStr !== currentUserIdStr) {
+        return {
+          _id: dataUser._id,
+          name: dataUser.name,
+          profilePic: dataUser.profilePic,
+        };
+      } else {
+        return {
+          _id: user._id,
+          name: "Bạn", // "You" in Vietnamese
+          profilePic: user.profilePic,
+        };
+      }
+    }
+
+    // For groups, continue with existing logic
     if (!conversation?.members) return { name: "Unknown", profilePic: "" };
 
-    const memberInfo = conversation.members.find((m) => m._id === senderId);
+    // Find member by comparing string IDs
+    const memberInfo = conversation.members.find((m) => {
+      const memberId = typeof m._id === "object" ? m._id.toString() : m._id.toString();
+      return memberId === senderIdStr;
+    });
 
     if (memberInfo) return memberInfo;
 
-    const messageWithSender = allMessages.find(
-      (msg) => msg.msgByUserId && msg.msgByUserId._id === senderId && msg.msgByUserId.name,
-    );
+    // Look through messages to find sender info
+    const messageWithSender = allMessages.find((msg) => {
+      if (!msg.msgByUserId) return false;
+
+      const msgSenderId =
+        typeof msg.msgByUserId === "object"
+          ? msg.msgByUserId._id
+            ? msg.msgByUserId._id.toString()
+            : msg.msgByUserId.toString()
+          : msg.msgByUserId.toString();
+
+      return msgSenderId === senderIdStr && msg.msgByUserId.name;
+    });
 
     if (messageWithSender && messageWithSender.msgByUserId) {
       return {
@@ -809,6 +871,30 @@ export default function MessagePage() {
     });
   };
 
+  const handleReplyMessage = (message) => {
+    setReplyingTo(message);
+    inputRef.current?.focus();
+    setOpenActionMessage(false);
+  };
+
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return;
+
+    const messageElement = document.getElementById(`message-${messageId}`);
+
+    if (messageElement) {
+      messageElement.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      messageElement.classList.add("bg-blue-200");
+      setTimeout(() => {
+        messageElement.classList.remove("bg-blue-200");
+      }, 1500);
+    }
+  };
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -1014,8 +1100,9 @@ export default function MessagePage() {
                     }
                     return (
                       <div
+                        id={`message-${message._id}`}
                         key={message._id}
-                        className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"}`}
+                        className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"} transition-colors duration-300`}
                         onMouseEnter={() => setHoveredMessage(message._id)}
                         onMouseLeave={() => setHoveredMessage(null)}
                       >
@@ -1035,6 +1122,19 @@ export default function MessagePage() {
                         >
                           {dataUser.isGroup && !isCurrentUser && (
                             <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
+                          )}
+                          {message.replyTo && (
+                            <div
+                              className="mb-2 cursor-pointer rounded border-l-4 border-blue-400 bg-gray-50 p-2 text-xs hover:bg-gray-100"
+                              onClick={() => scrollToMessage(message.replyTo.messageId)}
+                            >
+                              <div className="font-medium text-blue-600">
+                                {message.replyTo.sender === user._id
+                                  ? "Bạn"
+                                  : getSenderInfo(message.replyTo.sender)?.name || "Người dùng"}
+                              </div>
+                              <div className="truncate text-gray-600">{message.replyTo.text}</div>
+                            </div>
                           )}
                           {isDeletedMessage(message) ? (
                             <div>
@@ -1127,21 +1227,23 @@ export default function MessagePage() {
                               className={`absolute bottom-3 ${isCurrentUser ? "-left-20" : "-right-20"} flex items-center gap-x-1`}
                             >
                               <button
+                                title="Chia sẻ"
                                 className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onClick={commingSoon}
+                                onClick={() => commingSoon()}
                               >
                                 <FontAwesomeIcon
-                                  icon={faQuoteRight}
+                                  icon={faReply}
                                   width={10}
                                   className="text-[#5a5a5a] group-hover:text-[#005ae0]"
                                 />
                               </button>
                               <button
+                                title="Trả lời"
                                 className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onClick={commingSoon}
+                                onClick={() => handleReplyMessage(message)}
                               >
                                 <FontAwesomeIcon
-                                  icon={faShare}
+                                  icon={faQuoteRight}
                                   width={10}
                                   className="text-[#5a5a5a] group-hover:text-[#005ae0]"
                                 />
@@ -1314,26 +1416,49 @@ export default function MessagePage() {
               ref={fileInputRef}
               disabled={isCurrentUserMuted()}
             />
+            {replyingTo && (
+              <div className="absolute -top-12 left-0 right-0 flex items-center justify-between border-t border-gray-200 bg-blue-50 px-3 py-2">
+                <div className="flex items-center">
+                  <FontAwesomeIcon icon={faReply} className="mr-2 text-blue-500" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium">
+                      Đang trả lời{" "}
+                      <span className="text-blue-600">
+                        {replyingTo.msgByUserId === user._id
+                          ? "chính bạn"
+                          : getSenderInfo(replyingTo.msgByUserId)?.name}
+                      </span>
+                    </span>
+                    <p className="line-clamp-1 text-xs text-gray-500">
+                      {replyingTo.text || (replyingTo.imageUrl ? "Hình ảnh" : "File đính kèm")}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setReplyingTo(null)} className="rounded p-1 text-gray-500 hover:bg-gray-200">
+                  <FontAwesomeIcon icon={faXmark} />
+                </button>
+              </div>
+            )}
+            {editingMessage && (
+              <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
+                <span>Chỉnh sửa tin nhắn</span>
+                <button
+                  onClick={() => {
+                    setEditingMessage(null);
+                    setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
+                  }}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  Hủy
+                </button>
+              </div>
+            )}
             {isCurrentUserMuted() ? (
               <div className="flex h-[50px] items-center justify-center bg-gray-100 px-3 py-[10px]">
                 <p className="text-gray-500">Bạn đã bị tắt quyền nhắn tin trong nhóm này</p>
               </div>
             ) : (
               <div className="flex h-[50px] items-center px-3 py-[10px]">
-                {editingMessage && (
-                  <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
-                    <span>Chỉnh sửa tin nhắn</span>
-                    <button
-                      onClick={() => {
-                        setEditingMessage(null);
-                        setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
-                      }}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      Hủy
-                    </button>
-                  </div>
-                )}
                 <input
                   type="text"
                   placeholder={`Nhập tin nhắn với ${dataUser.name}`}

@@ -26,12 +26,10 @@ const messageHandler = (io, socket, userId) => {
         fileUrl: message?.fileUrl,
         fileName: message?.fileName,
         msgByUserId: message?.msgByUserId,
+        replyTo: message?.replyTo || null,
       });
 
-      await ConversationModel.updateOne(
-        { _id: conversation?._id },
-        { $push: { messages: newMessage?._id } }
-      );
+      await ConversationModel.updateOne({ _id: conversation?._id }, { $push: { messages: newMessage?._id } });
 
       const getConversationMessage = await ConversationModel.findOne({
         $or: [
@@ -80,12 +78,10 @@ const messageHandler = (io, socket, userId) => {
         msgByUserId,
         seen: false,
         seenBy: [msgByUserId],
+        replyTo: message?.replyTo || null,
       });
 
-      await ConversationModel.updateOne(
-        { _id: conversationId },
-        { $push: { messages: newMessage._id } }
-      );
+      await ConversationModel.updateOne({ _id: conversationId }, { $push: { messages: newMessage._id } });
 
       const updatedConversation = await ConversationModel.findById(conversationId)
         .populate("messages")
@@ -145,9 +141,8 @@ const messageHandler = (io, socket, userId) => {
           .populate("groupAdmin");
 
         for (const memberId of updatedConversation.members) {
-          const memberIdStr = typeof memberId === "object" 
-            ? (memberId._id ? memberId._id.toString() : memberId.toString()) 
-            : memberId;
+          const memberIdStr =
+            typeof memberId === "object" ? (memberId._id ? memberId._id.toString() : memberId.toString()) : memberId;
 
           io.to(memberIdStr).emit("groupMessage", updatedConversation);
         }
@@ -268,9 +263,9 @@ const messageHandler = (io, socket, userId) => {
         io.to(receiverStr).emit("message", updatedConversation);
       }
     } catch (error) {
-      socket.emit("error", { 
+      socket.emit("error", {
         message: "Không thể xóa tin nhắn",
-        error: error.message 
+        error: error.message,
       });
     }
   });
@@ -290,14 +285,11 @@ const messageHandler = (io, socket, userId) => {
       }
 
       // Update the message
-      await MessageModel.findByIdAndUpdate(
-        messageId,
-        {
-          text,
-          isEdited: true,
-          editedAt: new Date()
-        }
-      );
+      await MessageModel.findByIdAndUpdate(messageId, {
+        text,
+        isEdited: true,
+        editedAt: new Date(),
+      });
 
       // Get updated conversation and notify members
       let updatedConversation;
@@ -338,7 +330,7 @@ const messageHandler = (io, socket, userId) => {
     } catch (error) {
       socket.emit("error", {
         message: "Không thể sửa tin nhắn",
-        error: error.message
+        error: error.message,
       });
     }
   });
