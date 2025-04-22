@@ -809,28 +809,87 @@ export default function Chat() {
     }
   };
 
+  // Fix the handleDeleteMessage function to ensure it works properly
   const handleDeleteMessage = (messageId) => {
-    Alert.alert(
-      "Xóa tin nhắn",
-      "Bạn có chắc chắn muốn xóa tin nhắn này?",
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: () => {
-            if (socketConnection) {
-              socketConnection.emit("deleteMessage", {
-                messageId,
-                conversationId: selectedChat.userDetails?._id,
-                userId: user._id,
-                isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
-              });
-            }
-          }
+    console.log("Handling message deletion for ID:", messageId);
+
+    if (!socketConnection) {
+      console.error("Socket connection is not available");
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    if (!messageId) {
+      console.error("Invalid message ID:", messageId);
+      Alert.alert("Lỗi", "Mã tin nhắn không hợp lệ.");
+      return;
+    }
+
+    try {
+      const deletePayload = {
+        messageId: messageId,
+        conversationId: selectedChat.userDetails?._id,
+        userId: user._id,
+        isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
+      };
+
+      console.log("Sending delete payload:", deletePayload);
+
+      // Emit event and set up listener for response in one operation
+      socketConnection.emit("deleteMessage", deletePayload);
+
+      // Set up a specific one-time listener for deletion response
+      socketConnection.once("messageDeleted", (response) => {
+        console.log("Server response to deletion:", response);
+        if (response.success) {
+          console.log("Message deleted successfully");
+          // Optional: Update the local messages list to reflect the deletion
+          setMessages(prev => prev.filter(msg => msg._id !== messageId));
+        } else {
+          console.error("Failed to delete message:", response.message);
+          Alert.alert("Lỗi", response.message || "Không thể xóa tin nhắn.");
         }
-      ]
-    );
+      });
+    } catch (error) {
+      console.error("Error in handleDeleteMessage:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi xóa tin nhắn. Vui lòng thử lại.");
+    }
+  };
+
+  // Add the handleAddReaction function to handle emoji reactions
+  const handleAddReaction = (messageId, emoji) => {
+    console.log("Adding reaction:", emoji, "to message:", messageId);
+
+    if (!socketConnection) {
+      console.error("Socket connection is not available");
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    if (!messageId) {
+      console.error("Invalid message ID:", messageId);
+      return;
+    }
+
+    try {
+      socketConnection.emit("addReaction", {
+        messageId,
+        conversationId: selectedChat.userDetails?._id,
+        emoji,
+        userId: user._id,
+        isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
+      });
+
+      console.log("Reaction event emitted:", {
+        messageId,
+        emoji,
+        userId: user._id,
+        isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
+      });
+    } catch (error) {
+      console.error("Error sending reaction:", error);
+      Alert.alert("Lỗi", "Có lỗi xảy ra khi thêm cảm xúc. Vui lòng thử lại.");
+    }
   };
 
   const renderMessage = ({ item }) => {
@@ -861,6 +920,7 @@ export default function Chat() {
         userProfilePic={chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`}
         onEditMessage={handleEditMessage}
         onDeleteMessage={handleDeleteMessage}
+        onReaction={handleAddReaction} // Now properly defined
         senderName={senderName}
         isGroupChat={selectedChat?.isGroup}
         onImagePress={(imageUrl) => handleImageClick(imageUrl)}

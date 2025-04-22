@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, Image, Modal, SafeAreaView, Dimensions, Platform, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, Image, Modal, SafeAreaView, Dimensions, Platform, Linking } from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import {
-  faThumbsUp
-} from '@fortawesome/free-regular-svg-icons';
+import { faThumbsUp } from '@fortawesome/free-regular-svg-icons';
 import {
   faEllipsisVertical,
   faQuoteRight,
@@ -23,6 +21,7 @@ import {
 import { Video } from 'expo-av';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import ConfirmationModal from './ConfirmationModal';
 
 const MessageBubble = ({
   message,
@@ -97,6 +96,47 @@ const MessageBubble = ({
       setIsLongPressed(true);
       setShowMessageOptions(true);
     }
+  };
+
+  // Add state for confirmation modal
+  const [confirmationModal, setConfirmationModal] = useState({
+    visible: false,
+    messageId: null
+  });
+
+  // Replace Alert with custom confirmation modal
+  const handleDeleteMessageWithConfirmation = (messageId) => {
+    console.log("Delete message requested for ID:", messageId);
+
+    if (!messageId || !onDeleteMessage) {
+      console.error("Cannot delete message: ", !messageId ? "No message ID" : "No delete handler");
+      return;
+    }
+
+    // Show confirmation modal instead of Alert
+    setConfirmationModal({
+      visible: true,
+      messageId: messageId
+    });
+  };
+
+  // Handle confirmation modal actions
+  const handleConfirmDelete = () => {
+    const messageId = confirmationModal.messageId;
+    console.log("Confirmed deletion for message:", messageId);
+
+    if (onDeleteMessage && messageId) {
+      onDeleteMessage(messageId);
+      console.log("Delete function called");
+    }
+
+    // Hide modal and options menu
+    setConfirmationModal({ visible: false, messageId: null });
+    setShowMessageOptions(false);
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmationModal({ visible: false, messageId: null });
   };
 
   // Media handling functions
@@ -310,21 +350,34 @@ const MessageBubble = ({
               <Text className="text-[15px]">Chỉnh sửa tin nhắn</Text>
             </TouchableOpacity>
 
+            {/* Simplified delete button with direct handler */}
             <TouchableOpacity
               className="flex-row items-center px-4 py-3"
               onPress={() => {
-                if (onDeleteMessage) {
-                  onDeleteMessage(message._id);
-                  setShowMessageOptions(false);
+                console.log("Delete button pressed for message:", message._id);
+                if (message._id) {
+                  handleDeleteMessageWithConfirmation(message._id);
+                } else {
+                  console.error("Message has no ID");
                 }
               }}
             >
               <FontAwesomeIcon icon={faTrash} size={16} color="#ff4444" className="mr-3" />
-              <Text className="text-[15px]">Xóa tin nhắn</Text>
+              <Text className="text-[15px] text-red-500">Xóa tin nhắn</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Custom Confirmation Modal */}
+      <ConfirmationModal
+        visible={confirmationModal.visible}
+        title="Xóa tin nhắn"
+        message="Bạn có chắc chắn muốn xóa tin nhắn này không?"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        type="danger"
+      />
 
       {/* Image/Video/Document Modals */}
       <Modal
