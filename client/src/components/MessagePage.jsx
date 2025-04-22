@@ -1,7 +1,3 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useGlobalContext } from "../context/GlobalProvider";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faAddressCard,
   faBookmark,
@@ -23,27 +19,30 @@ import {
   faPhone,
   faPlus,
   faQuoteRight,
+  faReply,
   faTrash,
   faUsers,
   faVideo,
-  faReply,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
-import { useSelector } from "react-redux";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import PropTypes from "prop-types";
+import { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
+import { useNavigate, useParams } from "react-router-dom";
+import { useGlobalContext } from "../context/GlobalProvider";
 import commingSoon from "../helpers/commingSoon";
 // eslint-disable-next-line no-unused-vars
-import uploadFileToS3 from "../helpers/uploadFileToS3";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
-import AddGroupMemberModal from "./AddGroupMemberModal";
-import ConfirmModal from "./ConfirmModal";
-import RightSidebar from "./RightSidebar";
 import { toast } from "sonner";
-import ReactionDisplay from "./ReactionDisplay";
 import { useCallContext } from "../context/CallProvider";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
+import AddGroupMemberModal from "./AddGroupMemberModal";
+import ConfirmModal from "./ConfirmModal";
 import ImageViewerModal from "./ImageViewerModal";
+import ReactionDisplay from "./ReactionDisplay";
+import RightSidebar from "./RightSidebar";
 import ShareMessageModal from "./ShareMessageModal";
 
 // Button component
@@ -1143,6 +1142,12 @@ export default function MessagePage() {
                           {dataUser.isGroup && !isCurrentUser && (
                             <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
                           )}
+                          {message.isShared && (
+                            <div className="mb-1 flex items-center text-xs text-gray-500 italic">
+                              <FontAwesomeIcon icon={faReply} className="mr-1 h-3 w-3 -scale-x-100" />
+                              <span>Tin nhắn được chia sẻ</span>
+                            </div>
+                          )}
                           {message.replyTo && (
                             <div
                               className="mb-2 cursor-pointer rounded border-l-4 border-blue-400 bg-gray-50 p-2 text-xs hover:bg-gray-100"
@@ -1309,9 +1314,6 @@ export default function MessagePage() {
                           )}
                           {message.sharedContent && (
                             <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-2">
-                              <div className="mb-1 text-xs text-gray-500">
-                                Được chia sẻ từ {message.sharedContent.originalSender}
-                              </div>
                               <div className="rounded bg-white p-2">
                                 {message.sharedContent.originalImage && (
                                   <img

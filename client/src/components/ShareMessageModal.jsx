@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
-import PropTypes from "prop-types";
-import { useSelector } from "react-redux";
+import { faCheck, faMagnifyingGlass, faUsers, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faXmark, faMagnifyingGlass, faCheck, faUsers } from "@fortawesome/free-solid-svg-icons";
-import { useGlobalContext } from "../context/GlobalProvider";
+import PropTypes from "prop-types";
+import { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { toast } from "sonner";
+import { useGlobalContext } from "../context/GlobalProvider";
 
 export default function ShareMessageModal({ isOpen, onClose, message }) {
   const { socketConnection } = useGlobalContext();
@@ -15,7 +15,6 @@ export default function ShareMessageModal({ isOpen, onClose, message }) {
   const [filteredConversations, setFilteredConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [customMessage, setCustomMessage] = useState("");
 
   const modalRef = useRef(null);
 
@@ -96,23 +95,22 @@ export default function ShareMessageModal({ isOpen, onClose, message }) {
         originalFileName: message.fileName || "",
       };
 
-      // Use original text as default or custom message if provided
-      const shareText = customMessage || message.text || "";
-
       // Create message data based on conversation type (group or direct)
       const messageData = selectedConversation.isGroup
         ? {
             conversationId: selectedConversation.userDetails._id,
-            text: shareText,
+            text: message.text || "",
             msgByUserId: user?._id,
             sharedContent: sharedContent,
+            isShared: true, // Add this flag
           }
         : {
             sender: user._id,
             receiver: selectedConversation.userDetails._id,
-            text: shareText,
+            text: message.text || "",
             msgByUserId: user?._id,
             sharedContent: sharedContent,
+            isShared: true, // Add this flag
           };
 
       // Include media if present in original message
@@ -124,7 +122,6 @@ export default function ShareMessageModal({ isOpen, onClose, message }) {
       const eventName = selectedConversation.isGroup ? "newGroupMessage" : "newMessage";
       socketConnection.emit(eventName, messageData);
 
-      // Show success message and close modal (without waiting for response)
       toast.success("Tin nhắn đã được chia sẻ thành công");
       setIsSharing(false);
       onClose();
@@ -160,18 +157,6 @@ export default function ShareMessageModal({ isOpen, onClose, message }) {
               <p className="text-sm text-blue-500">{message.fileName || "Attached file"}</p>
             )}
           </div>
-        </div>
-
-        {/* Add custom text */}
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700">Thêm tin nhắn (tùy chọn)</label>
-          <textarea
-            value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
-            placeholder="Nhập tin nhắn của bạn..."
-            rows={2}
-          />
         </div>
 
         {/* Search box */}
