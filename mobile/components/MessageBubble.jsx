@@ -1,8 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Pressable, Image, Modal, SafeAreaView, Dimensions, Platform, Alert, Linking } from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
+  faThumbsUp
+} from '@fortawesome/free-regular-svg-icons';
+import {
+  faEllipsisVertical,
+  faQuoteRight,
+  faShare,
   faPencil,
   faTrash,
   faPlay,
@@ -31,9 +37,26 @@ const MessageBubble = ({
   isGroupChat = false,
   showTime = true
 }) => {
+  // Action menu state
+  const [hoveredMessage, setHoveredMessage] = useState(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const [isLongPressed, setIsLongPressed] = useState(false);
   const [showMessageOptions, setShowMessageOptions] = useState(false);
 
+  // Media modal states
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+
+  // Refs
+  const videoRef = useRef(null);
+  const actionMenuTimer = useRef(null);
+
+  // Screen dimensions
+  const screenWidth = Dimensions.get('window').width;
+  const screenHeight = Dimensions.get('window').height;
+
+  // Content type detection
   const hasImage = message.imageUrl && message.imageUrl.length > 0;
   const hasVideo = message.fileUrl &&
     (message.fileUrl.endsWith('.mp4') ||
@@ -53,14 +76,30 @@ const MessageBubble = ({
     message.text.includes("đã xóa")
   );
 
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [showVideoModal, setShowVideoModal] = useState(false);
-  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  // Clean up timers
+  useEffect(() => {
+    return () => {
+      if (actionMenuTimer.current) {
+        clearTimeout(actionMenuTimer.current);
+      }
+    };
+  }, []);
 
-  const videoRef = useRef(null);
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
+  // Action handlers
+  const handleQuickLike = (messageId) => {
+    if (onReaction) {
+      onReaction(messageId, '👍');
+    }
+  };
 
+  const handleLongPress = () => {
+    if (isCurrentUser && !message.isDeleted) {
+      setIsLongPressed(true);
+      setShowMessageOptions(true);
+    }
+  };
+
+  // Media handling functions
   const getFileIcon = (fileName) => {
     if (!fileName) return faFileAlt;
 
@@ -115,23 +154,16 @@ const MessageBubble = ({
     }
   };
 
-  const handleLongPress = () => {
-    if (isCurrentUser && !message.isDeleted) {
-      setIsLongPressed(true);
-      setShowMessageOptions(true);
-    }
-  };
-
   const renderDocumentPreview = () => (
     <TouchableOpacity
       onPress={handleDocumentView}
-      className="mb-2 flex-row items-center p-2 bg-white bg-opacity-40 rounded-lg shadow-sm"
+      className="mb-2 flex-row items-center p-3 bg-white bg-opacity-30 rounded-md"
     >
-      <View className="w-10 h-10 rounded-lg bg-white bg-opacity-70 flex items-center justify-center mr-2">
+      <View className="w-10 h-10 rounded-md bg-white bg-opacity-50 flex items-center justify-center mr-2">
         <FontAwesomeIcon
           icon={getFileIcon(message.fileName)}
           size={20}
-          color={isCurrentUser ? "#2563eb" : "#333"}
+          color={isCurrentUser ? "#fff" : "#333"}
         />
       </View>
       <View className="flex-1">
@@ -148,7 +180,7 @@ const MessageBubble = ({
   if (isSystemMessage) {
     return (
       <View className="flex justify-center my-2 px-4">
-        <View className="bg-white rounded-full px-3 py-0.5 self-center shadow-sm">
+        <View className="bg-white rounded-full px-3 py-1 self-center shadow-sm">
           <Text className="text-xs text-gray-500">{message.text}</Text>
         </View>
       </View>
@@ -156,97 +188,99 @@ const MessageBubble = ({
   }
 
   return (
-    <View className={`flex ${isCurrentUser ? 'items-end' : 'items-start'} mb-1.5 mx-2`}>
+    <View className="flex-row items-start mb-2 mx-1">
       {!isCurrentUser && (
         <Image
           source={{ uri: userProfilePic }}
-          className="h-7 w-7 rounded-full mr-1 mb-1 self-end"
+          className="h-8 w-8 rounded-full mr-2 self-end"
         />
       )}
 
-      <Pressable
-        onLongPress={handleLongPress}
-        delayLongPress={500}
-        onPressOut={() => setIsLongPressed(false)}
-      >
-        <View
-          className={`max-w-[75%] p-2.5 ${isCurrentUser
-            ? 'bg-blue-500 rounded-t-lg rounded-bl-lg rounded-br-sm'
-            : 'bg-gray-100 rounded-t-lg rounded-br-lg rounded-bl-sm'
-            }`}
-          style={{
-            backgroundColor: isLongPressed
-              ? (isCurrentUser ? '#0074e0' : '#e2e2e2')
-              : (isCurrentUser ? '#0084ff' : '#f0f0f0'),
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 1,
-            elevation: 1,
-          }}
+      <View className={`flex-1 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+        <Pressable
+          onLongPress={handleLongPress}
+          delayLongPress={500}
+          onPressOut={() => setIsLongPressed(false)}
         >
-          {isGroupChat && !isCurrentUser && senderName && (
-            <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
-          )}
+          <View
+            className={`rounded-lg ${isCurrentUser
+              ? 'bg-blue-500 rounded-tr-sm'
+              : 'bg-gray-100 rounded-tl-sm'
+              } px-3 py-2 max-w-[100%]`}
+            style={{
+              backgroundColor: isLongPressed
+                ? (isCurrentUser ? '#0074e0' : '#e2e2e2')
+                : (isCurrentUser ? '#0084ff' : '#f0f0f0'),
+            }}
+          >
+            {isGroupChat && !isCurrentUser && senderName && (
+              <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
+            )}
 
-          {hasImage && (
-            <TouchableOpacity
-              onPress={handleImageView}
-              className="mb-2 overflow-hidden rounded-md"
-            >
-              <Image
-                source={{ uri: message.imageUrl }}
-                style={{ width: 200, height: 150, borderRadius: 6 }}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          )}
+            {hasImage && (
+              <TouchableOpacity
+                onPress={handleImageView}
+                className="mb-2 overflow-hidden rounded-md"
+              >
+                <Image
+                  source={{ uri: message.imageUrl }}
+                  style={{
+                    width: 240,
+                    height: 180,
+                    borderRadius: 4
+                  }}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            )}
 
-          {hasVideo && (
-            <TouchableOpacity
-              onPress={handleVideoView}
-              className="mb-2 relative overflow-hidden rounded-md"
-            >
-              <Video
-                source={{ uri: message.fileUrl }}
-                style={{ width: 200, height: 150, borderRadius: 6 }}
-                useNativeControls={false}
-                resizeMode="cover"
-                shouldPlay={false}
-              />
-              <View className="absolute inset-0 justify-center items-center bg-black bg-opacity-30 rounded-md">
-                <View className="w-12 h-12 rounded-full bg-black bg-opacity-60 flex items-center justify-center">
-                  <FontAwesomeIcon icon={faPlay} size={24} color="#fff" />
+            {hasVideo && (
+              <TouchableOpacity
+                onPress={handleVideoView}
+                className="mb-2 rounded-md overflow-hidden"
+              >
+                <Video
+                  source={{ uri: message.fileUrl }}
+                  style={{ width: 240, height: 180 }}
+                  useNativeControls={false}
+                  resizeMode="cover"
+                  shouldPlay={false}
+                />
+                <View className="absolute inset-0 justify-center items-center bg-black bg-opacity-30">
+                  <View className="w-12 h-12 rounded-full bg-black bg-opacity-60 items-center justify-center">
+                    <FontAwesomeIcon icon={faPlay} size={24} color="#fff" />
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            )}
 
-          {hasDocument && renderDocumentPreview()}
+            {hasDocument && renderDocumentPreview()}
 
-          {message.text && (
-            <Text className={`text-sm ${isCurrentUser ? 'text-white' : 'text-gray-800'}`}>
-              {message.text}
-            </Text>
-          )}
+            {message.text && (
+              <Text className={`text-sm ${isCurrentUser ? 'text-white' : 'text-gray-800'}`}>
+                {message.text}
+              </Text>
+            )}
 
-          {showTime && (
-            <Text className={`text-[10px] mt-1 ${isCurrentUser ? 'text-white/80' : 'text-gray-500'}`}>
-              {format(new Date(message.createdAt), 'HH:mm', { locale: vi })}
-              {message.isEdited && <Text className="italic text-[9px] ml-1">(Đã chỉnh sửa)</Text>}
-            </Text>
-          )}
+            {showTime && (
+              <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-white/80' : 'text-gray-500'}`}>
+                {format(new Date(message.createdAt), 'HH:mm', { locale: vi })}
+                {message.isEdited && <Text className="italic text-[9px] ml-1">(Đã chỉnh sửa)</Text>}
+              </Text>
+            )}
+          </View>
+        </Pressable>
 
-          {message.reactions && message.reactions.length > 0 && (
-            <View className="absolute -bottom-4 right-2 bg-white rounded-full px-1.5 py-0.5 shadow-sm flex-row">
-              {message.reactions.map((reaction, index) => (
-                <Text key={`${reaction.userId}-${index}`} className="text-xs">{reaction.emoji}</Text>
-              ))}
-            </View>
-          )}
-        </View>
-      </Pressable>
+        {message.reactions && message.reactions.length > 0 && (
+          <View className="bg-white rounded-full px-1.5 py-0.5 shadow-sm flex-row absolute -bottom-2.5 right-2">
+            {message.reactions.map((reaction, index) => (
+              <Text key={`${reaction.userId}-${index}`} className="text-xs">{reaction.emoji}</Text>
+            ))}
+          </View>
+        )}
+      </View>
 
+      {/* Edit/Delete Menu Modal */}
       <Modal
         transparent={true}
         visible={showMessageOptions}
@@ -292,6 +326,7 @@ const MessageBubble = ({
         </TouchableOpacity>
       </Modal>
 
+      {/* Image/Video/Document Modals */}
       <Modal
         animationType="fade"
         transparent={true}
