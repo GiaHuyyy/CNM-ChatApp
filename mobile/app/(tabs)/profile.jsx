@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform, ScrollView } from "react-native";
 import * as MediaLibrary from "expo-media-library";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { 
-  faSearch, 
-  faGear, 
-  faCamera, 
-  faCloud, 
-  faWrench, 
-  faLock, 
+import {
+  faSearch,
+  faGear,
+  faCamera,
+  faCloud,
+  faWrench,
+  faLock,
   faShieldAlt,
   faQrcode,
   faAngleRight,
@@ -16,13 +16,19 @@ import {
   faCloudArrowUp,
   faClock,
   faDatabase,
-  faUserShield
+  faUserShield,
+  faSignOut
 } from "@fortawesome/free-solid-svg-icons";
 import { useSelector, useDispatch } from "react-redux";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
-import { setUser } from "../redux/userSlice";
+import { setUser, setToken } from "../redux/userSlice";
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
+import { useGlobalContext } from "../context/GlobalProvider";
+import ConfirmationModal from "../../components/ConfirmationModal";
+import { useRouter } from "expo-router";
 
 // Dữ liệu mẫu cho các menu items
 const menuItems = [
@@ -74,11 +80,23 @@ const menuItems = [
     title: 'Quyền riêng tư',
     description: '',
     hasArrow: true
+  },
+  // Add the logout item
+  {
+    id: 'logout',
+    icon: faSignOut,
+    title: 'Đăng xuất',
+    description: 'Đăng xuất khỏi tài khoản',
+    hasArrow: false,
+    danger: true
   }
 ];
 
 export default function Profile() {
   const dispatch = useDispatch();
+  const router = useRouter(); // Use router instead of navigation
+  const navigation = useNavigation(); // Keep this for other navigation needs if any
+  const { socketConnection } = useGlobalContext();
   const user = useSelector((state) => state.user);
   const token = useSelector((state) => state.user.token);
 
@@ -87,6 +105,10 @@ export default function Profile() {
   const [newAvatarUri, setNewAvatarUri] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (modalVisible) {
@@ -205,16 +227,67 @@ export default function Profile() {
     }
   };
 
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const performLogout = async () => {
+    try {
+      setLoggingOut(true);
+
+      // Store user ID locally before the state gets wiped out
+      const userId = user?._id;
+
+      // Disconnect socket if connected
+      if (socketConnection) {
+        socketConnection.disconnect();
+      }
+
+      // Call the logout API
+      await axios.get("http://localhost:5000/api/logout", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // Clear local storage
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("refreshToken");
+      await AsyncStorage.removeItem("cachedConversations");
+      await AsyncStorage.removeItem("lastSelectedChat");
+
+      // Clear Redux state
+      dispatch(setToken(null));
+
+      // Use router.replace instead of navigation.navigate
+      setTimeout(() => {
+        router.replace("/(auth)/sign-in");
+      }, 100);
+    } catch (error) {
+      console.error("Logout error:", error);
+      setErrorMessage("Đã xảy ra lỗi khi đăng xuất. Vui lòng thử lại.");
+      setErrorModalVisible(true);
+    } finally {
+      setLoggingOut(false);
+      setLogoutModalVisible(false);
+    }
+  };
+
   const renderMenuItem = (item) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       key={item.id}
-      className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100"
+      className={`flex-row items-center px-4 py-3 bg-white border-b border-gray-100`}
+      onPress={() => {
+        if (item.id === 'logout') {
+          handleLogout();
+        }
+      }}
     >
-      <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center">
-        <FontAwesomeIcon icon={item.icon} size={20} color="#0068FF" />
+      <View className={`w-10 h-10 rounded-full ${item.danger ? 'bg-red-100' : 'bg-blue-100'} items-center justify-center`}>
+        <FontAwesomeIcon icon={item.icon} size={20} color={item.danger ? "#FF3B30" : "#0068FF"} />
       </View>
       <View className="flex-1 ml-3">
-        <Text className="text-[15px] font-medium">{item.title}</Text>
+        <Text className={`text-[15px] font-medium ${item.danger ? 'text-red-600' : ''}`}>{item.title}</Text>
         {item.description && (
           <Text className="text-gray-500 text-sm mt-0.5">{item.description}</Text>
         )}
@@ -253,7 +326,7 @@ export default function Profile() {
 
       <ScrollView>
         {/* Profile Section */}
-        <TouchableOpacity 
+        <TouchableOpacity
           className="flex-row items-center px-4 py-4 bg-white mb-2"
           onPress={() => setModalVisible(true)}
         >
@@ -347,6 +420,36 @@ export default function Profile() {
           </View>
         </View>
       </Modal>
+
+      {/* Loading indicator for logout */}
+      {loggingOut && (
+        <View className="absolute inset-0 flex-1 bg-black/30 justify-center items-center">
+          <View className="bg-white p-4 rounded-xl items-center">
+            <ActivityIndicator size="large" color="#0068FF" />
+            <Text className="mt-2 font-medium">Đang đăng xuất...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Add the ConfirmationModal for logout */}
+      <ConfirmationModal
+        visible={logoutModalVisible}
+        title="Đăng xuất"
+        message="Bạn có chắc muốn đăng xuất khỏi tài khoản?"
+        onConfirm={performLogout}
+        onCancel={() => setLogoutModalVisible(false)}
+        type="warning"
+      />
+
+      {/* Add Error Modal */}
+      <ConfirmationModal
+        visible={errorModalVisible}
+        title="Lỗi đăng xuất"
+        message={errorMessage}
+        onConfirm={() => setErrorModalVisible(false)}
+        onCancel={() => setErrorModalVisible(false)}
+        type="danger"
+      />
     </View>
   );
 }
