@@ -444,8 +444,9 @@ export default function Chat() {
   }, [socketConnection, selectedChat]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollToEnd({ animated: true });
+    if (messagesEndRef.current && messages.length > 0) {
+      // Scroll to end without animation when first loading messages
+      messagesEndRef.current.scrollToEnd({ animated: false });
     }
   }, [messages]);
 
@@ -814,7 +815,7 @@ export default function Chat() {
             className="w-8 h-8 rounded-full mr-2"
           />
         )}
-        <View className={`px-3 py-2 rounded-lg ${isCurrentUser ? 'bg-[#ebecf0]' : 'bg-gray-200'} ${(hasImage || isVideo) ? 'w-[40%]' : 'max-w-[70%]'}`}>
+        <View className={`px-3 py-2 rounded-lg ${isCurrentUser ? 'bg-[#e3f2fd]' : 'bg-gray-200'} ${(hasImage || isVideo) ? 'w-[40%]' : 'max-w-[70%]'}`}>
           {selectedChat?.isGroup && !isCurrentUser && (
             <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
           )}
@@ -857,7 +858,7 @@ export default function Chat() {
               {item.text}
             </Text>
           )}
-          <Text className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'} mt-1`}>
+          <Text className={`text-xs ${isCurrentUser ? 'text-blue-600' : 'text-gray-500'} mt-1`}>
             {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
@@ -883,14 +884,16 @@ export default function Chat() {
         )}
       </View>
       <View className="ml-3 flex-1 overflow-hidden">
-        <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
-        <Text numberOfLines={1} className="text-gray-500 text-sm">
+        <Text className={`text-[15px] ${chatItem?.unseenMessages > 0 ? 'font-bold' : 'font-semibold'}`}>
+          {chatItem?.userDetails?.name}
+        </Text>
+        <Text numberOfLines={1} className={`text-sm ${chatItem?.unseenMessages > 0 ? 'font-semibold text-black' : 'text-gray-500'}`}>
           {chatItem?.isGroup ? (
             <>
               {chatItem?.latestMessage?.msgByUserId === user?._id ? (
                 <Text>Bạn: </Text>
               ) : (
-                <Text>
+                <Text className={chatItem?.unseenMessages > 0 ? 'font-semibold' : ''}>
                   {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
                     ?.name + ":" || ""}
                 </Text>
@@ -919,7 +922,7 @@ export default function Chat() {
         </Text>
       </View>
       <View className="items-end">
-        <Text className="text-xs text-gray-500">
+        <Text className={`text-xs ${chatItem?.unseenMessages > 0 ? 'font-semibold text-black' : 'text-gray-500'}`}>
           {chatItem?.latestMessage?.createdAt &&
             new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
               hour: '2-digit',
@@ -1288,8 +1291,14 @@ export default function Chat() {
               renderItem={renderMessage}
               keyExtractor={(item) => item._id}
               contentContainerStyle={{ padding: 10 }}
-              onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: true })}
+              onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
               onLayout={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
+              initialScrollIndex={messages.length - 1}
+              getItemLayout={(data, index) => ({
+                length: 100, // Approximate height of each message
+                offset: 100 * index,
+                index,
+              })}
             />
           )}
 
