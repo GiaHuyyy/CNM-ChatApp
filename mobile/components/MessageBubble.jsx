@@ -24,6 +24,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import EmojiReactionPicker from './EmojiReactionPicker';
 import { Video } from 'expo-av';
+import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 const MessageBubble = ({
   message,
@@ -35,7 +37,8 @@ const MessageBubble = ({
   onImagePress,
   onVideoPress,
   senderName = "",
-  isGroupChat = false
+  isGroupChat = false,
+  showTime = true
 }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredMessage, setHoveredMessage] = useState(null);
@@ -258,8 +261,24 @@ const MessageBubble = ({
   }
 
   return (
-    <View className="mb-3 px-4">
-      <View className={`${containerClass} items-end`}>
+    <View className={`flex ${isCurrentUser ? 'items-end' : 'items-start'} mb-2`}>
+      <View
+        className={`max-w-[80%] rounded-message p-3 ${
+          isCurrentUser
+            ? 'bg-message-sent rounded-tr-none'
+            : 'bg-message-received rounded-tl-none'
+        }`}
+        style={{
+          shadowColor: '#000',
+          shadowOffset: {
+            width: 0,
+            height: 1,
+          },
+          shadowOpacity: 0.1,
+          shadowRadius: 1,
+          elevation: 1,
+        }}
+      >
         {!isCurrentUser && (
           <Image
             source={{ uri: userProfilePic }}
@@ -267,34 +286,34 @@ const MessageBubble = ({
           />
         )}
 
-        <View className={`max-w-[75%] relative ${hasFile ? mediaWidthClass : ''}`}>
-          <Pressable
-            onPressIn={() => setHoveredMessage(message._id)}
-            onPressOut={() => setHoveredMessage(null)}
-            onHoverIn={handleShowActionMenu}
-            onHoverOut={handleHideActionMenu}
-            className={`
-              relative px-4 py-2
-              ${bubbleClass}
-            `}
+        {message.type === 'text' && (
+          <Text
+            className={`text-base ${
+              isCurrentUser ? 'text-white' : 'text-text-primary'
+            }`}
           >
-            {isGroupChat && !isCurrentUser && senderName && (
-              <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
-            )}
-
+            {message.content}
+          </Text>
+        )}
+        {message.type === 'image' && (
+          <Image
+            source={{ uri: message.content }}
+            className="w-48 h-48 rounded-lg"
+            resizeMode="cover"
+          />
+        )}
+        {message.type === 'file' && (
+          <>
             {hasImage && (
               <TouchableOpacity
                 onPress={handleImageView}
                 className="mb-2"
               >
                 <Image
-                  source={{ uri: message.imageUrl }}
+                  source={{ uri: message.content }}
                   className="w-full h-[200px] rounded-md"
                   resizeMode="cover"
                 />
-                <View className="absolute bottom-2 right-2 p-1 bg-black bg-opacity-50 rounded-full">
-                  <FontAwesomeIcon icon={faExpand} size={12} color="#fff" />
-                </View>
               </TouchableOpacity>
             )}
 
@@ -304,120 +323,89 @@ const MessageBubble = ({
                 className="mb-2 relative"
               >
                 <Video
-                  source={{ uri: message.fileUrl }}
+                  source={{ uri: message.content }}
                   className="w-full h-[200px] rounded-md"
                   useNativeControls={false}
                   resizeMode="cover"
                   shouldPlay={false}
                 />
-                <View className="absolute inset-0 flex items-center justify-center">
-                  <View className="w-12 h-12 rounded-full bg-black bg-opacity-50 flex items-center justify-center">
-                    <FontAwesomeIcon icon={faPlay} size={20} color="#fff" />
-                  </View>
-                </View>
               </TouchableOpacity>
             )}
 
             {hasDocument && renderDocumentPreview()}
+          </>
+        )}
 
-            {message.text && (
-              <Text className={`text-base ${textClass}`}>
-                {message.text}
-              </Text>
-            )}
+        {showTime && (
+          <Text
+            className={`text-xs mt-1 ${
+              isCurrentUser ? 'text-white/80' : 'text-text-tertiary'
+            }`}
+          >
+            {format(new Date(message.timestamp), 'HH:mm', { locale: vi })}
+          </Text>
+        )}
 
-            <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-gray-500' : 'text-gray-500'}`}>
-              {new Date(message.createdAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-              {message.isEdited && (
-                <Text className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</Text>
-              )}
-            </Text>
+        {message.reactions && message.reactions.length > 0 && (
+          <View className="absolute -bottom-5 right-2 bg-white rounded-full px-2 py-1 shadow-sm flex-row">
+            {message.reactions.map((reaction, index) => (
+              <Text key={`${reaction.userId}-${index}`} className="text-sm">{reaction.emoji}</Text>
+            ))}
+          </View>
+        )}
 
-            {message.reactions && message.reactions.length > 0 && (
-              <View className="absolute -bottom-5 right-2 bg-white rounded-full px-2 py-1 shadow-sm flex-row">
-                {message.reactions.map((reaction, index) => (
-                  <Text key={`${reaction.userId}-${index}`} className="text-sm">{reaction.emoji}</Text>
-                ))}
-              </View>
-            )}
+        <TouchableOpacity
+          onPress={() => handleQuickLike(message._id)}
+          onLongPress={() => toggleEmojiPicker(true)}
+          className={`
+            absolute -bottom-2 -right-2 
+            flex-row items-center gap-x-1 
+            rounded-full bg-white px-1 py-[3px]
+          `}
+        >
+          <FontAwesomeIcon
+            icon={faThumbsUp}
+            size={14}
+            color="#8b8b8b"
+          />
+        </TouchableOpacity>
 
+        {showActionMenu && isCurrentUser && (
+          <View
+            className={`
+              absolute ${isCurrentUser ? '-left-20' : '-right-20'} 
+              top-1/2 -translate-y-1/2
+              flex-row items-center gap-x-1
+            `}
+          >
             <TouchableOpacity
-              onPress={() => handleQuickLike(message._id)}
-              onLongPress={() => toggleEmojiPicker(true)}
-              className={`
-                absolute -bottom-2 -right-2 
-                flex-row items-center gap-x-1 
-                rounded-full bg-white px-1 py-[3px]
-              `}
-            >
-              <FontAwesomeIcon
-                icon={faThumbsUp}
-                size={14}
-                color="#8b8b8b"
-              />
-            </TouchableOpacity>
-
-            {showActionMenu && isCurrentUser && (
-              <View
-                className={`
-                  absolute ${isCurrentUser ? '-left-20' : '-right-20'} 
-                  top-1/2 -translate-y-1/2
-                  flex-row items-center gap-x-1
-                `}
-              >
-                <TouchableOpacity
-                  className="p-2 bg-white rounded-full shadow-sm"
-                  onPress={() => {
-                    onEditMessage && onEditMessage(message);
-                    setShowActionMenu(false);
-                  }}
-                >
-                  <FontAwesomeIcon
-                    icon={faPencil}
-                    size={14}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className="p-2 bg-white rounded-full shadow-sm"
-                  onPress={() => {
-                    onDeleteMessage && onDeleteMessage(message._id);
-                    setShowActionMenu(false);
-                  }}
-                >
-                  <FontAwesomeIcon
-                    icon={faTrash}
-                    size={14}
-                    color="#ff4444"
-                  />
-                </TouchableOpacity>
-              </View>
-            )}
-          </Pressable>
-
-          {showEmojiPicker && (
-            <Animated.View
-              className={`
-                absolute z-50 
-                ${isCurrentUser ? 'right-0' : 'left-0'} 
-                bottom-full mb-2
-              `}
-              style={{
-                transform: [{
-                  scale: emojiPickerAnim
-                }],
-                opacity: emojiPickerAnim
+              className="p-2 bg-white rounded-full shadow-sm"
+              onPress={() => {
+                onEditMessage && onEditMessage(message);
+                setShowActionMenu(false);
               }}
             >
-              <EmojiReactionPicker
-                onSelectEmoji={handleEmojiSelect}
+              <FontAwesomeIcon
+                icon={faPencil}
+                size={14}
+                color="#666"
               />
-            </Animated.View>
-          )}
-        </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="p-2 bg-white rounded-full shadow-sm"
+              onPress={() => {
+                onDeleteMessage && onDeleteMessage(message._id);
+                setShowActionMenu(false);
+              }}
+            >
+              <FontAwesomeIcon
+                icon={faTrash}
+                size={14}
+                color="#ff4444"
+              />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <Modal
@@ -556,7 +544,8 @@ MessageBubble.propTypes = {
   onImagePress: PropTypes.func,
   onVideoPress: PropTypes.func,
   senderName: PropTypes.string,
-  isGroupChat: PropTypes.bool
+  isGroupChat: PropTypes.bool,
+  showTime: PropTypes.bool
 };
 
 export default MessageBubble;

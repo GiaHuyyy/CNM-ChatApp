@@ -39,7 +39,7 @@ export default function SignIn() {
 
         // Set token in Redux
         dispatch(setToken(data.token));
-
+        console.log("BACKEND_URL", BACKEND_URL);
         // Fetch user details after login
         const userResponse = await axios.get(
           `${BACKEND_URL}/api/user-details`,
