@@ -208,6 +208,23 @@ export default function Sidebar({ onGroupCreated }) {
     }, 100);
   }, [socketConnection, user?._id]);
 
+  useEffect(() => {
+    if (socketConnection) {
+      // Listen for conversationDeleted events
+      socketConnection.on("conversationDeleted", (response) => {
+        if (response.success && response.conversationId) {
+          console.log(`Conversation ${response.conversationId} deleted, refreshing sidebar`);
+          // Request fresh conversation list
+          socketConnection.emit("sidebar", user?._id);
+        }
+      });
+
+      return () => {
+        socketConnection.off("conversationDeleted");
+      };
+    }
+  }, [socketConnection, user?._id]);
+
   const handleGroupCreated = (conversationId) => {
     // Pass the conversationId to the parent component
     if (onGroupCreated) {
@@ -417,7 +434,8 @@ export default function Sidebar({ onGroupCreated }) {
                                   /* Otherwise show sender's name - find the sender from members array */
                                   <>
                                     {chatItem?.members?.find((m) => m._id === chatItem?.latestMessage?.msgByUserId)
-                                      ?.name + ":" || ""}
+                                      ?.name !==
+                                      "" + ":" || ""}
                                   </>
                                 )}
                               </>
