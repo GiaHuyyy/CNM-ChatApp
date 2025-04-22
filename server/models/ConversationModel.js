@@ -97,6 +97,10 @@ const conversationSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    profilePic: {
+      type: String,
+      default: "",
+    },
     members: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -107,6 +111,12 @@ const conversationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    mutedMembers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

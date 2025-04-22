@@ -92,7 +92,7 @@ export default function Sidebar({ onGroupCreated }) {
     return (
       <button
         ref={isRef ? buttonSettingRef : null}
-        className={`flex h-12 w-12 items-center justify-center rounded-md text-2xl relative ${
+        className={`relative flex h-12 w-12 items-center justify-center rounded-md text-2xl ${
           isActive ? "bg-[#00000040]" : ""
         } text-white hover:bg-[#38383840] ${styles}`}
         onClick={handleClick}
@@ -125,10 +125,9 @@ export default function Sidebar({ onGroupCreated }) {
   useEffect(() => {
     const fetchFriendRequestsCount = async () => {
       try {
-        const response = await axios.get(
-          `${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`,
-          { withCredentials: true }
-        );
+        const response = await axios.get(`${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`, {
+          withCredentials: true,
+        });
         setFriendRequestsCount(response.data.data.length);
       } catch (error) {
         console.error("Error fetching friend requests:", error);
@@ -136,10 +135,10 @@ export default function Sidebar({ onGroupCreated }) {
     };
 
     fetchFriendRequestsCount();
-    
+
     // Set up interval to check for new requests
     const interval = setInterval(fetchFriendRequestsCount, 30000); // Check every 30 seconds
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -150,7 +149,7 @@ export default function Sidebar({ onGroupCreated }) {
     isActive={openTab === "bookphone"}
     handleClick={() => handleOpenTab("bookphone")}
     notificationCount={friendRequestsCount}
-  />
+  />;
   const handleOpenTab = (tab) => {
     setOpenTab(tab);
     // Navigate to the corresponding route based on the tab
@@ -392,6 +391,12 @@ export default function Sidebar({ onGroupCreated }) {
                             src={chatItem?.userDetails?.profilePic}
                             alt={chatItem?.userDetails?.name}
                             className={`h-12 w-12 rounded-full object-cover`}
+                            onError={(e) => {
+                              // If image fails to load, use a fallback
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                chatItem?.userDetails?.name || "Chat",
+                              )}&background=random`;
+                            }}
                           />
                           {chatItem?.isGroup && (
                             <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
@@ -493,18 +498,15 @@ export default function Sidebar({ onGroupCreated }) {
                       >
                         <div className="relative">
                           <img
-                            src={
-                              result.profilePic ||
-                              (result.isGroup
-                                ? `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                    result.name || "Group",
-                                  )}&background=random`
-                                : `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                    result.name || "User",
-                                  )}&background=random`)
-                            }
+                            src={result.profilePic}
                             alt={result.name || (result.isGroup ? "Group" : "User")}
                             className="h-12 w-12 rounded-full object-cover"
+                            onError={(e) => {
+                              // If image fails to load, use a fallback
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                result.name || (result.isGroup ? "Group" : "User"),
+                              )}&background=random`;
+                            }}
                           />
                           {/* Show group icon or online status */}
                           {result.isGroup ? (
@@ -576,7 +578,7 @@ export default function Sidebar({ onGroupCreated }) {
               >
                 Lời mời kết bạn
                 {friendRequestsCount > 0 && (
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                  <span className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-red-500 text-xs text-white">
                     {friendRequestsCount}
                   </span>
                 )}

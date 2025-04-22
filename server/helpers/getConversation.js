@@ -52,7 +52,7 @@ const getConversation = async (currentUserId) => {
           userDetails: {
             _id: conv?._id,
             name: conv?.name,
-            profilePic: "https://ui-avatars.com/api/?name=" + encodeURIComponent(conv?.name) + "&background=random",
+            profilePic: conv?.profilePic || "https://ui-avatars.com/api/?name=" + encodeURIComponent(conv?.name) + "&background=random",
             isGroup: true,
           },
         };
