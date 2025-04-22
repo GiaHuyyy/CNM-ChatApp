@@ -44,6 +44,7 @@ import ReactionDisplay from "./ReactionDisplay";
 import { useCallContext } from "../context/CallProvider";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 import ImageViewerModal from "./ImageViewerModal";
+import ShareMessageModal from "./ShareMessageModal";
 
 // Button component
 const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick, disabled }) => {
@@ -145,6 +146,7 @@ export default function MessagePage() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [replyingTo, setReplyingTo] = useState(null);
+  const [shareMessage, setShareMessage] = useState(null);
 
   useEffect(() => {
     if (!socketConnection) {
@@ -193,6 +195,11 @@ export default function MessagePage() {
 
       socketConnection.on("message", (message) => {
         console.log("Received message event:", message?.messages?.length || 0, "messages");
+        // Add more detailed debug for shared messages
+        const sharedMessages = message?.messages?.filter((msg) => msg.sharedContent);
+        if (sharedMessages?.length > 0) {
+          console.log("Found shared messages:", sharedMessages);
+        }
         setAllMessages(message?.messages || []);
         setConversation(message);
         setIsLoading(false);
@@ -206,8 +213,16 @@ export default function MessagePage() {
           name: groupData?.name,
           isGroup: groupData?.isGroup,
           membersCount: groupData?.members?.length || 0,
-          profilePic: groupData?.profilePic, // Log the profilePic to verify it's coming from server
+          profilePic: groupData?.profilePic,
+          hasSharedMessages: groupData?.messages?.some((msg) => msg.sharedContent),
         });
+
+        // Debug any shared messages
+        const sharedMessages = groupData?.messages?.filter((msg) => msg.sharedContent);
+        if (sharedMessages?.length > 0) {
+          console.log("Shared messages in group:", sharedMessages);
+        }
+
         setAllMessages(groupData?.messages || []);
         setConversation(groupData);
 
@@ -877,6 +892,11 @@ export default function MessagePage() {
     setOpenActionMessage(false);
   };
 
+  const handleShareMessage = (message) => {
+    setShareMessage(message);
+    setOpenActionMessage(false);
+  };
+
   const scrollToMessage = (messageId) => {
     if (!messageId) return;
 
@@ -1229,7 +1249,7 @@ export default function MessagePage() {
                               <button
                                 title="Chia sẻ"
                                 className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onClick={() => commingSoon()}
+                                onClick={() => handleShareMessage(message)}
                               >
                                 <FontAwesomeIcon
                                   icon={faReply}
@@ -1285,6 +1305,35 @@ export default function MessagePage() {
                                   </button>
                                 </div>
                               )}
+                            </div>
+                          )}
+                          {message.sharedContent && (
+                            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-2">
+                              <div className="mb-1 text-xs text-gray-500">
+                                Được chia sẻ từ {message.sharedContent.originalSender}
+                              </div>
+                              <div className="rounded bg-white p-2">
+                                {message.sharedContent.originalImage && (
+                                  <img
+                                    src={message.sharedContent.originalImage}
+                                    alt="Shared content"
+                                    className="mb-2 h-40 w-auto object-contain"
+                                    onClick={() => handleImageClick(message.sharedContent.originalImage)}
+                                  />
+                                )}
+                                {message.sharedContent.originalFile && !message.sharedContent.originalImage && (
+                                  <div className="mb-2 flex items-center text-blue-500">
+                                    <FontAwesomeIcon icon={faFilePen} className="mr-2" />
+                                    <span>{message.sharedContent.originalFileName}</span>
+                                  </div>
+                                )}
+                                {message.sharedContent.originalText && (
+                                  <p className="whitespace-pre-wrap break-words text-sm font-medium">
+                                    {console.log("Rendering shared text:", message.sharedContent.originalText)}
+                                    {message.sharedContent.originalText}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1543,6 +1592,14 @@ export default function MessagePage() {
       />
 
       {showImageModal && <ImageViewerModal fileUrl={selectedImage} onClose={() => setShowImageModal(false)} />}
+
+      {shareMessage && (
+        <ShareMessageModal
+          isOpen={Boolean(shareMessage)}
+          onClose={() => setShareMessage(null)}
+          message={shareMessage}
+        />
+      )}
     </main>
   );
 }
