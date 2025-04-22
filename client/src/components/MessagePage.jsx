@@ -45,21 +45,26 @@ import uploadFileToCloud from "../helpers/uploadFileToClound";
 import ImageViewerModal from "./ImageViewerModal";
 
 // Button component
-const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick }) => {
+const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick, disabled }) => {
   return isUpload ? (
     <label
-      htmlFor={id}
+      htmlFor={disabled ? "" : id}
       title={title}
-      onClick={handleOnClick}
-      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
+      onClick={disabled ? null : handleOnClick}
+      className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-[3px] ${
+        disabled ? "cursor-not-allowed opacity-50" : "hover:bg-[#ebe7eb]"
+      }`}
     >
       <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
     </label>
   ) : (
     <button
       title={title}
-      onClick={handleOnClick}
-      className="flex h-8 w-8 items-center justify-center rounded-[3px] hover:bg-[#ebe7eb]"
+      onClick={disabled ? null : handleOnClick}
+      disabled={disabled}
+      className={`flex h-8 w-8 items-center justify-center rounded-[3px] ${
+        disabled ? "cursor-not-allowed opacity-50" : "hover:bg-[#ebe7eb]"
+      }`}
     >
       <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
     </button>
@@ -74,6 +79,7 @@ Button.propTypes = {
   isUpload: PropTypes.bool,
   id: PropTypes.string,
   handleOnClick: PropTypes.func,
+  disabled: PropTypes.bool,
 };
 
 export default function MessagePage() {
@@ -216,6 +222,7 @@ export default function MessagePage() {
           isGroup: true,
           members: groupData.members || [],
           groupAdmin: groupData.groupAdmin,
+          mutedMembers: groupData.mutedMembers || [],
         });
         setSeenMessage(true);
         setIsLoading(false);
@@ -613,6 +620,8 @@ export default function MessagePage() {
       /đã cập nhật/i,
       /đã thay đổi tên nhóm/i,
       /đã thay đổi ảnh nhóm/i,
+      /đã mở/i,
+      /đã tắt/i,
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));
@@ -745,6 +754,51 @@ export default function MessagePage() {
   const handleImageClick = (imageUrl) => {
     setSelectedImage(imageUrl);
     setShowImageModal(true);
+  };
+
+  const isCurrentUserMuted = () => {
+    if (!dataUser.isGroup || !dataUser.mutedMembers) return false;
+
+    const currentUserIdStr = typeof user._id === "object" ? user._id.toString() : user._id;
+
+    return dataUser.mutedMembers.some((mutedId) => {
+      const mutedIdStr =
+        typeof mutedId === "object" ? (mutedId._id ? mutedId._id.toString() : mutedId.toString()) : mutedId.toString();
+
+      return mutedIdStr === currentUserIdStr;
+    });
+  };
+
+  const handleToggleMute = (memberId, memberName, isMuted) => {
+    if (!socketConnection || !dataUser.isGroup) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: isMuted ? "Bỏ tắt quyền chat" : "Tắt quyền chat",
+      message: isMuted
+        ? `Bạn có chắc chắn muốn mở lại quyền nhắn tin cho ${memberName}?`
+        : `Bạn có chắc chắn muốn tắt quyền nhắn tin của ${memberName}?`,
+      action: () => {
+        const cleanAdminId = typeof user._id === "object" ? user._id.toString() : user._id;
+        const cleanMemberId = typeof memberId === "object" ? memberId.toString() : memberId;
+
+        socketConnection.emit(isMuted ? "unmuteMember" : "muteMember", {
+          groupId: params.userId,
+          memberId: cleanMemberId,
+          adminId: cleanAdminId,
+        });
+
+        socketConnection.once("memberMuteToggled", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+
+            socketConnection.emit("joinRoom", params.userId);
+          } else {
+            toast.error(response.message);
+          }
+        });
+      },
+    });
   };
 
   return (
@@ -1162,6 +1216,7 @@ export default function MessagePage() {
                 icon={faFaceLaughSquint}
                 width={20}
                 handleOnClick={() => setOpenEmoji(true)}
+                disabled={isCurrentUserMuted()}
               />
               <Button
                 title="Gửi hình ảnh"
@@ -1170,6 +1225,7 @@ export default function MessagePage() {
                 isUpload
                 id="image"
                 handleOnClick={handleUploadFile}
+                disabled={isCurrentUserMuted()}
               />
               <Button
                 title="Gửi kèm File"
@@ -1178,12 +1234,43 @@ export default function MessagePage() {
                 isUpload
                 id="file"
                 handleOnClick={handleUploadFile}
+                disabled={isCurrentUserMuted()}
               />
-              <Button title="Gửi danh thiếp" icon={faAddressCard} width={20} handleOnClick={commingSoon} />
-              <Button title="Chụp kèm với cửa sổ Z" icon={faCamera} width={20} handleOnClick={commingSoon} />
-              <Button title="Định dạng tin nhắn" icon={faFilePen} width={20} handleOnClick={commingSoon} />
-              <Button title="Chèn tin nhắn nhanh" icon={faBolt} width={20} handleOnClick={commingSoon} />
-              <Button title="Tùy chọn thêm" icon={faEllipsis} width={20} handleOnClick={commingSoon} />
+              <Button
+                title="Gửi danh thiếp"
+                icon={faAddressCard}
+                width={20}
+                handleOnClick={commingSoon}
+                disabled={isCurrentUserMuted()}
+              />
+              <Button
+                title="Chụp kèm với cửa sổ Z"
+                icon={faCamera}
+                width={20}
+                handleOnClick={commingSoon}
+                disabled={isCurrentUserMuted()}
+              />
+              <Button
+                title="Định dạng tin nhắn"
+                icon={faFilePen}
+                width={20}
+                handleOnClick={commingSoon}
+                disabled={isCurrentUserMuted()}
+              />
+              <Button
+                title="Chèn tin nhắn nhanh"
+                icon={faBolt}
+                width={20}
+                handleOnClick={commingSoon}
+                disabled={isCurrentUserMuted()}
+              />
+              <Button
+                title="Tùy chọn thêm"
+                icon={faEllipsis}
+                width={20}
+                handleOnClick={commingSoon}
+                disabled={isCurrentUserMuted()}
+              />
             </div>
             {openEmoji && (
               <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
@@ -1208,54 +1295,80 @@ export default function MessagePage() {
               hidden
               onChange={handleUploadFile}
               ref={imageInputRef}
+              disabled={isCurrentUserMuted()}
             />
-            <input type="file" name="file" id="file" hidden onChange={handleUploadFile} ref={fileInputRef} />
-            <div className="flex h-[50px] items-center px-3 py-[10px]">
-              {editingMessage && (
-                <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
-                  <span>Chỉnh sửa tin nhắn</span>
-                  <button
-                    onClick={() => {
-                      setEditingMessage(null);
-                      setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
-                    }}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    Hủy
-                  </button>
-                </div>
-              )}
-              <input
-                type="text"
-                placeholder={`Nhập tin nhắn với ${dataUser.name}`}
-                className="h-full flex-1 rounded-[3px] text-sm"
-                value={messages.text}
-                onChange={(e) => setMessages({ ...messages, text: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                onFocus={handleInputFocus}
-                onBlur={() => setSeenMessage(false)}
-                ref={inputRef}
-              />
-              <div className="flex items-center gap-x-1">
-                <Button title="Biểu cảm" icon={faFaceSmile} width={20} handleOnClick={() => setOpenEmoji(true)} />
-                {messages.text === "" && !selectedFile ? (
-                  <Button
-                    title="Gửi nhanh biểu tưởng cảm xúc"
-                    icon={faThumbsUp}
-                    width={20}
-                    handleOnClick={handleSendEmojiLike}
-                  />
-                ) : (
-                  <Button
-                    title="Gửi tin nhắn"
-                    icon={faPaperPlane}
-                    width={20}
-                    styleIcon="text-[#005ae0]"
-                    handleOnClick={handleSendMessage}
-                  />
-                )}
+            <input
+              type="file"
+              name="file"
+              id="file"
+              hidden
+              onChange={handleUploadFile}
+              ref={fileInputRef}
+              disabled={isCurrentUserMuted()}
+            />
+            {isCurrentUserMuted() ? (
+              <div className="flex h-[50px] items-center justify-center bg-gray-100 px-3 py-[10px]">
+                <p className="text-gray-500">Bạn đã bị tắt quyền nhắn tin trong nhóm này</p>
               </div>
-            </div>
+            ) : (
+              <div className="flex h-[50px] items-center px-3 py-[10px]">
+                {editingMessage && (
+                  <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
+                    <span>Chỉnh sửa tin nhắn</span>
+                    <button
+                      onClick={() => {
+                        setEditingMessage(null);
+                        setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  placeholder={`Nhập tin nhắn với ${dataUser.name}`}
+                  className="h-full flex-1 rounded-[3px] text-sm"
+                  value={messages.text}
+                  onChange={(e) => setMessages({ ...messages, text: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                  onFocus={handleInputFocus}
+                  onBlur={() => setSeenMessage(false)}
+                  ref={inputRef}
+                  disabled={isCurrentUserMuted()}
+                />
+                <div className="flex items-center gap-x-1">
+                  <Button
+                    title="Biểu cảm"
+                    icon={faFaceSmile}
+                    width={20}
+                    handleOnClick={() => setOpenEmoji(true)}
+                    styleIcon={isCurrentUserMuted() ? "text-gray-400" : ""}
+                    disabled={isCurrentUserMuted()}
+                  />
+                  {messages.text === "" && !selectedFile ? (
+                    <Button
+                      title="Gửi nhanh biểu tưởng cảm xúc"
+                      icon={faThumbsUp}
+                      width={20}
+                      handleOnClick={handleSendEmojiLike}
+                      styleIcon={isCurrentUserMuted() ? "text-gray-400" : ""}
+                      disabled={isCurrentUserMuted()}
+                    />
+                  ) : (
+                    <Button
+                      title="Gửi tin nhắn"
+                      icon={faPaperPlane}
+                      width={20}
+                      styleIcon={isCurrentUserMuted() ? "text-gray-400" : "text-[#005ae0]"}
+                      handleOnClick={handleSendMessage}
+                      disabled={isCurrentUserMuted()}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </footer>
         )}
       </div>
@@ -1274,6 +1387,7 @@ export default function MessagePage() {
           onLeaveGroup={handleLeaveGroup}
           onDeleteConversation={handleDeleteConversation}
           onRemoveMember={handleRemoveMember}
+          onToggleMute={handleToggleMute}
         />
       )}
 

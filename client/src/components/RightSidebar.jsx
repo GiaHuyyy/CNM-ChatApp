@@ -12,8 +12,8 @@ import {
   faTrash,
   faUsers,
   faFilePen,
-  faMicrophone,
-  faMicrophoneSlash,
+  faCommentSlash,
+  faComment,
 } from "@fortawesome/free-solid-svg-icons";
 import commingSoon from "../helpers/commingSoon";
 import { format } from "date-fns";
@@ -202,12 +202,16 @@ export default function RightSidebar({
     if (dataUser.isGroup && user._id === dataUser.groupAdmin?._id) {
       setShowEditGroupModal(true);
     } else if (dataUser.isGroup) {
-      toast.warning(("Tính năng này chỉ dành cho admin!"), {
+      toast.warning("Tính năng này chỉ dành cho admin!", {
         position: "center-center",
       });
     } else {
       commingSoon();
     }
+  };
+
+  const handleToggleMute = (memberId, memberName, isMuted) => {
+    onToggleMute(memberId, memberName, isMuted);
   };
 
   const renderTabContent = () => {
@@ -384,18 +388,35 @@ export default function RightSidebar({
                   {dataUser.groupAdmin?._id === member._id && (
                     <span className="text-xs text-blue-500">Quản trị viên</span>
                   )}
+                  {isMemberMuted(member, dataUser.mutedMembers) && (
+                    <span className="text-xs text-red-500">Đã tắt quyền nhắn tin</span>
+                  )}
                 </div>
               </div>
 
-              {/* Button for admin delete member */}
               {user._id === dataUser.groupAdmin?._id && member._id !== user._id && (
-                <button
-                  onClick={() => onRemoveMember(member._id, member.name)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
-                  title="Xóa thành viên"
-                >
-                  <FontAwesomeIcon icon={faTrash} width={14} />
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() =>
+                      handleToggleMute(member._id, member.name, isMemberMuted(member, dataUser.mutedMembers))
+                    }
+                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
+                    title={isMemberMuted(member, dataUser.mutedMembers) ? "Bỏ tắt quyền chat" : "Tắt quyền chat"}
+                  >
+                    <FontAwesomeIcon
+                      icon={isMemberMuted(member, dataUser.mutedMembers) ? faCommentSlash : faComment}
+                      width={14}
+                      className={isMemberMuted(member, dataUser.mutedMembers) ? "text-gray-500" : "text-green-500"}
+                    />
+                  </button>
+                  <button
+                    onClick={() => onRemoveMember(member._id, member.name)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
+                    title="Xóa thành viên"
+                  >
+                    <FontAwesomeIcon icon={faTrash} width={14} />
+                  </button>
+                </div>
               )}
             </div>
           ))}
