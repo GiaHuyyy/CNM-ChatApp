@@ -1,17 +1,85 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform } from "react-native";
+import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform, ScrollView } from "react-native";
 import * as MediaLibrary from "expo-media-library";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faArrowLeft, faGear, faCamera } from "@fortawesome/free-solid-svg-icons";
+import { 
+  faSearch, 
+  faGear, 
+  faCamera, 
+  faCloud, 
+  faWrench, 
+  faLock, 
+  faShieldAlt,
+  faQrcode,
+  faAngleRight,
+  faImage,
+  faCloudArrowUp,
+  faClock,
+  faDatabase,
+  faUserShield
+} from "@fortawesome/free-solid-svg-icons";
 import { useSelector, useDispatch } from "react-redux";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import { setUser } from "../redux/userSlice";
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 
+// Dữ liệu mẫu cho các menu items
+const menuItems = [
+  {
+    id: 'zcloud',
+    icon: faCloud,
+    title: 'zCloud',
+    description: 'Không gian lưu trữ dữ liệu trên đám mây',
+    hasArrow: true
+  },
+  {
+    id: 'zstyle',
+    icon: faWrench,
+    title: 'zStyle - Nổi bật trên Zalo',
+    description: 'Hình nền và nhạc cho cuộc gọi Zalo',
+    hasArrow: false
+  },
+  {
+    id: 'mycloud',
+    icon: faCloudArrowUp,
+    title: 'Cloud của tôi',
+    description: 'Lưu trữ các tin nhắn quan trọng',
+    hasArrow: true
+  },
+  {
+    id: 'devicedata',
+    icon: faDatabase,
+    title: 'Dữ liệu trên máy',
+    description: 'Quản lý dữ liệu Zalo của bạn',
+    hasArrow: true
+  },
+  {
+    id: 'qr',
+    icon: faQrcode,
+    title: 'Ví QR',
+    description: 'Lưu trữ và xuất trình các mã QR quan trọng',
+    hasArrow: false
+  },
+  {
+    id: 'security',
+    icon: faUserShield,
+    title: 'Tài khoản và bảo mật',
+    description: '',
+    hasArrow: true
+  },
+  {
+    id: 'privacy',
+    icon: faLock,
+    title: 'Quyền riêng tư',
+    description: '',
+    hasArrow: true
+  }
+];
+
 export default function Profile() {
   const dispatch = useDispatch();
-  const user = useSelector((state) => state.user); // Correctly access user from Redux
+  const user = useSelector((state) => state.user);
   const token = useSelector((state) => state.user.token);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -20,7 +88,6 @@ export default function Profile() {
   const [updating, setUpdating] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Set initial edit name when modal opens
   useEffect(() => {
     if (modalVisible) {
       setEditName(user.name || "");
@@ -138,7 +205,26 @@ export default function Profile() {
     }
   };
 
-  // Show loading if we don't have user data yet
+  const renderMenuItem = (item) => (
+    <TouchableOpacity 
+      key={item.id}
+      className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100"
+    >
+      <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center">
+        <FontAwesomeIcon icon={item.icon} size={20} color="#0068FF" />
+      </View>
+      <View className="flex-1 ml-3">
+        <Text className="text-[15px] font-medium">{item.title}</Text>
+        {item.description && (
+          <Text className="text-gray-500 text-sm mt-0.5">{item.description}</Text>
+        )}
+      </View>
+      {item.hasArrow && (
+        <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+      )}
+    </TouchableOpacity>
+  );
+
   if (!user._id) {
     return (
       <View className="flex-1 justify-center items-center">
@@ -149,49 +235,75 @@ export default function Profile() {
   }
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-gray-100">
       {/* Header */}
-      <View className="bg-blue-500 px-4 py-4 pt-10 flex-row items-center justify-between">
-        <TouchableOpacity>
-          <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
-        </TouchableOpacity>
-        <Text className="text-white text-lg font-semibold">Hồ sơ</Text>
-        <TouchableOpacity>
-          <FontAwesomeIcon icon={faGear} size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Profile content */}
-      <View className="items-center mt-6">
-        <TouchableOpacity onPress={() => setModalVisible(true)}>
-          <View className="relative">
-            <Image
-              source={{ uri: user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` }}
-              className="w-24 h-24 rounded-full"
-            />
-            <View className="absolute bottom-0 right-0 bg-blue-500 p-2 rounded-full">
-              <FontAwesomeIcon icon={faCamera} size={14} color="white" />
+      <View className="bg-[#0068FF] px-4 pt-12 pb-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1">
+            <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
+              <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
+              <Text className="ml-2 text-white/80">Tìm kiếm</Text>
             </View>
           </View>
-        </TouchableOpacity>
-
-        <Text className="text-xl font-bold mt-4">{user.name}</Text>
-        <Text className="text-gray-600 mt-1">{user.email || user.phone}</Text>
-
-        <TouchableOpacity
-          className="mt-6 bg-blue-500 px-6 py-2 rounded-full"
-          onPress={() => setModalVisible(true)}
-        >
-          <Text className="text-white font-medium">Chỉnh sửa thông tin</Text>
-        </TouchableOpacity>
+          <TouchableOpacity className="ml-3">
+            <FontAwesomeIcon icon={faGear} size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
+      <ScrollView>
+        {/* Profile Section */}
+        <TouchableOpacity 
+          className="flex-row items-center px-4 py-4 bg-white mb-2"
+          onPress={() => setModalVisible(true)}
+        >
+          <Image
+            source={{ uri: user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` }}
+            className="w-16 h-16 rounded-full"
+          />
+          <View className="ml-4 flex-1">
+            <Text className="text-xl font-bold">{user.name}</Text>
+            <Text className="text-gray-500 mt-1">Xem trang cá nhân</Text>
+          </View>
+          <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+        </TouchableOpacity>
 
-      {/* Edit Modal */}
+        {/* New Feature Banner */}
+        <TouchableOpacity className="bg-white px-4 py-3 mb-2 flex-row items-center">
+          <Image
+            source={{ uri: 'https://via.placeholder.com/50' }}
+            className="w-12 h-12 rounded-lg"
+          />
+          <View className="flex-1 ml-3">
+            <View className="flex-row items-center">
+              <Text className="text-base font-semibold">Trang trí ảnh đại diện</Text>
+              <View className="bg-green-500 rounded px-2 py-0.5 ml-2">
+                <Text className="text-white text-xs">Mới</Text>
+              </View>
+            </View>
+            <Text className="text-blue-500">Kho khung ảnh zStyle đa dạng</Text>
+          </View>
+          <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+        </TouchableOpacity>
+
+        {/* Menu Items */}
+        <View className="mb-2">
+          {menuItems.map(renderMenuItem)}
+        </View>
+
+        {/* Version Info */}
+        <View className="items-center py-4">
+          <Text className="text-gray-500 text-sm">Phiên bản 23.12.01</Text>
+        </View>
+      </ScrollView>
+
+      {/* Edit Profile Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View className="flex-1 bg-black/50 justify-center items-center">
           <View className="bg-white w-[90%] p-4 rounded-xl">
-            <Text className="text-lg font-semibold text-center mb-4">Chỉnh sửa thông tin</Text>
+            <Text className="text-lg font-semibold text-center mb-4">
+              Chỉnh sửa thông tin
+            </Text>
 
             <TouchableOpacity className="items-center mb-4" onPress={pickNewAvatar}>
               <Image
