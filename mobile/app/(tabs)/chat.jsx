@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
@@ -64,75 +64,161 @@ export default function Chat() {
   // Add a ref for the input field
   const inputRef = useRef(null);
 
+  // Add a state to track if app is initialized
+  const [isAppInitialized, setIsAppInitialized] = useState(false);
+  const initializationAttempted = useRef(false);
+
+  // Add state to track if all conversations should be shown
+  const [showAllConversations, setShowAllConversations] = useState(false);
+
+  // Enhanced initialization effect that runs only once on app load
   useEffect(() => {
-    const fetchUserDetails = async () => {
+    if (initializationAttempted.current) return;
+    initializationAttempted.current = true;
+
+    const initializeApp = async () => {
       try {
+        console.log("Initializing app...");
+        setLoading(true);
+
+        // Check for existing token
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          console.log("No token found, redirecting to login");
+          setLoading(false);
+          // Handle navigation to login screen if needed
+          return;
+        }
+
+        console.log("Token found, fetching user details");
+
+        // Set token in redux (if not already set)
+        dispatch(setToken(token));
+
+        // Fetch user details
         const response = await axios.get("http://localhost:5000/api/user-details", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
           withCredentials: true,
         });
-        dispatch(setUser(response?.data?.data));
-        console.log("User details fetched:", response.data.data);
+
+        // Update user in redux
+        if (response?.data?.data) {
+          dispatch(setUser(response.data.data));
+          console.log("User details fetched successfully");
+        }
+
+        // Connect socket with token
+        await connectSocket(token);
+
+        setIsAppInitialized(true);
       } catch (error) {
-        console.error("Error fetching user info:", error.message);
+        console.error("Error initializing app:", error.message);
+        Alert.alert(
+          "Connection Error",
+          "Could not connect to the server. Please check your internet connection and try again.",
+          [{ text: "Retry", onPress: initializeApp }]
+        );
       } finally {
         setLoading(false);
       }
     };
 
-    setTimeout(() => {
-      fetchUserDetails();
-    }, 100);
+    initializeApp();
   }, []);
+
+  // Separate the socket connection logic to reuse it
+  const connectSocket = async (token) => {
+    try {
+      if (!token) {
+        token = await AsyncStorage.getItem("token");
+      }
+
+      if (!token) {
+        console.error("No token available for socket connection");
+        return null;
+      }
+
+      const socket = io('http://localhost:5000', {
+        auth: { token },
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
+
+      socket.on("connect", () => {
+        console.log("🔌 Socket connected: ", socket.id);
+        // When socket connects, immediately request sidebar data
+        if (user?._id) {
+          socket.emit("sidebar", user?._id);
+        }
+      });
+
+      socket.on("onlineUser", (data) => {
+        console.log("🟢 Online users: ", data);
+        dispatch(setOnlineUser(data));
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+      });
+
+      // Set socket in context and local state
+      setSocketConnection(socket);
+      setSocketConnectionState(socket);
+
+      return socket;
+    } catch (err) {
+      console.error("Socket connection error:", err);
+      return null;
+    }
+  };
+
+  // Modified useEffect that depends on user and socket initialization
   useEffect(() => {
-    const connectSocket = async () => {
+    if (!socketConnection || !user?._id || !isAppInitialized) return;
+
+    console.log("Fetching conversations for user:", user?._id);
+    socketConnection.emit("sidebar", user?._id);
+
+    // Set up the conversation listener
+    socketConnection.on("conversation", (data) => {
+      console.log("Received conversations:", Array.isArray(data) ? data.length : "not an array");
+      if (data) {
+        // Ensure data is an array before setting state
+        const conversationsArray = Array.isArray(data) ? data : [];
+        setAllUsers(conversationsArray);
+
+        // Store conversations in AsyncStorage for offline access
+        try {
+          AsyncStorage.setItem('cachedConversations', JSON.stringify(conversationsArray));
+        } catch (error) {
+          console.error("Error caching conversations:", error);
+        }
+      }
+    });
+
+    // Load cached conversations while waiting for server response
+    const loadCachedConversations = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        const socketConnection = io('http://localhost:5000', {
-          auth: { token },
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-        });
-
-        socketConnection.on("connect", () => {
-          console.log("🔌 Socket connected: ", socketConnection.id);
-        });
-
-        socketConnection.on("onlineUser", (data) => {
-          console.log("🟢 Online users: ", data);
-          dispatch(setOnlineUser(data));
-        });
-
-        setSocketConnection(socketConnection);
-        setSocketConnectionState(socketConnection);
-
-        return () => {
-          console.log("❌ Disconnecting socket");
-          socketConnection.disconnect();
-        };
-      } catch (err) {
-        console.log("Socket connection error:", err);
+        const cachedData = await AsyncStorage.getItem('cachedConversations');
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+          setAllUsers(parsedData);
+          console.log("Loaded cached conversations:", parsedData.length);
+        }
+      } catch (error) {
+        console.error("Error loading cached conversations:", error);
       }
     };
 
-    connectSocket();
-  }, [dispatch, setSocketConnection]);
+    loadCachedConversations();
 
-  useEffect(() => {
-    setTimeout(() => {
-      if (socketConnection) {
-        socketConnection.emit("sidebar", user?._id);
-        console.log("Socket emit sidebar: ", user);
-        socketConnection.on("conversation", (data) => {
-          console.log("Conversation: ", data);
-
-          if (data) {
-            setAllUsers(data);
-          }
-        });
-      }
-    }, 100);
-  }, [socketConnection, user?._id]);
+    return () => {
+      socketConnection.off("conversation");
+    };
+  }, [socketConnection, user?._id, isAppInitialized]);
 
   useEffect(() => {
     const fetchFriendRequestsCount = async () => {
@@ -332,32 +418,62 @@ export default function Chat() {
   };
 
   const handleSelectChat = (chatItem) => {
+    if (!socketConnection) {
+      // Try to reconnect socket if not connected
+      connectSocket().then(socket => {
+        if (socket) {
+          setSocketConnectionState(socket);
+          setSocketConnection(socket);
+          // Delay selecting chat to ensure socket is ready
+          setTimeout(() => handleSelectChat(chatItem), 500);
+        } else {
+          Alert.alert("Connection Error", "Could not connect to the chat server.");
+        }
+      });
+      return;
+    }
+
     setIsChatLoading(true);
     setSelectedChat(chatItem);
-    setAllUsers(prev =>
-      prev.map(item => item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item)
-    );
+
+    // Add array check before mapping
+    setAllUsers(prev => {
+      if (!Array.isArray(prev)) {
+        console.warn("allUsers is not an array:", prev);
+        return [chatItem]; // Return a new array with just this chat item
+      }
+      return prev.map(item =>
+        item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item
+      );
+    });
+
     setSeenMessage(true);
 
     // Clear any existing messages to prevent showing old messages while loading
     setMessages([]);
 
-    if (socketConnection) {
-      // Make sure we disconnect from any previous room first
-      if (selectedChat?.userDetails?._id) {
-        socketConnection.emit("leaveRoom", selectedChat.userDetails._id);
-      }
+    // Make sure we disconnect from any previous room first
+    if (selectedChat?.userDetails?._id) {
+      socketConnection.emit("leaveRoom", selectedChat.userDetails._id);
+    }
 
-      const isGroup = chatItem.isGroup || chatItem.userDetails?.isGroup;
-      console.log("Joining chat:", chatItem.userDetails._id, "isGroup:", isGroup);
-      socketConnection.emit("joinRoom", chatItem.userDetails._id);
+    const isGroup = chatItem.isGroup || chatItem.userDetails?.isGroup;
+    console.log("Joining chat:", chatItem.userDetails._id, "isGroup:", isGroup);
+    socketConnection.emit("joinRoom", chatItem.userDetails._id);
 
-      // Mark messages as seen immediately
-      if (isGroup) {
-        socketConnection.emit("seenGroup", chatItem.userDetails._id);
-      } else {
-        socketConnection.emit("seen", chatItem.userDetails._id);
-      }
+    // Mark messages as seen immediately
+    if (isGroup) {
+      socketConnection.emit("seenGroup", chatItem.userDetails._id);
+    } else {
+      socketConnection.emit("seen", chatItem.userDetails._id);
+    }
+
+    // Save last selected chat for history, but don't auto-restore
+    // This is only for tracking purposes now
+    try {
+      AsyncStorage.setItem('lastSelectedChat', JSON.stringify(chatItem));
+    } catch (error) {
+      console.error("Error saving last selected chat:", error);
     }
   };
 
@@ -1148,6 +1264,25 @@ export default function Chat() {
     loadUsersForGroup();
   };
 
+  // Create a filtered conversations list based on the showAllConversations state
+  const displayedConversations = useMemo(() => {
+    if (!Array.isArray(allUsers)) return [];
+
+    // Sort by latest message timestamp if available
+    const sortedConversations = [...allUsers].sort((a, b) => {
+      const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
+      const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
+      return timeB - timeA; // Sort in descending order (newest first)
+    });
+
+    return showAllConversations ? sortedConversations : sortedConversations.slice(0, 7);
+  }, [allUsers, showAllConversations]);
+
+  // Function to toggle showing all conversations
+  const toggleShowAllConversations = () => {
+    setShowAllConversations(prevState => !prevState);
+  };
+
   return (
     <View className="flex-1 bg-white">
       {/* Header */}
@@ -1481,12 +1616,26 @@ export default function Chat() {
                 </View>
               </View>
               {allUsers.length > 0 ? (
-                <FlatList
-                  data={allUsers}
-                  renderItem={renderConversationItem}
-                  keyExtractor={(item) => item._id}
-                  contentContainerStyle={{ flexGrow: 1 }}
-                />
+                <View className="flex-1">
+                  <FlatList
+                    data={displayedConversations}
+                    renderItem={renderConversationItem}
+                    keyExtractor={(item) => item._id}
+                    contentContainerStyle={{ flexGrow: 1 }}
+                  />
+
+                  {/* Only show the "View All" button if there are more than 10 conversations and not already showing all */}
+                  {(Array.isArray(allUsers) && allUsers.length > 10) && (
+                    <TouchableOpacity
+                      className="py-3 border-t border-gray-200 items-center bg-gray-50"
+                      onPress={toggleShowAllConversations}
+                    >
+                      <Text className="text-blue-500 font-medium">
+                        {showAllConversations ? "Hiển thị ít hơn" : `Xem tất cả (${allUsers.length})`}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ) : (
                 <View className="flex-1 items-center justify-center">
                   <Text className="text-gray-500">Không có cuộc hội thoại nào</Text>
