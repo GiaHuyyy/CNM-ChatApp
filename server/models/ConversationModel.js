@@ -76,6 +76,13 @@ const messageSchema = new mongoose.Schema(
         ref: "User",
       },
     },
+    sharedContent: {
+      originalText: String,
+      originalSender: String,
+      originalImage: String,
+      originalFile: String,
+      originalFileName: String,
+    },
   },
   {
     timestamps: true,
