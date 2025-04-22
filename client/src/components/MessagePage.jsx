@@ -27,11 +27,11 @@ import {
   faTrash,
   faUsers,
   faVideo,
-  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { useSelector } from "react-redux";
 import PropTypes from "prop-types";
 import commingSoon from "../helpers/commingSoon";
+// eslint-disable-next-line no-unused-vars
 import uploadFileToS3 from "../helpers/uploadFileToS3";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
@@ -198,6 +198,7 @@ export default function MessagePage() {
           name: groupData?.name,
           isGroup: groupData?.isGroup,
           membersCount: groupData?.members?.length || 0,
+          profilePic: groupData?.profilePic, // Log the profilePic to verify it's coming from server
         });
         setAllMessages(groupData?.messages || []);
         setConversation(groupData);
@@ -208,7 +209,10 @@ export default function MessagePage() {
         setDataUser({
           _id: groupData._id,
           name: groupName,
-          profilePic: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=random`,
+          // Use the actual profilePic if available, otherwise fallback to generated avatar
+          profilePic:
+            groupData?.profilePic ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=random`,
           isGroup: true,
           members: groupData.members || [],
           groupAdmin: groupData.groupAdmin,
@@ -607,6 +611,8 @@ export default function MessagePage() {
       /đã rời khỏi nhóm/i,
       /đã xóa/i,
       /đã cập nhật/i,
+      /đã thay đổi tên nhóm/i,
+      /đã thay đổi ảnh nhóm/i,
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));
@@ -744,7 +750,7 @@ export default function MessagePage() {
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
-      {/* Header */}
+        {/* Header */}
         {(dataUser._id || isLoading) && (
           <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
             {isLoading ? (
@@ -1147,6 +1153,7 @@ export default function MessagePage() {
           </section>
         </div>
 
+        {/* Footer input chat */}
         {!isLoading && !loadError && (
           <footer className="relative">
             <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">

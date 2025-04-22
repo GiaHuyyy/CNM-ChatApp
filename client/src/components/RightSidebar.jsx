@@ -12,10 +12,14 @@ import {
   faTrash,
   faUsers,
   faFilePen,
+  faMicrophone,
+  faMicrophoneSlash,
 } from "@fortawesome/free-solid-svg-icons";
 import commingSoon from "../helpers/commingSoon";
 import { format } from "date-fns";
 import ImageViewerModal from "./ImageViewerModal";
+import EditGroupModal from "./EditGroupModal";
+import { toast } from "sonner";
 
 // Action Group Button component
 const ActionGroupButton = ({ icon, title, handleOnClick }) => {
@@ -157,18 +161,33 @@ export default function RightSidebar({
   onLeaveGroup,
   onDeleteConversation,
   onRemoveMember,
+  onToggleMute,
   showContextMenu,
   setShowContextMenu,
 }) {
   const [activeTab, setActiveTab] = useState("Anh/Video");
-
   const [showImageModal, setShowImageModal] = useState(false);
-const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImage, setSelectedImage] = useState("");
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
 
-const handleImageClick = (imageUrl) => {
-  setSelectedImage(imageUrl);
-  setShowImageModal(true);
-};
+  const isMemberMuted = (member, mutedMembers) => {
+    if (!mutedMembers || !Array.isArray(mutedMembers) || mutedMembers.length === 0) {
+      return false;
+    }
+
+    const memberId = typeof member._id === "object" ? member._id.toString() : member._id.toString();
+
+    return mutedMembers.some((mutedId) => {
+      const mutedIdStr =
+        typeof mutedId === "object" ? (mutedId._id ? mutedId._id.toString() : mutedId.toString()) : mutedId.toString();
+      return mutedIdStr === memberId;
+    });
+  };
+
+  const handleImageClick = (imageUrl) => {
+    setSelectedImage(imageUrl);
+    setShowImageModal(true);
+  };
 
   const handleContextMenuChange = (menu) => {
     setShowContextMenu(menu);
@@ -179,7 +198,18 @@ const handleImageClick = (imageUrl) => {
     setActiveTab(tab);
   };
 
-  // Render content for Anh/Video, Files, Links
+  const handleEditGroupInfo = () => {
+    if (dataUser.isGroup && user._id === dataUser.groupAdmin?._id) {
+      setShowEditGroupModal(true);
+    } else if (dataUser.isGroup) {
+      toast.warning(("Tính năng này chỉ dành cho admin!"), {
+        position: "center-center",
+      });
+    } else {
+      commingSoon();
+    }
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "Anh/Video":
@@ -241,7 +271,7 @@ const handleImageClick = (imageUrl) => {
             </button>
             <div className="flex items-center space-x-1">
               <span className="text-base font-semibold">{dataUser.name}</span>
-              <button>
+              <button onClick={handleEditGroupInfo}>
                 <FontAwesomeIcon icon={faEdit} width={20} />
               </button>
             </div>
@@ -395,6 +425,15 @@ const handleImageClick = (imageUrl) => {
       )}
 
       {showImageModal && <ImageViewerModal fileUrl={selectedImage} onClose={() => setShowImageModal(false)} />}
+
+      {showEditGroupModal && (
+        <EditGroupModal
+          isOpen={showEditGroupModal}
+          onClose={() => setShowEditGroupModal(false)}
+          group={dataUser}
+          user={user}
+        />
+      )}
     </div>
   );
 }
@@ -410,6 +449,7 @@ RightSidebar.propTypes = {
   onLeaveGroup: PropTypes.func.isRequired,
   onDeleteConversation: PropTypes.func.isRequired,
   onRemoveMember: PropTypes.func.isRequired,
+  onToggleMute: PropTypes.func.isRequired,
   showContextMenu: PropTypes.string.isRequired,
   setShowContextMenu: PropTypes.func.isRequired,
 };

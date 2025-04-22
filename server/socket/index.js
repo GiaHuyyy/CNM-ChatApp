@@ -6,6 +6,7 @@ const getUserDetailsFromToken = require("../helpers/getUserDetailsFromToken");
 // Import handlers
 const messageHandler = require("./handlers/messageHandler");
 const groupHandler = require("./handlers/groupHandler");
+const groupUpdateHandler = require("./handlers/groupUpdateHandler");
 const callHandler = require("./handlers/callHandler");
 const userHandler = require("./handlers/userHandler");
 const conversationHandler = require("./handlers/conversationHandler");
@@ -13,7 +14,7 @@ const conversationHandler = require("./handlers/conversationHandler");
 const setupSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: [process.env.FRONTEND_URL, 'http://localhost:8081'],
+      origin: [process.env.FRONTEND_URL, "http://localhost:8081"],
       credentials: true,
     },
   });
@@ -51,6 +52,7 @@ const setupSocket = (server) => {
       // Initialize all handlers
       messageHandler(io, socket, userId);
       groupHandler(io, socket, userId);
+      groupUpdateHandler(io, socket, userId); // Add the new handler here
       callHandler(io, socket, userId, onlineUser);
       userHandler(io, socket, userId, onlineUser);
       conversationHandler(io, socket, userId, onlineUser);
@@ -60,22 +62,22 @@ const setupSocket = (server) => {
         try {
           const { receiverId } = data;
           const receiverSocketId = connectedUsers.get(receiverId);
-          
+
           const sender = {
             _id: socket.user._id,
             name: socket.user.name,
             email: socket.user.email,
-            profilePic: socket.user.profilePic
+            profilePic: socket.user.profilePic,
           };
 
           if (receiverSocketId) {
             io.to(receiverSocketId).emit("receiveFriendRequest", {
               ...data,
-              sender
+              sender,
             });
           }
         } catch (error) {
-          socket.emit('error', { message: error.message });
+          socket.emit("error", { message: error.message });
         }
       });
 
@@ -85,7 +87,6 @@ const setupSocket = (server) => {
         onlineUser.delete(userIdStr);
         io.emit("onlineUser", Array.from(onlineUser));
       });
-
     } catch (error) {
       console.error("Error in socket connection:", error);
     }
