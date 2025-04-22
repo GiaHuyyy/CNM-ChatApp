@@ -1,4 +1,7 @@
-const url = `https://api.cloudinary.com/v1_1/daky9cjxu/auto/upload`;
+
+import { CLOUDINARY_NAME } from "@env"
+
+const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_NAME}/auto/upload`;
 
 const uploadFileToCloud = async (file) => {
     const formData = new FormData();

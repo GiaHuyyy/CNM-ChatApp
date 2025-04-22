@@ -744,6 +744,7 @@ export default function MessagePage() {
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
+      {/* Header */}
         {(dataUser._id || isLoading) && (
           <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
             {isLoading ? (
@@ -819,6 +820,7 @@ export default function MessagePage() {
 
         <div className="flex flex-1 overflow-hidden">
           <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
+            {/* Loading chat */}
             {isLoading ? (
               <div className="flex h-full items-center justify-center">
                 <div className="flex flex-col items-center">
@@ -846,8 +848,10 @@ export default function MessagePage() {
                 </div>
               </div>
             ) : (
+              // Render all messages
               <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
                 {allMessages.map((message) => {
+                  // If the message is a system notification center it
                   if (isSystemNotification(message.text)) {
                     return (
                       <div key={message._id} className="flex justify-center">
@@ -859,6 +863,7 @@ export default function MessagePage() {
                         </div>
                       </div>
                     );
+                    // If the message is (cuộc gọi thoại) or (cuộc gọi video) align left or right
                   } else if (isCallMessage(message)) {
                     const isCurrentUser = message.msgByUserId === user._id;
                     let sender = null;
@@ -932,6 +937,7 @@ export default function MessagePage() {
                         </div>
                       </div>
                     );
+                    // If the message is a text, image, video, file align left or right
                   } else {
                     const isCurrentUser = message.msgByUserId === user._id;
                     let sender = null;

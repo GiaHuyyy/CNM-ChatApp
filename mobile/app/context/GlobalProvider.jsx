@@ -8,10 +8,10 @@ export const useGlobalContext = () => useContext(GlobalContext);
 
 // Create the provider component
 const GlobalProvider = ({ children }) => {
-  const [isLoginWithEmail, setIsLoginWithEmail] = useState(() => {
-    const savedState = localStorage.getItem("authState");
-    return savedState !== null ? JSON.parse(savedState) : null;
-  });
+  // const [isLoginWithEmail, setIsLoginWithEmail] = useState(() => {
+  //   const savedState = localStorage.getItem("authState");
+  //   return savedState !== null ? JSON.parse(savedState) : null;
+  // });
   const [isLoginWithPhone, setIsLoginWithPhone] = useState(false);
   const [socketConnection, setSocketConnection] = useState(null);
   const [seenMessage, setSeenMessage] = useState(false);
@@ -61,11 +61,11 @@ const GlobalProvider = ({ children }) => {
     }
 
     // Listen for socket connection from Home component
-    window.addEventListener("socketConnected", (e) => {
-      if (e.detail && e.detail.socket) {
-        handleSocketConnection(e.detail.socket);
-      }
-    });
+    // window.addEventListener("socketConnected", (e) => {
+    //   if (e.detail && e.detail.socket) {
+    //     handleSocketConnection(e.detail.socket);
+    //   }
+    // });
 
     return () => {
       window.removeEventListener("socketConnected", handleSocketConnection);
@@ -73,10 +73,10 @@ const GlobalProvider = ({ children }) => {
   }, []);
 
   return (
-    <GlobalContext.Provider 
-      value={{ 
-        isLoginWithEmail, 
-        setIsLoginWithEmail,
+    <GlobalContext.Provider
+      value={{
+        // isLoginWithEmail,
+        // setIsLoginWithEmail,
         isLoginWithPhone,
         setIsLoginWithPhone,
         socketConnection,
