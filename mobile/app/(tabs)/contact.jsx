@@ -11,11 +11,14 @@ import {
 } from 'react-native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
-  faUserFriends,
   faUserPlus,
-  faCircle,
   faSearch,
-  faUser,
+  faPhone,
+  faVideo,
+  faAddressBook,
+  faBirthdayCake,
+  faUserFriends,
+  faAngleRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -28,9 +31,11 @@ import {
   clearError,
 } from '../redux/contactSlice';
 
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
 const ContactScreen = () => {
   const dispatch = useDispatch();
-  const [selectedTab, setSelectedTab] = useState('friends');
+  const [activeTab, setActiveTab] = useState('friends');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -52,7 +57,6 @@ const ContactScreen = () => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -87,106 +91,130 @@ const ContactScreen = () => {
     }
   };
 
-  const TabButton = ({ title, icon, isSelected, onPress }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      className={`flex-1 flex-row items-center justify-center py-3 ${
-        isSelected ? 'border-b-2 border-primary' : ''
-      }`}
-    >
-      <FontAwesomeIcon
-        icon={icon}
-        size={20}
-        color={isSelected ? '#0068FF' : '#6b7280'}
-      />
-      <Text
-        className={`ml-2 font-medium ${
-          isSelected ? 'text-primary' : 'text-gray-500'
-        }`}
-      >
-        {title}
-      </Text>
-    </TouchableOpacity>
-  );
+  // Nhóm danh bạ theo chữ cái
+  const groupedContacts = contacts.reduce((groups, contact) => {
+    const firstLetter = contact.name.charAt(0).toUpperCase();
+    if (!groups[firstLetter]) {
+      groups[firstLetter] = [];
+    }
+    groups[firstLetter].push(contact);
+    return groups;
+  }, {});
 
-  const FriendItem = ({ friend }) => (
-    <TouchableOpacity className="flex-row items-center p-4 border-b border-gray-100">
-      <View className="relative">
-        <Image
-          source={{ uri: friend.avatar || 'https://via.placeholder.com/50' }}
-          className="w-12 h-12 rounded-full"
-        />
-        {friend.isOnline && (
-          <View className="absolute bottom-0 right-0 bg-status-online w-3 h-3 rounded-full border-2 border-white" />
-        )}
-      </View>
-      <View className="ml-4 flex-1">
-        <Text className="text-base font-semibold text-text-primary">
-          {friend.name}
-        </Text>
-        <Text className="text-sm text-text-secondary">
-          {friend.isOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderQuickFeatures = () => (
+    <View className="bg-white mb-2">
+      <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+        <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center">
+          <FontAwesomeIcon icon={faUserPlus} size={20} color="#0068FF" />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="text-base font-semibold">Lời mời kết bạn ({friendRequests.length})</Text>
+        </View>
+        <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+      </TouchableOpacity>
 
-  const FriendRequestItem = ({ request }) => (
-    <View className="flex-row items-center p-4 border-b border-gray-100">
-      <Image
-        source={{ uri: request.sender.avatar || 'https://via.placeholder.com/50' }}
-        className="w-12 h-12 rounded-full"
-      />
-      <View className="ml-4 flex-1">
-        <Text className="text-base font-semibold text-text-primary">
-          {request.sender.name}
-        </Text>
-        <Text className="text-sm text-text-secondary">
-          {request.mutualFriends} bạn chung
-        </Text>
-      </View>
-      <View className="flex-row">
-        <TouchableOpacity
-          onPress={() => handleAcceptRequest(request._id)}
-          className="bg-primary px-4 py-2 rounded-button mr-2"
-        >
-          <Text className="text-white font-medium">Đồng ý</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleRejectRequest(request._id)}
-          className="bg-gray-200 px-4 py-2 rounded-button"
-        >
-          <Text className="text-gray-700 font-medium">Từ chối</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity className="flex-row items-center px-4 py-3 border-b border-gray-100">
+        <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center">
+          <FontAwesomeIcon icon={faAddressBook} size={20} color="#0068FF" />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="text-base font-semibold">Danh bạ máy</Text>
+          <Text className="text-sm text-gray-500">Liên hệ có dùng Zalo</Text>
+        </View>
+        <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+      </TouchableOpacity>
+
+      <TouchableOpacity className="flex-row items-center px-4 py-3">
+        <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center">
+          <FontAwesomeIcon icon={faBirthdayCake} size={20} color="#0068FF" />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="text-base font-semibold">Sinh nhật</Text>
+          <Text className="text-sm text-gray-500">Có thể bạn muốn gửi lời chúc</Text>
+        </View>
+        <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+      </TouchableOpacity>
     </View>
   );
 
-  const SearchResultItem = ({ user }) => (
-    <TouchableOpacity className="flex-row items-center p-4 border-b border-gray-100">
-      <View className="relative">
-        <Image
-          source={{ uri: user.avatar || 'https://via.placeholder.com/50' }}
-          className="w-12 h-12 rounded-full"
-        />
-        {user.isOnline && (
-          <View className="absolute bottom-0 right-0 bg-status-online w-3 h-3 rounded-full border-2 border-white" />
-        )}
-      </View>
-      <View className="ml-4 flex-1">
-        <Text className="text-base font-semibold text-text-primary">
-          {user.name}
+  const renderTabs = () => (
+    <View className="flex-row bg-white px-4 py-2 border-b border-gray-200">
+      <TouchableOpacity
+        onPress={() => setActiveTab('friends')}
+        className={`mr-6 pb-2 ${activeTab === 'friends' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'friends' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          Bạn bè
         </Text>
-        <Text className="text-sm text-text-secondary">
-          {user.email}
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setActiveTab('groups')}
+        className={`mr-6 pb-2 ${activeTab === 'groups' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'groups' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          Nhóm
         </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setActiveTab('oa')}
+        className={`pb-2 ${activeTab === 'oa' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'oa' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          OA
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderContactList = () => (
+    <View className="flex-1 bg-white">
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {contacts.length}</Text>
+        <Text className="text-gray-500">Mới truy cập</Text>
       </View>
-      {!contacts.some(contact => contact._id === user._id) && (
-        <TouchableOpacity className="bg-primary px-4 py-2 rounded-button">
-          <Text className="text-white font-medium">Kết bạn</Text>
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
+
+      <ScrollView className="flex-1">
+        {renderQuickFeatures()}
+        
+        {Object.keys(groupedContacts).sort().map(letter => (
+          <View key={letter}>
+            <Text className="px-4 py-2 bg-gray-50 text-gray-500">{letter}</Text>
+            {groupedContacts[letter].map(contact => (
+              <TouchableOpacity
+                key={contact._id}
+                className="flex-row items-center px-4 py-3 border-b border-gray-100"
+              >
+                <Image
+                  source={{ uri: contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}` }}
+                  className="w-12 h-12 rounded-full"
+                />
+                <Text className="ml-3 flex-1 text-base">{contact.name}</Text>
+                <View className="flex-row">
+                  <TouchableOpacity className="mr-4">
+                    <FontAwesomeIcon icon={faPhone} size={20} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity>
+                    <FontAwesomeIcon icon={faVideo} size={20} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Alphabet Index */}
+      <View className="absolute right-0 top-0 bottom-0 w-6 bg-transparent justify-center">
+        {ALPHABET.map(letter => (
+          <TouchableOpacity
+            key={letter}
+            className="py-0.5 items-center"
+          >
+            <Text className="text-xs text-blue-500">{letter}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   );
 
   if (loading) {
@@ -198,76 +226,31 @@ const ContactScreen = () => {
   }
 
   return (
-    <View className="flex-1 bg-white">
-      <View className="bg-white py-4 px-4 border-b border-gray-200">
-        <Text className="text-xl font-bold text-text-primary">Danh bạ</Text>
-      </View>
-
-      <View className="p-3 border-b border-gray-200">
-        <View className="flex-row items-center bg-background-dark rounded-button px-3 py-2">
-          <FontAwesomeIcon icon={faSearch} size={16} color="#666" />
-          <TextInput
-            className="flex-1 ml-2 text-text-primary text-base"
-            placeholder="Tìm kiếm người dùng..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
-
-      {!searchQuery && (
-        <View className="flex-row border-b border-gray-200">
-          <TabButton
-            title="Bạn bè"
-            icon={faUserFriends}
-            isSelected={selectedTab === 'friends'}
-            onPress={() => setSelectedTab('friends')}
-          />
-          <TabButton
-            title="Lời mời kết bạn"
-            icon={faUserPlus}
-            isSelected={selectedTab === 'requests'}
-            onPress={() => setSelectedTab('requests')}
-          />
-        </View>
-      )}
-
-      <ScrollView className="flex-1">
-        {searchQuery ? (
-          searchLoading ? (
-            <View className="flex-1 items-center justify-center p-4">
-              <ActivityIndicator size="small" color="#0068FF" />
+    <View className="flex-1 bg-gray-100">
+      {/* Header */}
+      <View className="bg-[#0068FF] px-4 pt-12 pb-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1">
+            <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
+              <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
+              <TextInput
+                className="flex-1 ml-2 text-white"
+                placeholder="Tìm kiếm"
+                placeholderTextColor="rgba(255,255,255,0.8)"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
             </View>
-          ) : searchResults.length > 0 ? (
-            searchResults.map((user) => (
-              <SearchResultItem key={user._id} user={user} />
-            ))
-          ) : (
-            <View className="p-4 items-center">
-              <Text className="text-text-secondary">Không tìm thấy kết quả</Text>
-            </View>
-          )
-        ) : selectedTab === 'friends' ? (
-          contacts.length > 0 ? (
-            contacts.map((friend) => (
-              <FriendItem key={friend._id} friend={friend} />
-            ))
-          ) : (
-            <View className="p-4 items-center">
-              <Text className="text-text-secondary">Chưa có bạn bè</Text>
-            </View>
-          )
-        ) : friendRequests.length > 0 ? (
-          friendRequests.map((request) => (
-            <FriendRequestItem key={request._id} request={request} />
-          ))
-        ) : (
-          <View className="p-4 items-center">
-            <Text className="text-text-secondary">Không có lời mời kết bạn</Text>
           </View>
-        )}
-      </ScrollView>
+          <TouchableOpacity className="ml-3">
+            <FontAwesomeIcon icon={faUserPlus} size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {renderTabs()}
+      
+      {activeTab === 'friends' && renderContactList()}
     </View>
   );
 };
