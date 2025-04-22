@@ -4,12 +4,19 @@ require("dotenv").config();
 const connectDB = require("./config/connectDB");
 const router = require("./routers/index");
 const cookieParser = require("cookie-parser");
-const { app, server } = require("./socket/index");
+const http = require("http");
+const setupSocket = require("./socket/index");
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const swaggerDocument = YAML.load('./swagger.yaml');
 
-// const app = express();
+const app = express();
+const server = http.createServer(app);
+
+// Setup socket.io
+setupSocket(server);
+
+// Configure middleware
 app.use(
   cors({
     origin: [process.env.FRONTEND_URL, 'http://localhost:8081'],
