@@ -23,6 +23,9 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import ConfirmationModal from './ConfirmationModal';
 
+// Common emoji reactions
+const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+
 const MessageBubble = ({
   message,
   isCurrentUser,
@@ -41,7 +44,14 @@ const MessageBubble = ({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isLongPressed, setIsLongPressed] = useState(false);
   const [showMessageOptions, setShowMessageOptions] = useState(false);
-
+  
+  // Add new state for emoji reaction popup
+  const [showReactionSelector, setShowReactionSelector] = useState(false);
+  const [reactionPosition, setReactionPosition] = useState({ x: 0, y: 0 });
+  
+  // Add local state to track reactions for immediate UI updates
+  const [localReactions, setLocalReactions] = useState(message.reactions || []);
+  
   // Media modal states
   const [showImageModal, setShowImageModal] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -50,6 +60,12 @@ const MessageBubble = ({
   // Refs
   const videoRef = useRef(null);
   const actionMenuTimer = useRef(null);
+  const messageRef = useRef(null);
+
+  // Update local reactions when message reactions change from props
+  useEffect(() => {
+    setLocalReactions(message.reactions || []);
+  }, [message.reactions]);
 
   // Screen dimensions
   const screenWidth = Dimensions.get('window').width;
@@ -88,14 +104,70 @@ const MessageBubble = ({
   const handleQuickLike = (messageId) => {
     if (onReaction) {
       onReaction(messageId, '👍');
+      
+      // Immediately update UI with the reaction
+      addLocalReaction('👍');
     }
   };
 
-  const handleLongPress = () => {
+  // Function to add reaction to local state for immediate UI update
+  const addLocalReaction = (emoji) => {
+    // Check if user already reacted with this emoji
+    const userReactionIndex = localReactions.findIndex(
+      r => r.emoji === emoji && r.userId === 'currentUser' // Use actual userId in real implementation
+    );
+    
+    if (userReactionIndex >= 0) {
+      // User already reacted with this emoji, so remove it (toggle behavior)
+      setLocalReactions(prev => prev.filter((_, index) => index !== userReactionIndex));
+    } else {
+      // Add new reaction
+      setLocalReactions(prev => [
+        ...prev,
+        { emoji, userId: 'currentUser' } // Replace with actual userId
+      ]);
+    }
+  };
+
+  // Updated long press handler to show emoji reactions for all messages
+  const handleLongPress = (event) => {
+    // Get message position for the reaction popup
+    if (messageRef.current && messageRef.current.measureInWindow) {
+      messageRef.current.measureInWindow((x, y, width, height) => {
+        // Position the reaction selector above the message
+        const position = {
+          x: x,
+          y: y - 50, // Position above the message
+        };
+        setReactionPosition(position);
+        setShowReactionSelector(true);
+      });
+    } else {
+      // Fallback position if measure fails
+      setShowReactionSelector(true);
+    }
+    
+    // If it's the user's message, also enable edit/delete options
     if (isCurrentUser && !message.isDeleted) {
       setIsLongPressed(true);
-      setShowMessageOptions(true);
+      // We'll show message options on a separate button in the reaction popup
     }
+  };
+
+  const handleReactionSelect = (emoji) => {
+    if (onReaction) {
+      onReaction(message._id, emoji);
+      
+      // Immediately update UI with the reaction
+      addLocalReaction(emoji);
+    }
+    setShowReactionSelector(false);
+  };
+
+  // Show message options specifically
+  const handleShowMessageOptions = () => {
+    setShowReactionSelector(false);
+    setShowMessageOptions(true);
   };
 
   // Add state for confirmation modal
@@ -227,6 +299,15 @@ const MessageBubble = ({
     );
   }
 
+  // Group reactions by emoji for the reaction counter display
+  const groupedReactions = localReactions.reduce((acc, reaction) => {
+    if (!acc[reaction.emoji]) {
+      acc[reaction.emoji] = [];
+    }
+    acc[reaction.emoji].push(reaction.userId);
+    return acc;
+  }, {});
+
   return (
     <View className="flex-row items-start mb-2 mx-1">
       {!isCurrentUser && (
@@ -238,6 +319,7 @@ const MessageBubble = ({
 
       <View className={`flex-1 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
         <Pressable
+          ref={messageRef}
           onLongPress={handleLongPress}
           delayLongPress={500}
           onPressOut={() => setIsLongPressed(false)}
@@ -257,6 +339,7 @@ const MessageBubble = ({
               <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
             )}
 
+            {/* File content rendering */}
             {hasImage && (
               <TouchableOpacity
                 onPress={handleImageView}
@@ -311,14 +394,69 @@ const MessageBubble = ({
           </View>
         </Pressable>
 
-        {message.reactions && message.reactions.length > 0 && (
-          <View className="bg-white rounded-full px-1.5 py-0.5 shadow-sm flex-row absolute -bottom-2.5 right-2">
-            {message.reactions.map((reaction, index) => (
-              <Text key={`${reaction.userId}-${index}`} className="text-xs">{reaction.emoji}</Text>
+        {/* Improved Reactions display */}
+        {localReactions && localReactions.length > 0 && (
+          <View className={`flex-row mt-1 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+            {Object.entries(groupedReactions).map(([emoji, users], index) => (
+              <TouchableOpacity 
+                key={`${emoji}-${index}`} 
+                className="bg-white rounded-full shadow-sm px-2 py-1 mr-1 flex-row items-center"
+                onPress={() => handleReactionSelect(emoji)}
+              >
+                <Text style={{ fontSize: 14 }}>{emoji}</Text>
+                <Text className="text-xs text-gray-600 ml-1">{users.length}</Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
       </View>
+
+      {/* Emoji Reaction Selector Popup */}
+      <Modal
+        transparent={true}
+        visible={showReactionSelector}
+        animationType="fade"
+        onRequestClose={() => setShowReactionSelector(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' }}
+          activeOpacity={1}
+          onPress={() => setShowReactionSelector(false)}
+        >
+          <View 
+            className="absolute bg-white rounded-full py-2 px-1 shadow-lg flex-row"
+            style={{ 
+              left: reactionPosition.x, 
+              top: reactionPosition.y,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 3.84,
+              elevation: 5
+            }}
+          >
+            {EMOJI_REACTIONS.map((emoji, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={() => handleReactionSelect(emoji)}
+                className="mx-2 items-center justify-center"
+              >
+                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+            
+            {/* More options button for user's own messages */}
+            {isCurrentUser && !message.isDeleted && (
+              <TouchableOpacity
+                className="ml-2 bg-gray-200 rounded-full w-10 h-10 items-center justify-center"
+                onPress={handleShowMessageOptions}
+              >
+                <FontAwesomeIcon icon={faEllipsisVertical} size={16} color="#555" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Edit/Delete Menu Modal */}
       <Modal
