@@ -20,6 +20,11 @@ import { format } from "date-fns";
 import ImageViewerModal from "./ImageViewerModal";
 import EditGroupModal from "./EditGroupModal";
 import { toast } from "sonner";
+import handleRemoveMember from "./handles/handleRemoveMember";
+import handleToggleMute from "./handles/handleToggleMute";
+import { useNavigate } from "react-router-dom";
+import handleLeaveGroup from "./handles/handleLeaveGroup";
+import handleDeleteConversation from "./handles/handleDeleteConversation";
 
 // Action Group Button component
 const ActionGroupButton = ({ icon, title, handleOnClick }) => {
@@ -151,38 +156,25 @@ MediaItem.propTypes = {
 };
 
 export default function RightSidebar({
+  socketConnection,
+  params,
   isVisible,
   dataUser,
   user,
   photoVideoMessages,
   fileMessages,
   linkMessages,
-  onAddMember,
-  onLeaveGroup,
-  onDeleteConversation,
-  onRemoveMember,
-  onToggleMute,
+  handleAddMember,
+  // handleDeleteConversation,
   showContextMenu,
   setShowContextMenu,
+  setConfirmModal,
 }) {
   const [activeTab, setActiveTab] = useState("Anh/Video");
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
-
-  const isMemberMuted = (member, mutedMembers) => {
-    if (!mutedMembers || !Array.isArray(mutedMembers) || mutedMembers.length === 0) {
-      return false;
-    }
-
-    const memberId = typeof member._id === "object" ? member._id.toString() : member._id.toString();
-
-    return mutedMembers.some((mutedId) => {
-      const mutedIdStr =
-        typeof mutedId === "object" ? (mutedId._id ? mutedId._id.toString() : mutedId.toString()) : mutedId.toString();
-      return mutedIdStr === memberId;
-    });
-  };
+  const navigate = useNavigate();
 
   const handleImageClick = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -210,8 +202,18 @@ export default function RightSidebar({
     }
   };
 
-  const handleToggleMute = (memberId, memberName, isMuted) => {
-    onToggleMute(memberId, memberName, isMuted);
+  const isMemberMuted = (member, mutedMembers) => {
+    if (!mutedMembers || !Array.isArray(mutedMembers) || mutedMembers.length === 0) {
+      return false;
+    }
+
+    const memberId = typeof member._id === "object" ? member._id.toString() : member._id.toString();
+
+    return mutedMembers.some((mutedId) => {
+      const mutedIdStr =
+        typeof mutedId === "object" ? (mutedId._id ? mutedId._id.toString() : mutedId.toString()) : mutedId.toString();
+      return mutedIdStr === memberId;
+    });
   };
 
   const renderTabContent = () => {
@@ -282,7 +284,7 @@ export default function RightSidebar({
             <div className="mt-3 flex w-full items-center justify-between">
               <ActionGroupButton icon={faBell} title="Tăt thông báo" handleOnClick={commingSoon} />
               <ActionGroupButton icon={faThumbTack} title="Ghim hội thoại" handleOnClick={commingSoon} />
-              <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={onAddMember} />
+              <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={handleAddMember} />
               <ActionGroupButton icon={faGear} title="Quản lý nhóm" handleOnClick={commingSoon} />
             </div>
           </div>
@@ -341,9 +343,9 @@ export default function RightSidebar({
               className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
               onClick={() => {
                 if (dataUser.isGroup && user._id !== dataUser.groupAdmin?._id) {
-                  onLeaveGroup();
+                  handleLeaveGroup({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
                 } else {
-                  onDeleteConversation();
+                  handleDeleteConversation({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
                 }
               }}
             >
@@ -368,7 +370,7 @@ export default function RightSidebar({
           <div className="mx-4">
             <button
               className="flex h-8 w-full items-center justify-center gap-x-1 rounded-sm bg-[#ebe7eb] text-sm hover:bg-[#e0dde0]"
-              onClick={onAddMember}
+              onClick={handleAddMember}
             >
               <FontAwesomeIcon icon={faUsers} width={20} />
               Thêm thành viên
@@ -398,7 +400,16 @@ export default function RightSidebar({
                 <div className="flex space-x-2">
                   <button
                     onClick={() =>
-                      handleToggleMute(member._id, member.name, isMemberMuted(member, dataUser.mutedMembers))
+                      handleToggleMute({
+                        socketConnection,
+                        setConfirmModal,
+                        params,
+                        user,
+                        dataUser,
+                        memberId: member._id,
+                        memberName: member.name,
+                        isMuted: isMemberMuted(member, dataUser.mutedMembers),
+                      })
                     }
                     className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
                     title={isMemberMuted(member, dataUser.mutedMembers) ? "Bỏ tắt quyền chat" : "Tắt quyền chat"}
@@ -410,7 +421,17 @@ export default function RightSidebar({
                     />
                   </button>
                   <button
-                    onClick={() => onRemoveMember(member._id, member.name)}
+                    onClick={() =>
+                      handleRemoveMember({
+                        socketConnection,
+                        setConfirmModal,
+                        params,
+                        user,
+                        dataUser,
+                        memberId: member._id,
+                        memberName: member.name,
+                      })
+                    }
                     className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
                     title="Xóa thành viên"
                   >
@@ -467,9 +488,9 @@ RightSidebar.propTypes = {
   fileMessages: PropTypes.array.isRequired,
   linkMessages: PropTypes.array.isRequired,
   onAddMember: PropTypes.func.isRequired,
-  onLeaveGroup: PropTypes.func.isRequired,
-  onDeleteConversation: PropTypes.func.isRequired,
-  onRemoveMember: PropTypes.func.isRequired,
+  handleLeaveGroup: PropTypes.func.isRequired,
+  handleDeleteConversation: PropTypes.func.isRequired,
+  handleRemoveMember: PropTypes.func.isRequired,
   onToggleMute: PropTypes.func.isRequired,
   showContextMenu: PropTypes.string.isRequired,
   setShowContextMenu: PropTypes.func.isRequired,

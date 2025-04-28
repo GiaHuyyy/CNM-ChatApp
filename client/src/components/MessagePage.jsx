@@ -1,91 +1,34 @@
 import {
-  faAddressCard,
-  faBookmark,
-  faFaceLaughSquint,
-  faFaceSmile,
-  faFolderClosed,
-  faImage,
-  faThumbsUp,
-} from "@fortawesome/free-regular-svg-icons";
-import {
-  faArrowRotateRight,
-  faBars,
-  faBolt,
-  faCamera,
-  faEllipsis,
   faFilePen,
-  faMagnifyingGlass,
-  faPaperPlane,
   faPhone,
-  faPlus,
-  faQuoteRight,
-  faReply,
   faTrash,
-  faUsers,
   faVideo,
-  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import PropTypes from "prop-types";
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useGlobalContext } from "../context/GlobalProvider";
-import commingSoon from "../helpers/commingSoon";
-// eslint-disable-next-line no-unused-vars
 import { format } from "date-fns";
-import EmojiPicker from "emoji-picker-react";
-import { toast } from "sonner";
 import { useCallContext } from "../context/CallProvider";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
+// eslint-disable-next-line no-unused-vars
+import uploadFileToS3 from "../helpers/uploadFileToS3";
+
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmModal from "./ConfirmModal";
 import ImageViewerModal from "./ImageViewerModal";
-import ReactionDisplay from "./ReactionDisplay";
 import RightSidebar from "./RightSidebar";
 import ShareMessageModal from "./ShareMessageModal";
-
-// Button component
-const Button = ({ icon, width, title, styleIcon, isUpload, id, handleOnClick, disabled }) => {
-  return isUpload ? (
-    <label
-      htmlFor={disabled ? "" : id}
-      title={title}
-      onClick={disabled ? null : handleOnClick}
-      className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-[3px] ${
-        disabled ? "cursor-not-allowed opacity-50" : "hover:bg-[#ebe7eb]"
-      }`}
-    >
-      <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
-    </label>
-  ) : (
-    <button
-      title={title}
-      onClick={disabled ? null : handleOnClick}
-      disabled={disabled}
-      className={`flex h-8 w-8 items-center justify-center rounded-[3px] ${
-        disabled ? "cursor-not-allowed opacity-50" : "hover:bg-[#ebe7eb]"
-      }`}
-    >
-      <FontAwesomeIcon icon={icon} width={width} className={`${styleIcon}`} />
-    </button>
-  );
-};
-
-Button.propTypes = {
-  icon: PropTypes.object,
-  width: PropTypes.number,
-  title: PropTypes.string,
-  styleIcon: PropTypes.string,
-  isUpload: PropTypes.bool,
-  id: PropTypes.string,
-  handleOnClick: PropTypes.func,
-  disabled: PropTypes.bool,
-};
+import Header from "./chat/Header";
+import Footer from "./chat/Footer";
+import handleAudioCall from "./handles/handleAudioCall";
+import handleVideoCall from "./handles/handleVideoCall";
+import MessageIsCall from "./chat/MessageIsCall";
+import MessageIsNormal from "./chat/MessageIsNormal";
 
 export default function MessagePage() {
   const params = useParams();
-  const navigate = useNavigate();
   const { socketConnection, seenMessage, setSeenMessage } = useGlobalContext();
   const user = useSelector((state) => state?.user);
   const callContext = useCallContext();
@@ -121,9 +64,6 @@ export default function MessagePage() {
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [openTrash, setOpenTrash] = useState(false);
-
-  const [openEmoji, setOpenEmoji] = useState(false);
-  const emojiPickerRef = useRef(null);
 
   const [hoveredLikeMessage, setHoveredLikeMessage] = useState(null);
   const [hoveredMessage, setHoveredMessage] = useState(null);
@@ -286,21 +226,6 @@ export default function MessagePage() {
       inputRef.current?.focus();
     }
   }, [seenMessage]);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
-        setOpenEmoji(false);
-      }
-    }
-
-    if (openEmoji) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [openEmoji]);
 
   useEffect(() => {
     if (socketConnection && params.userId && !dataUser.isGroup) {
@@ -530,116 +455,6 @@ export default function MessagePage() {
     );
   };
 
-  const handleInputFocus = () => {
-    setSeenMessage(true);
-  };
-
-  const handleLeaveGroup = () => {
-    if (!socketConnection || !dataUser.isGroup) return;
-
-    setConfirmModal({
-      isOpen: true,
-      title: "Rời nhóm chat",
-      message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-      action: () => {
-        let cleanUserId;
-
-        if (typeof user._id === "object" && user._id !== null) {
-          cleanUserId = user._id.toString();
-        } else if (typeof user._id === "string") {
-          cleanUserId = user._id;
-        } else {
-          cleanUserId = user._id;
-          console.warn("Unexpected user ID format:", user._id);
-        }
-
-        socketConnection.emit("leaveGroup", {
-          groupId: params.userId,
-          userId: cleanUserId,
-        });
-
-        socketConnection.once("leftGroup", (response) => {
-          if (response.success) {
-            toast.success(response.message);
-            navigate("/chat");
-          } else {
-            toast.error(response.message);
-          }
-        });
-      },
-    });
-  };
-
-  const handleDeleteConversation = () => {
-    if (!socketConnection) return;
-
-    setConfirmModal({
-      isOpen: true,
-      title: dataUser.isGroup ? "Xóa nhóm chat" : "Xóa lịch sử trò chuyện",
-      message: dataUser.isGroup
-        ? "Bạn có chắc chắn muốn xóa nhóm chat này? Thao tác này không thể hoàn tác."
-        : "Bạn có chắc chắn muốn xóa lịch sử trò chuyện này? Thao tác này không thể hoàn tác.",
-      action: () => {
-        // Get clean IDs
-        const cleanUserId = typeof user._id === "object" ? user._id.toString() : user._id;
-        const cleanConversationId = params.userId;
-        // Send delete request
-        socketConnection.emit("deleteConversation", {
-          conversationId: cleanConversationId,
-          userId: cleanUserId,
-        });
-
-        // Set up one-time handler for response
-        socketConnection.once("conversationDeleted", (response) => {
-          if (response.success) {
-            // Force refresh sidebar
-            socketConnection.emit("sidebar", cleanUserId);
-
-            toast.success("Cuộc trò chuyện đã được xóa thành công");
-
-            // Navigate away first
-            navigate("/chat", { replace: true });
-          } else {
-            toast.error("Không thể xóa cuộc trò chuyện");
-          }
-        });
-      },
-    });
-  };
-
-  const handleRemoveMember = (memberId, memberName) => {
-    if (!socketConnection || !dataUser.isGroup) return;
-
-    if (user._id !== dataUser.groupAdmin?._id) {
-      toast.error("Chỉ quản trị viên mới có thể xóa thành viên");
-      return;
-    }
-
-    setConfirmModal({
-      isOpen: true,
-      title: "Xóa thành viên khỏi nhóm",
-      message: `Bạn có chắc chắn muốn xóa ${memberName} khỏi nhóm?`,
-      action: () => {
-        const cleanAdminId = typeof user._id === "object" ? user._id.toString() : user._id;
-        const cleanMemberId = typeof memberId === "object" ? memberId.toString() : memberId;
-
-        socketConnection.emit("removeMemberFromGroup", {
-          groupId: params.userId,
-          memberId: cleanMemberId,
-          adminId: cleanAdminId,
-        });
-
-        socketConnection.once("memberRemovedFromGroup", (response) => {
-          if (response.success) {
-            toast.success(response.message);
-          } else {
-            toast.error(response.message);
-          }
-        });
-      },
-    });
-  };
-
   const handleAddMember = () => {
     setShowAddMemberModal(true);
   };
@@ -674,9 +489,9 @@ export default function MessagePage() {
     });
   };
 
-  const isDeletedMessage = (message) => {
-    return message.isDeleted;
-  };
+  // const isDeletedMessage = (message) => {
+  //   return message.isDeleted;
+  // };
 
   const photoVideoMessages = allMessages.filter(
     (message) =>
@@ -729,80 +544,6 @@ export default function MessagePage() {
     handleAddReaction(messageId, "👍");
   };
 
-  const handleAudioCall = () => {
-    if (dataUser.isGroup) {
-      toast.error("Không thể gọi điện cho nhóm chat");
-      return;
-    }
-
-    if (!callUser) {
-      toast.error("Chức năng gọi điện đang không khả dụng");
-      return;
-    }
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast.error("Trình duyệt của bạn không hỗ trợ cuộc gọi");
-      return;
-    }
-
-    if (!dataUser.online) {
-      toast.error("Người dùng hiện không trực tuyến, không thể gọi điện");
-      return;
-    }
-
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        stream.getTracks().forEach((track) => track.stop());
-        callUser(params.userId, dataUser.name, dataUser.profilePic, false);
-      })
-      .catch((err) => {
-        console.error("Permission check failed:", err);
-        if (err.name === "NotAllowedError") {
-          toast.error("Vui lòng cấp quyền truy cập microphone để thực hiện cuộc gọi");
-        } else {
-          toast.error("Không thể truy cập thiết bị âm thanh");
-        }
-      });
-  };
-
-  const handleVideoCall = () => {
-    if (dataUser.isGroup) {
-      toast.error("Không thể gọi video cho nhóm chat");
-      return;
-    }
-
-    if (!callUser) {
-      toast.error("Chức năng gọi video đang không khả dụng");
-      return;
-    }
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast.error("Trình duyệt của bạn không hỗ trợ cuộc gọi video");
-      return;
-    }
-
-    if (!dataUser.online) {
-      toast.error("Người dùng hiện không trực tuyến, không thể gọi video");
-      return;
-    }
-
-    navigator.mediaDevices
-      .getUserMedia({ audio: true, video: true })
-      .then((stream) => {
-        stream.getTracks().forEach((track) => track.stop());
-        callUser(params.userId, dataUser.name, dataUser.profilePic, true);
-      })
-      .catch((err) => {
-        console.error("Permission check failed:", err);
-        if (err.name === "NotAllowedError") {
-          toast.error("Vui lòng cấp quyền truy cập camera và microphone để thực hiện cuộc gọi video");
-        } else {
-          toast.error("Không thể truy cập camera hoặc microphone");
-        }
-      });
-  };
-
   const isCallMessage = (message) => {
     return (
       message.text === "Cuộc gọi thoại" ||
@@ -853,38 +594,6 @@ export default function MessagePage() {
     });
   };
 
-  const handleToggleMute = (memberId, memberName, isMuted) => {
-    if (!socketConnection || !dataUser.isGroup) return;
-
-    setConfirmModal({
-      isOpen: true,
-      title: isMuted ? "Bỏ tắt quyền chat" : "Tắt quyền chat",
-      message: isMuted
-        ? `Bạn có chắc chắn muốn mở lại quyền nhắn tin cho ${memberName}?`
-        : `Bạn có chắc chắn muốn tắt quyền nhắn tin của ${memberName}?`,
-      action: () => {
-        const cleanAdminId = typeof user._id === "object" ? user._id.toString() : user._id;
-        const cleanMemberId = typeof memberId === "object" ? memberId.toString() : memberId;
-
-        socketConnection.emit(isMuted ? "unmuteMember" : "muteMember", {
-          groupId: params.userId,
-          memberId: cleanMemberId,
-          adminId: cleanAdminId,
-        });
-
-        socketConnection.once("memberMuteToggled", (response) => {
-          if (response.success) {
-            toast.success(response.message);
-
-            socketConnection.emit("joinRoom", params.userId);
-          } else {
-            toast.error(response.message);
-          }
-        });
-      },
-    });
-  };
-
   const handleReplyMessage = (message) => {
     setReplyingTo(message);
     inputRef.current?.focus();
@@ -896,99 +605,19 @@ export default function MessagePage() {
     setOpenActionMessage(false);
   };
 
-  const scrollToMessage = (messageId) => {
-    if (!messageId) return;
-
-    const messageElement = document.getElementById(`message-${messageId}`);
-
-    if (messageElement) {
-      messageElement.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-
-      messageElement.classList.add("bg-blue-200");
-      setTimeout(() => {
-        messageElement.classList.remove("bg-blue-200");
-      }, 1500);
-    }
-  };
-
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
         {/* Header */}
         {(dataUser._id || isLoading) && (
-          <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
-            {isLoading ? (
-              <div className="flex w-full items-center space-x-4">
-                <div className="h-12 w-12 animate-pulse rounded-full bg-gray-200"></div>
-                <div className="flex flex-col gap-y-2">
-                  <div className="h-5 w-32 animate-pulse rounded bg-gray-200"></div>
-                  <div className="h-3 w-20 animate-pulse rounded bg-gray-200"></div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex w-full items-center space-x-4">
-                <div className="relative">
-                  <img
-                    src={dataUser?.profilePic}
-                    alt={dataUser.name}
-                    className="h-12 w-12 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
-                  />
-                  {!dataUser.isGroup && dataUser.online ? (
-                    <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#2dc937]"></div>
-                  ) : (
-                    <div className="absolute bottom-[2px] right-[2px] h-3 w-3 rounded-full border-2 border-white bg-[#8f918f]"></div>
-                  )}
-                  {dataUser.isGroup && (
-                    <div className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#005ae0]">
-                      <FontAwesomeIcon icon={faUsers} width={10} className="text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col gap-y-1">
-                  <span className="text-base font-semibold">{dataUser?.name}</span>
-                  <div className="flex items-center space-x-2">
-                    {dataUser.isGroup && (
-                      <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
-                    )}
-                    <button className="flex">
-                      <FontAwesomeIcon
-                        icon={faBookmark}
-                        width={16}
-                        className="rotate-90 text-sm text-[#555454] hover:text-[#005ae0]"
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center space-x-[3px]">
-              <Button title="Thêm bạn vào nhóm" icon={faPlus} width={20} handleOnClick={commingSoon} />
-              <Button
-                title={dataUser.online ? "Cuộc gọi thoại" : "Người dùng không trực tuyến"}
-                icon={faPhone}
-                width={20}
-                handleOnClick={handleAudioCall}
-                styleIcon={dataUser.isGroup || !dataUser.online ? "text-gray-400" : ""}
-              />
-              <Button
-                title={dataUser.online ? "Cuộc gọi video" : "Người dùng không trực tuyến"}
-                icon={faVideo}
-                width={20}
-                handleOnClick={handleVideoCall}
-                styleIcon={dataUser.isGroup || !dataUser.online ? "text-gray-400" : ""}
-              />
-              <Button title="Tìm kiếm tin nhắn" icon={faMagnifyingGlass} width={18} handleOnClick={commingSoon} />
-              <Button
-                title="Thông tin hội thoại"
-                icon={faBars}
-                width={18}
-                handleOnClick={() => setShowRightSideBar(!showRightSideBar)}
-              />
-            </div>
-          </header>
+          <Header
+            dataUser={dataUser}
+            isLoading={isLoading}
+            handleAudioCall={() => handleAudioCall({ callUser, dataUser, params })}
+            handleVideoCall={() => handleVideoCall({ callUser, dataUser, params })}
+            setShowRightSideBar={setShowRightSideBar}
+            showRightSideBar={showRightSideBar}
+          />
         )}
 
         <div className="flex flex-1 overflow-hidden">
@@ -1044,71 +673,22 @@ export default function MessagePage() {
                       sender = getSenderInfo(message.msgByUserId);
                     }
                     return (
-                      <div
-                        key={message._id}
-                        className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"}`}
-                        onMouseEnter={() => setHoveredMessage(message._id)}
-                        onMouseLeave={() => setHoveredMessage(null)}
-                      >
-                        {!isCurrentUser && (
-                          <button className="flex">
-                            <img
-                              src={dataUser.isGroup && sender ? sender.profilePic : dataUser.profilePic}
-                              alt="avatar"
-                              className="h-9 w-9 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
-                            />
-                          </button>
-                        )}
-                        <div
-                          className={`relative h-full rounded-md border border-[#c9d0db] p-3 text-[#081b3a] ${
-                            isCurrentUser ? "bg-[#dbebff]" : "bg-white"
-                          }`}
-                        >
-                          {dataUser.isGroup && !isCurrentUser && (
-                            <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
-                          )}
-                          <div className="flex items-center">
-                            <div className="mr-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-200">
-                              <FontAwesomeIcon
-                                icon={getCallIcon(message)}
-                                className={`${
-                                  message.callData?.callStatus === "missed" ? "text-red-500" : "text-blue-500"
-                                }`}
-                              />
-                            </div>
-                            <div>
-                              <p className="text-sm">{getCallStatusText(message)}</p>
-                              <p className="text-[11px] text-gray-500">
-                                {format(new Date(message.createdAt), "HH:mm")}
-                              </p>
-                            </div>
-                          </div>
-                          {message.reactions && message.reactions.length > 0 && (
-                            <ReactionDisplay reactions={message.reactions} currentUserId={user._id} />
-                          )}
-                          <div
-                            className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
-                            onMouseEnter={() => {
-                              setHoveredLikeMessage(message._id), setHoveredMessage(null);
-                            }}
-                            onMouseLeave={() => setHoveredLikeMessage(null)}
-                            onClick={() => handleQuickLike(message._id)}
-                          >
-                            <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
-                            {hoveredLikeMessage === message._id && (
-                              <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-3" : "left-3"}`}>
-                                <EmojiPicker
-                                  emojiStyle="apple"
-                                  reactionsDefaultOpen={true}
-                                  onEmojiClick={(emojiData) => {
-                                    handleAddReaction(message._id, emojiData.emoji);
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <>
+                        <MessageIsCall
+                          message={message}
+                          isCurrentUser={isCurrentUser}
+                          sender={sender}
+                          dataUser={dataUser}
+                          user={user}
+                          setHoveredMessage={setHoveredMessage}
+                          hoveredLikeMessage={hoveredLikeMessage}
+                          setHoveredLikeMessage={setHoveredLikeMessage}
+                          getCallIcon={getCallIcon}
+                          getCallStatusText={getCallStatusText}
+                          handleQuickLike={handleQuickLike}
+                          handleAddReaction={handleAddReaction}
+                        />
+                      </>
                     );
                     // If the message is a text, image, video, file align left or right
                   } else {
@@ -1118,228 +698,29 @@ export default function MessagePage() {
                       sender = getSenderInfo(message.msgByUserId);
                     }
                     return (
-                      <div
-                        id={`message-${message._id}`}
-                        key={message._id}
-                        className={`flex gap-x-2 ${isCurrentUser ? "justify-end" : "justify-start"} transition-colors duration-300`}
-                        onMouseEnter={() => setHoveredMessage(message._id)}
-                        onMouseLeave={() => setHoveredMessage(null)}
-                      >
-                        {!isCurrentUser && (
-                          <button className="flex">
-                            <img
-                              src={dataUser.isGroup && sender ? sender.profilePic : dataUser.profilePic}
-                              alt="avatar"
-                              className="h-9 w-9 rounded-full border border-[rgba(0,0,0,0.15)] object-cover"
-                            />
-                          </button>
-                        )}
-                        <div
-                          className={`relative h-full max-w-md rounded-md border border-[#c9d0db] p-3 text-[#081b3a] ${
-                            isCurrentUser ? "bg-[#dbebff]" : "bg-white"
-                          }`}
-                        >
-                          {dataUser.isGroup && !isCurrentUser && (
-                            <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
-                          )}
-                          {message.isShared && (
-                            <div className="mb-1 flex items-center text-xs text-gray-500 italic">
-                              <FontAwesomeIcon icon={faReply} className="mr-1 h-3 w-3 -scale-x-100" />
-                              <span>Tin nhắn được chia sẻ</span>
-                            </div>
-                          )}
-                          {message.replyTo && (
-                            <div
-                              className="mb-2 cursor-pointer rounded border-l-4 border-blue-400 bg-gray-50 p-2 text-xs hover:bg-gray-100"
-                              onClick={() => scrollToMessage(message.replyTo.messageId)}
-                            >
-                              <div className="font-medium text-blue-600">
-                                {message.replyTo.sender === user._id
-                                  ? "Bạn"
-                                  : getSenderInfo(message.replyTo.sender)?.name || "Người dùng"}
-                              </div>
-                              <div className="truncate text-gray-600">{message.replyTo.text}</div>
-                            </div>
-                          )}
-                          {isDeletedMessage(message) ? (
-                            <div>
-                              <p className="break-words text-sm italic text-gray-500">Tin nhắn đã được xóa</p>
-                              <p className="mt-1 text-[11px] text-[#00000080]">
-                                {format(new Date(message.createdAt), "HH:mm")}
-                                {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
-                              </p>
-                            </div>
-                          ) : (
-                            <>
-                              {message.imageUrl && (
-                                <img
-                                  src={message.imageUrl}
-                                  alt="image"
-                                  className="cursor-pointer rounded-[3px] object-contain hover:opacity-90"
-                                  onClick={() => handleImageClick(message.imageUrl)}
-                                />
-                              )}
-                              {message.fileUrl && (
-                                <div className="flex items-center gap-x-1">
-                                  {message.fileUrl.endsWith(".mp4") ||
-                                  message.fileUrl.endsWith(".webm") ||
-                                  message.fileUrl.endsWith(".ogg") ? (
-                                    <video controls className="rounded-[3px] object-contain">
-                                      <source src={message.fileUrl} type="video/mp4" />
-                                      Your browser does not support the video tag.
-                                    </video>
-                                  ) : (
-                                    <>
-                                      <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
-                                      <a
-                                        href={message.fileUrl}
-                                        className="break-words text-sm"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
-                                        {message.fileName}
-                                      </a>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                              <div>
-                                {message.text.startsWith("https") || message.text.startsWith("http") ? (
-                                  <a
-                                    href={message.text}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-sm text-blue-500 underline"
-                                  >
-                                    {message.text}
-                                  </a>
-                                ) : (
-                                  <p className="break-words text-sm">{message.text}</p>
-                                )}
-                                <p className="mt-1 text-[11px] text-[#00000080]">
-                                  {format(new Date(message.createdAt), "HH:mm")}
-                                  {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
-                                </p>
-                                <ReactionDisplay reactions={message.reactions} currentUserId={user._id} />
-                              </div>
-                            </>
-                          )}
-                          {!isDeletedMessage(message) && (
-                            <div
-                              className="absolute -bottom-2 -right-2 flex cursor-pointer items-center gap-x-1 rounded-full bg-white px-1 py-[3px]"
-                              onMouseEnter={() => {
-                                setHoveredLikeMessage(message._id), setHoveredMessage(null);
-                              }}
-                              onMouseLeave={() => setHoveredLikeMessage(null)}
-                              onClick={() => handleQuickLike(message._id)}
-                            >
-                              <FontAwesomeIcon icon={faThumbsUp} width={14} className="text-[#8b8b8b]" />
-                              {hoveredLikeMessage === message._id && (
-                                <div className={`absolute bottom-4 z-50 ${isCurrentUser ? "right-3" : "left-3"}`}>
-                                  <EmojiPicker
-                                    emojiStyle="apple"
-                                    reactionsDefaultOpen={true}
-                                    onEmojiClick={(emojiData) => {
-                                      handleAddReaction(message._id, emojiData.emoji);
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {hoveredMessage === message._id && (
-                            <div
-                              className={`absolute bottom-3 ${isCurrentUser ? "-left-20" : "-right-20"} flex items-center gap-x-1`}
-                            >
-                              <button
-                                title="Chia sẻ"
-                                className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onClick={() => handleShareMessage(message)}
-                              >
-                                <FontAwesomeIcon
-                                  icon={faReply}
-                                  width={10}
-                                  className="text-[#5a5a5a] group-hover:text-[#005ae0]"
-                                />
-                              </button>
-                              <button
-                                title="Trả lời"
-                                className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onClick={() => handleReplyMessage(message)}
-                              >
-                                <FontAwesomeIcon
-                                  icon={faQuoteRight}
-                                  width={10}
-                                  className="text-[#5a5a5a] group-hover:text-[#005ae0]"
-                                />
-                              </button>
-                              <button
-                                className="group flex items-center justify-center rounded-full bg-white px-[6px] py-[3px]"
-                                onMouseEnter={() => setOpenActionMessage(true)}
-                              >
-                                <FontAwesomeIcon
-                                  icon={faEllipsis}
-                                  width={10}
-                                  className="text-[#5a5a5a] group-hover:text-[#005ae0]"
-                                />
-                              </button>
-
-                              {openActionMessage && isCurrentUser && !isDeletedMessage(message) && (
-                                <div
-                                  className={`absolute bottom-7 ${isCurrentUser ? "right-0" : "left-0"} w-[120px] rounded-sm bg-white py-2`}
-                                  onMouseEnter={() => setOpenActionMessage(true)}
-                                  onMouseLeave={() => setOpenActionMessage(false)}
-                                >
-                                  <button
-                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
-                                    onClick={() => handleEditMessage(message)}
-                                  >
-                                    <FontAwesomeIcon icon={faArrowRotateRight} width={10} className="text-[#5a5a5a]" />
-                                    <span className="text-sm">Sửa tin nhắn</span>
-                                  </button>
-                                  <button
-                                    className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
-                                    onClick={() => handleDeleteMessage(message._id)}
-                                  >
-                                    <FontAwesomeIcon
-                                      icon={faTrash}
-                                      width={10}
-                                      className="text-[#5a5a5a] group-hover:text-red-600"
-                                    />
-                                    <span className="text-sm group-hover:text-red-600">Xóa tin nhắn</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {message.sharedContent && (
-                            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-2">
-                              <div className="rounded bg-white p-2">
-                                {message.sharedContent.originalImage && (
-                                  <img
-                                    src={message.sharedContent.originalImage}
-                                    alt="Shared content"
-                                    className="mb-2 h-40 w-auto object-contain"
-                                    onClick={() => handleImageClick(message.sharedContent.originalImage)}
-                                  />
-                                )}
-                                {message.sharedContent.originalFile && !message.sharedContent.originalImage && (
-                                  <div className="mb-2 flex items-center text-blue-500">
-                                    <FontAwesomeIcon icon={faFilePen} className="mr-2" />
-                                    <span>{message.sharedContent.originalFileName}</span>
-                                  </div>
-                                )}
-                                {message.sharedContent.originalText && (
-                                  <p className="whitespace-pre-wrap break-words text-sm font-medium">
-                                    {console.log("Rendering shared text:", message.sharedContent.originalText)}
-                                    {message.sharedContent.originalText}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      <>
+                        <MessageIsNormal
+                          message={message}
+                          isCurrentUser={isCurrentUser}
+                          sender={sender}
+                          dataUser={dataUser}
+                          user={user}
+                          hoveredMessage={hoveredMessage}
+                          setHoveredMessage={setHoveredMessage}
+                          setHoveredLikeMessage={setHoveredLikeMessage}
+                          handleQuickLike={handleQuickLike}
+                          hoveredLikeMessage={hoveredLikeMessage}
+                          handleAddReaction={handleAddReaction}
+                          getSenderInfo={getSenderInfo}
+                          handleImageClick={handleImageClick}
+                          handleShareMessage={handleShareMessage}
+                          handleReplyMessage={handleReplyMessage}
+                          openActionMessage={openActionMessage}
+                          setOpenActionMessage={setOpenActionMessage}
+                          handleEditMessage={handleEditMessage}
+                          handleDeleteMessage={handleDeleteMessage}
+                        />
+                      </>
                     );
                   }
                 })}
@@ -1370,211 +751,47 @@ export default function MessagePage() {
 
         {/* Footer input chat */}
         {!isLoading && !loadError && (
-          <footer className="relative">
-            <div className="flex h-10 items-center gap-x-3 border-b border-t border-[#c8c9cc] px-2">
-              <Button
-                title="Gửi Sticker"
-                icon={faFaceLaughSquint}
-                width={20}
-                handleOnClick={() => setOpenEmoji(true)}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Gửi hình ảnh"
-                icon={faImage}
-                width={20}
-                isUpload
-                id="image"
-                handleOnClick={handleUploadFile}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Gửi kèm File"
-                icon={faFolderClosed}
-                width={20}
-                isUpload
-                id="file"
-                handleOnClick={handleUploadFile}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Gửi danh thiếp"
-                icon={faAddressCard}
-                width={20}
-                handleOnClick={commingSoon}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Chụp kèm với cửa sổ Z"
-                icon={faCamera}
-                width={20}
-                handleOnClick={commingSoon}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Định dạng tin nhắn"
-                icon={faFilePen}
-                width={20}
-                handleOnClick={commingSoon}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Chèn tin nhắn nhanh"
-                icon={faBolt}
-                width={20}
-                handleOnClick={commingSoon}
-                disabled={isCurrentUserMuted()}
-              />
-              <Button
-                title="Tùy chọn thêm"
-                icon={faEllipsis}
-                width={20}
-                handleOnClick={commingSoon}
-                disabled={isCurrentUserMuted()}
-              />
-            </div>
-            {openEmoji && (
-              <div ref={emojiPickerRef} className="absolute bottom-24 left-0 z-50">
-                <EmojiPicker
-                  disableSearchBar
-                  disableSkinTonePicker
-                  emojiStyle="apple"
-                  height={400}
-                  width={300}
-                  searchDisabled
-                  onEmojiClick={(emojiData) => {
-                    setMessages({ ...messages, text: messages.text + emojiData.emoji });
-                  }}
-                />
-              </div>
-            )}
-            <input
-              type="file"
-              name="image"
-              id="image"
-              accept="image/*"
-              hidden
-              onChange={handleUploadFile}
-              ref={imageInputRef}
-              disabled={isCurrentUserMuted()}
-            />
-            <input
-              type="file"
-              name="file"
-              id="file"
-              hidden
-              onChange={handleUploadFile}
-              ref={fileInputRef}
-              disabled={isCurrentUserMuted()}
-            />
-            {replyingTo && (
-              <div className="absolute -top-12 left-0 right-0 flex items-center justify-between border-t border-gray-200 bg-blue-50 px-3 py-2">
-                <div className="flex items-center">
-                  <FontAwesomeIcon icon={faReply} className="mr-2 text-blue-500" />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-medium">
-                      Đang trả lời{" "}
-                      <span className="text-blue-600">
-                        {replyingTo.msgByUserId === user._id
-                          ? "chính bạn"
-                          : getSenderInfo(replyingTo.msgByUserId)?.name}
-                      </span>
-                    </span>
-                    <p className="line-clamp-1 text-xs text-gray-500">
-                      {replyingTo.text || (replyingTo.imageUrl ? "Hình ảnh" : "File đính kèm")}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => setReplyingTo(null)} className="rounded p-1 text-gray-500 hover:bg-gray-200">
-                  <FontAwesomeIcon icon={faXmark} />
-                </button>
-              </div>
-            )}
-            {editingMessage && (
-              <div className="absolute -top-9 left-0 right-0 flex items-center justify-between bg-blue-50 px-3 py-2 text-sm">
-                <span>Chỉnh sửa tin nhắn</span>
-                <button
-                  onClick={() => {
-                    setEditingMessage(null);
-                    setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
-                  }}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  Hủy
-                </button>
-              </div>
-            )}
-            {isCurrentUserMuted() ? (
-              <div className="flex h-[50px] items-center justify-center bg-gray-100 px-3 py-[10px]">
-                <p className="text-gray-500">Bạn đã bị tắt quyền nhắn tin trong nhóm này</p>
-              </div>
-            ) : (
-              <div className="flex h-[50px] items-center px-3 py-[10px]">
-                <input
-                  type="text"
-                  placeholder={`Nhập tin nhắn với ${dataUser.name}`}
-                  className="h-full flex-1 rounded-[3px] text-sm"
-                  value={messages.text}
-                  onChange={(e) => setMessages({ ...messages, text: e.target.value })}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                  onFocus={handleInputFocus}
-                  onBlur={() => setSeenMessage(false)}
-                  ref={inputRef}
-                  disabled={isCurrentUserMuted()}
-                />
-                <div className="flex items-center gap-x-1">
-                  <Button
-                    title="Biểu cảm"
-                    icon={faFaceSmile}
-                    width={20}
-                    handleOnClick={() => setOpenEmoji(true)}
-                    styleIcon={isCurrentUserMuted() ? "text-gray-400" : ""}
-                    disabled={isCurrentUserMuted()}
-                  />
-                  {messages.text === "" && !selectedFile ? (
-                    <Button
-                      title="Gửi nhanh biểu tưởng cảm xúc"
-                      icon={faThumbsUp}
-                      width={20}
-                      handleOnClick={handleSendEmojiLike}
-                      styleIcon={isCurrentUserMuted() ? "text-gray-400" : ""}
-                      disabled={isCurrentUserMuted()}
-                    />
-                  ) : (
-                    <Button
-                      title="Gửi tin nhắn"
-                      icon={faPaperPlane}
-                      width={20}
-                      styleIcon={isCurrentUserMuted() ? "text-gray-400" : "text-[#005ae0]"}
-                      handleOnClick={handleSendMessage}
-                      disabled={isCurrentUserMuted()}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </footer>
+          <Footer
+            setMessages={setMessages}
+            messages={messages}
+            setReplyingTo={setReplyingTo}
+            replyingTo={replyingTo}
+            setEditingMessage={setEditingMessage}
+            editingMessage={editingMessage}
+            user={user}
+            dataUser={dataUser}
+            handleSendMessage={handleSendMessage}
+            handleSendEmojiLike={handleSendEmojiLike}
+            handleUploadFile={handleUploadFile}
+            isCurrentUserMuted={isCurrentUserMuted}
+            setSeenMessage={setSeenMessage}
+            conversation={conversation}
+            allMessages={allMessages}
+            selectedFile={selectedFile}
+            getSenderInfo={getSenderInfo}
+          />
         )}
       </div>
 
+      {/* Right side bar */}
       {!isLoading && !loadError && showRightSideBar && (
         <RightSidebar
+          socketConnection={socketConnection}
+          params={params}
           isVisible={showRightSideBar}
           dataUser={dataUser}
           user={user}
           showContextMenu={showContextMenu}
           setShowContextMenu={setShowContextMenu}
+          setConfirmModal={setConfirmModal}
           photoVideoMessages={photoVideoMessages}
           fileMessages={fileMessages}
           linkMessages={linkMessages}
-          onAddMember={handleAddMember}
-          onLeaveGroup={handleLeaveGroup}
-          onDeleteConversation={handleDeleteConversation}
-          onRemoveMember={handleRemoveMember}
-          onToggleMute={handleToggleMute}
+          handleAddMember={handleAddMember}
         />
       )}
 
+      {/* Modal add member */}
       {showAddMemberModal && (
         <AddGroupMemberModal
           isOpen={showAddMemberModal}
@@ -1584,6 +801,7 @@ export default function MessagePage() {
         />
       )}
 
+      {/* Modal confirm */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
@@ -1595,6 +813,7 @@ export default function MessagePage() {
 
       {showImageModal && <ImageViewerModal fileUrl={selectedImage} onClose={() => setShowImageModal(false)} />}
 
+      {/* Modal share message */}
       {shareMessage && (
         <ShareMessageModal
           isOpen={Boolean(shareMessage)}
