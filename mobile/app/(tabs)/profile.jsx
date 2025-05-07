@@ -25,7 +25,7 @@ import axios from "axios";
 import { setUser, setToken } from "../redux/userSlice";
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
+// import { useNavigation } from "@react-navigation/native";
 import { useGlobalContext } from "../context/GlobalProvider";
 import ConfirmationModal from "../../components/ConfirmationModal";
 import { useRouter } from "expo-router";
@@ -95,7 +95,7 @@ const menuItems = [
 export default function Profile() {
   const dispatch = useDispatch();
   const router = useRouter(); // Use router instead of navigation
-  const navigation = useNavigation(); // Keep this for other navigation needs if any
+  // const navigation = useNavigation(); // Keep this for other navigation needs if any
   const { socketConnection } = useGlobalContext();
   const user = useSelector((state) => state.user);
   const token = useSelector((state) => state.user.token);

@@ -7,8 +7,10 @@ module.exports = (() => {
 
   config.transformer = {
     ...transformer,
-    babelTransformerPath: require.resolve("react-native-svg-transformer/expo"),
+    babelTransformerPath: require.resolve("react-native-svg-transformer"),
+    assetPlugins: ["expo-asset/tools/hashAssetFiles"],
   };
+
   config.resolver = {
     ...resolver,
     assetExts: resolver.assetExts.filter((ext) => ext !== "svg"),

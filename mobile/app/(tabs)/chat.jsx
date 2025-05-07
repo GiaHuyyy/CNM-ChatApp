@@ -8,7 +8,7 @@ import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { setOnlineUser } from "../redux/userSlice";
 import axios from "axios";
-import { useNavigation } from "@react-navigation/native";
+// import { useNavigation } from "@react-navigation/native";
 import { setUser, setToken } from "../redux/userSlice";
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -22,7 +22,7 @@ import GroupInfoModal from "../../components/GroupInfoModal";
 
 export default function Chat() {
   const dispatch = useDispatch();
-  const navigation = useNavigation();
+  // const navigation = useNavigation();
   const user = useSelector((state) => state.user);
   const { setSocketConnection, setSeenMessage } = useGlobalContext();
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,7 +106,7 @@ export default function Chat() {
         dispatch(setToken(token));
 
         // Fetch user details
-        const response = await axios.get("http://localhost:5000/api/user-details", {
+        const response = await axios.get("http://192.168.1.204:5000/api/user-details", {
           headers: {
             Authorization: `Bearer ${token}`
           },
@@ -150,7 +150,7 @@ export default function Chat() {
         return null;
       }
 
-      const socket = io('http://localhost:5000', {
+      const socket = io('http://192.168.1.204:5000', {
         auth: { token },
         reconnection: true,
         reconnectionAttempts: 5,
@@ -234,7 +234,7 @@ export default function Chat() {
     const fetchFriendRequestsCount = async () => {
       try {
         const response = await axios.get(
-          `http://localhost:5000/api/pending-friend-requests`,
+          `http://192.168.1.204:5000/api/pending-friend-requests`,
           { withCredentials: true }
         );
         setFriendRequestsCount(response.data.data.length);
@@ -327,7 +327,7 @@ export default function Chat() {
         setTimeout(async () => {
           try {
             const response = await axios.post(
-              "http://localhost:5000/api/search-friend-user",
+              "http://192.168.1.204:5000/api/search-friend-user",
               { search: searchQuery },
               { withCredentials: true }
             );
@@ -423,9 +423,9 @@ export default function Chat() {
     </TouchableOpacity>
   );
 
-  const navigateToChat = (chatId) => {
-    navigation.navigate('Messages', { chatId });
-  };
+  // const navigateToChat = (chatId) => {
+  //   navigation.navigate('Messages', { chatId });
+  // };
 
   const handleSelectChat = (chatItem) => {
     if (!socketConnection) {
