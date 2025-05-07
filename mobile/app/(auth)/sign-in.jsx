@@ -7,7 +7,7 @@ import { useDispatch } from "react-redux";
 import { setUser, setToken } from "../redux/userSlice";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BACKEND_URL } from "@env";
+import { REACT_APP_BACKEND_URL } from "@env";
 export default function SignIn() {
   const dispatch = useDispatch();
 
@@ -23,10 +23,10 @@ export default function SignIn() {
     }
 
     setIsLoading(true);
-    console.log(BACKEND_URL)
+    console.log(REACT_APP_BACKEND_URL)
     try {
       const response = await axios.post(
-        `${BACKEND_URL}/api/login`,
+        `${REACT_APP_BACKEND_URL}/api/login`,
         { email, password },
         { withCredentials: true }
       );
@@ -39,10 +39,10 @@ export default function SignIn() {
 
         // Set token in Redux
         dispatch(setToken(data.token));
-        console.log("BACKEND_URL", BACKEND_URL);
+        console.log("REACT_APP_BACKEND_URL", REACT_APP_BACKEND_URL);
         // Fetch user details after login
         const userResponse = await axios.get(
-          `${BACKEND_URL}/api/user-details`,
+          `${REACT_APP_BACKEND_URL}/api/user-details`,
           {
             headers: { Authorization: `Bearer ${data.token}` },
             withCredentials: true
