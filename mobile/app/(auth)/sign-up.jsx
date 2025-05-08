@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import axios from "axios";
 import HeaderOfSignIn from "../../components/HeaderOfSignIn";
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
+import { REACT_APP_BACKEND_URL } from "@env";
 
 export default function SignUp() {
     const [data, setData] = useState({
@@ -98,7 +99,7 @@ export default function SignUp() {
 
         setLoading(true);
         try {
-            const res = await axios.post(`http://localhost:5000/api/send-otp`, {
+            const res = await axios.post(`${REACT_APP_BACKEND_URL}/api/send-otp`, {
                 email: data.email,
             });
             if (res.data) {
@@ -124,7 +125,7 @@ export default function SignUp() {
         setLoading(true);
         try {
             // Xác minh OTP
-            const verify = await axios.post(`http://localhost:5000/api/verify-otp`, {
+            const verify = await axios.post(`${REACT_APP_BACKEND_URL}/api/verify-otp`, {
                 email,
                 otp,
             });
@@ -152,7 +153,7 @@ export default function SignUp() {
 
 
             // Đăng ký tài khoản
-            const register = await axios.post(`http://localhost:5000/api/register`, {
+            const register = await axios.post(`${REACT_APP_BACKEND_URL}/api/register`, {
                 email,
                 name,
                 password,

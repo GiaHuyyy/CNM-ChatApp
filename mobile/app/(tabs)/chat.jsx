@@ -19,6 +19,8 @@ import ConfirmationModal from "../../components/ConfirmationModal";
 import CreateGroupChat from "../../components/CreateGroupChat";
 import GroupChatItem from "../../components/GroupChatItem";
 import GroupInfoModal from "../../components/GroupInfoModal";
+import { router } from "expo-router";
+import { REACT_APP_BACKEND_URL } from "@env";
 
 export default function Chat() {
   const dispatch = useDispatch();
@@ -96,7 +98,8 @@ export default function Chat() {
         if (!token) {
           console.log("No token found, redirecting to login");
           setLoading(false);
-          // Handle navigation to login screen if needed
+          
+          router.replace("/(auth)/sign-in");
           return;
         }
 
@@ -106,7 +109,7 @@ export default function Chat() {
         dispatch(setToken(token));
 
         // Fetch user details
-        const response = await axios.get("http://192.168.1.204:5000/api/user-details", {
+        const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/user-details`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
@@ -150,7 +153,7 @@ export default function Chat() {
         return null;
       }
 
-      const socket = io('http://192.168.1.204:5000', {
+      const socket = io(`${REACT_APP_BACKEND_URL}`, {
         auth: { token },
         reconnection: true,
         reconnectionAttempts: 5,
@@ -230,25 +233,25 @@ export default function Chat() {
     };
   }, [socketConnection, user?._id, isAppInitialized]);
 
-  useEffect(() => {
-    const fetchFriendRequestsCount = async () => {
-      try {
-        const response = await axios.get(
-          `http://192.168.1.204:5000/api/pending-friend-requests`,
-          { withCredentials: true }
-        );
-        setFriendRequestsCount(response.data.data.length);
-      } catch (error) {
-        console.error("Error fetching friend requests:", error);
-      }
-    };
+  // useEffect(() => {
+  //   const fetchFriendRequestsCount = async () => {
+  //     try {
+  //       const response = await axios.get(
+  //         `http://192.168.1.204:5000/api/pending-friend-requests`,
+  //         { withCredentials: true }
+  //       );
+  //       setFriendRequestsCount(response.data.data.length);
+  //     } catch (error) {
+  //       console.error("Error fetching friend requests:", error);
+  //     }
+  //   };
 
-    fetchFriendRequestsCount();
+  //   fetchFriendRequestsCount();
 
-    const interval = setInterval(fetchFriendRequestsCount, 30000);
+  //   const interval = setInterval(fetchFriendRequestsCount, 30000);
 
-    return () => clearInterval(interval);
-  }, []);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   useEffect(() => {
     const loadRecentSearches = async () => {
@@ -1296,11 +1299,11 @@ export default function Chat() {
             onPress={() => setShowCreateGroupModal(true)}
           >
             <FontAwesomeIcon icon={faPlus} size={18} color="white" />
-            {friendRequestsCount > 0 && (
+            {/* {friendRequestsCount > 0 && (
               <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-5 h-5 items-center justify-center">
                 <Text className="text-white text-xs font-bold">{friendRequestsCount}</Text>
               </View>
-            )}
+            )} */}
           </TouchableOpacity>
         </View>
       ) : (
