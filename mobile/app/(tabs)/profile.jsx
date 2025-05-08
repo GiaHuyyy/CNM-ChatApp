@@ -25,10 +25,10 @@ import axios from "axios";
 import { setUser, setToken } from "../redux/userSlice";
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-// import { useNavigation } from "@react-navigation/native";
 import { useGlobalContext } from "../context/GlobalProvider";
 import ConfirmationModal from "../../components/ConfirmationModal";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
+import { REACT_APP_BACKEND_URL } from "@env";
 
 // Dữ liệu mẫu cho các menu items
 const menuItems = [
@@ -94,8 +94,6 @@ const menuItems = [
 
 export default function Profile() {
   const dispatch = useDispatch();
-  const router = useRouter(); // Use router instead of navigation
-  // const navigation = useNavigation(); // Keep this for other navigation needs if any
   const { socketConnection } = useGlobalContext();
   const user = useSelector((state) => state.user);
   const token = useSelector((state) => state.user.token);
@@ -200,7 +198,7 @@ export default function Profile() {
 
       // Update user via API
       const res = await axios.post(
-        "http://localhost:5000/api/update-user",
+        `${REACT_APP_BACKEND_URL}/api/update-user`,
         {
           name: editName,
           profilePic: avatarUrl,
@@ -244,7 +242,7 @@ export default function Profile() {
       }
 
       // Call the logout API
-      await axios.get("http://localhost:5000/api/logout", {
+      await axios.get(`${REACT_APP_BACKEND_URL}/api/logout`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -298,14 +296,14 @@ export default function Profile() {
     </TouchableOpacity>
   );
 
-  if (!user._id) {
-    return (
-      <View className="flex-1 justify-center items-center">
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text className="mt-4">Đang tải thông tin...</Text>
-      </View>
-    );
-  }
+  // if (!user._id) {
+  //   return (
+  //     <View className="flex-1 justify-center items-center">
+  //       <ActivityIndicator size="large" color="#0000ff" />
+  //       <Text className="mt-4">Đang tải thông tin...</Text>
+  //     </View>
+  //   );
+  // }
 
   return (
     <View className="flex-1 bg-gray-100">

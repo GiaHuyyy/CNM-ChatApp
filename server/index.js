@@ -19,7 +19,7 @@ setupSocket(server);
 // Configure middleware
 app.use(
   cors({
-    origin: [process.env.FRONTEND_URL, "http://localhost:8081", "http://192.168.1.204:8081"],
+    origin: [process.env.FRONTEND_URL, process.env.MOBILE_URL],
     credentials: true,
   })
 );

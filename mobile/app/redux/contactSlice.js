@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { REACT_APP_BACKEND_URL } from "@env";
 
 // Async thunk để lấy danh sách bạn bè
 export const fetchContacts = createAsyncThunk(
@@ -7,7 +8,7 @@ export const fetchContacts = createAsyncThunk(
   async (_, { getState }) => {
     const { user } = getState();
     try {
-      const response = await axios.get(`${process.env.EXPO_PUBLIC_API_URL}/api/friends`, {
+      const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/friends`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -25,7 +26,7 @@ export const fetchFriendRequests = createAsyncThunk(
   async (_, { getState }) => {
     const { user } = getState();
     try {
-      const response = await axios.get(`${process.env.EXPO_PUBLIC_API_URL}/api/friend-requests`, {
+      const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/friend-requests`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -44,7 +45,7 @@ export const acceptFriendRequest = createAsyncThunk(
     const { user } = getState();
     try {
       const response = await axios.post(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/friend-requests/${requestId}/accept`,
+        `${REACT_APP_BACKEND_URL}/api/friend-requests/${requestId}/accept`,
         {},
         {
           headers: {
@@ -66,7 +67,7 @@ export const rejectFriendRequest = createAsyncThunk(
     const { user } = getState();
     try {
       const response = await axios.post(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/friend-requests/${requestId}/reject`,
+        `${REACT_APP_BACKEND_URL}/api/friend-requests/${requestId}/reject`,
         {},
         {
           headers: {
@@ -88,7 +89,7 @@ export const searchUsers = createAsyncThunk(
     const { user } = getState();
     try {
       const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/users/search?q=${query}`,
+        `${REACT_APP_BACKEND_URL}/api/users/search?q=${query}`,
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -180,4 +181,4 @@ const contactSlice = createSlice({
 });
 
 export const { clearSearchResults, clearError } = contactSlice.actions;
-export default contactSlice.reducer; 
+export default contactSlice.reducer;

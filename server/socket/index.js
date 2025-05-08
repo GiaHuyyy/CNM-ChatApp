@@ -14,7 +14,7 @@ const conversationHandler = require("./handlers/conversationHandler");
 const setupSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: [process.env.FRONTEND_URL, "http://localhost:8081"],
+      origin: [process.env.FRONTEND_URL, process.env.MOBILE_URL],
       credentials: true,
     },
   });
