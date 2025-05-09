@@ -1,37 +1,45 @@
 const mongoose = require("mongoose");
 
+// Add a FileSchema to represent multiple files
+const FileSchema = new mongoose.Schema({
+  url: {
+    type: String,
+    required: true,
+  },
+  name: String,
+  type: String,
+  size: Number,
+});
+
 const messageSchema = new mongoose.Schema(
   {
     text: {
       type: String,
       default: "",
     },
-    imageUrl: {
-      type: String,
-      default: "",
+    msgByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
-    fileUrl: {
-      type: String,
-      default: "",
-    },
-    fileName: {
-      type: String,
-      default: "",
-    },
+    files: [FileSchema],
+    reactions: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        emoji: String,
+      },
+    ],
     seen: {
       type: Boolean,
       default: false,
     },
-    seenBy: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    msgByUserId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
+    seenBy: {
+      type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
+      default: [],
     },
     isDeleted: {
       type: Boolean,
@@ -41,16 +49,10 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    reactions: [
-      {
-        emoji: String,
-        userId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
-        userName: String,
-      },
-    ],
+    editedAt: {
+      type: Date,
+      default: null,
+    },
     callData: {
       callType: {
         type: String,
@@ -144,6 +146,7 @@ const conversationSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
 const MessageModel = mongoose.model("Message", messageSchema);
 const ConversationModel = mongoose.model("Conversation", conversationSchema);
 

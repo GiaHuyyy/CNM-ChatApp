@@ -26,6 +26,23 @@ import { useNavigate } from "react-router-dom";
 import handleLeaveGroup from "./handles/handleLeaveGroup";
 import handleDeleteConversation from "./handles/handleDeleteConversation";
 
+// File type
+const isImageFile = (url) => {
+  if (!url) return false;
+  const extensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
+  return extensions.some((ext) => url.toLowerCase().endsWith(ext));
+};
+
+const isVideoFile = (url) => {
+  if (!url) return false;
+  const extensions = [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"];
+  return extensions.some((ext) => url.toLowerCase().endsWith(ext));
+};
+
+const isLinkText = (text) => {
+  return text && (text.startsWith("http://") || text.startsWith("https://"));
+};
+
 // Action Group Button component
 const ActionGroupButton = ({ icon, title, handleOnClick }) => {
   return (
@@ -87,72 +104,203 @@ SidebarSection.propTypes = {
 
 // MediaItem component
 const MediaItem = ({ message, type, handleImageClick }) => {
-  if (type === "photo") {
-    return (
-      <button
-        key={message._id}
-        className="h-[72px] overflow-hidden hover:opacity-80"
-        onClick={() => handleImageClick(message.imageUrl || message.fileUrl)}
-      >
-        {message.imageUrl && <img src={message.imageUrl} alt="image" className="rounded-[3px] object-contain" />}
-        {message.fileUrl &&
-          (message.fileUrl.endsWith(".mp4") ||
-            message.fileUrl.endsWith(".webm") ||
-            message.fileUrl.endsWith(".ogg")) && (
-            <video className="rounded-[3px] object-contain">
-              <source src={message.fileUrl} type="video/mp4" />
-              Your browser does not support the video tag.
+  // Render media content with the files array as the primary source
+  const renderMediaContent = () => {
+    if (message.files && Array.isArray(message.files) && message.files.length > 0) {
+      const file = message.files[0]; // Get the first file from the array
+
+      if (type === "photo") {
+        if (file.type?.startsWith("image/")) {
+          return (
+            <button
+              className="h-[72px] w-full overflow-hidden hover:opacity-80"
+              onClick={() => handleImageClick(file.url)}
+            >
+              <img src={file.url} alt="image" className="h-full w-full rounded-[3px] object-cover" />
+            </button>
+          );
+        } else if (file.type?.startsWith("video/")) {
+          return (
+            <button className="h-[72px] w-full overflow-hidden hover:opacity-80">
+              <video className="h-full w-full rounded-[3px] object-cover">
+                <source src={file.url} type={file.type} />
+                Your browser does not support video.
+              </video>
+            </button>
+          );
+        }
+      } else if (type === "file") {
+        return (
+          <a
+            href={file.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+          >
+            <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+            <div className="flex flex-1 flex-col items-start pl-3">
+              <span className="break-words text-sm">{file.name || "File"}</span>
+              <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+                <span>{file.size ? `${Math.round(file.size / 1024)} KB` : ""}</span>
+                <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+              </div>
+            </div>
+          </a>
+        );
+      }
+    }
+
+    // Legacy support (for backward compatibility)
+    if (type === "photo") {
+      const fileUrl = message.imageUrl || message.fileUrl;
+      if (!fileUrl) return null;
+
+      return (
+        <button className="h-[72px] w-full overflow-hidden hover:opacity-80" onClick={() => handleImageClick(fileUrl)}>
+          {isImageFile(fileUrl) && (
+            <img src={fileUrl} alt="image" className="h-full w-full rounded-[3px] object-cover" />
+          )}
+          {isVideoFile(fileUrl) && (
+            <video className="h-full w-full rounded-[3px] object-cover">
+              <source src={fileUrl} type="video/mp4" />
+              Your browser does not support video.
             </video>
           )}
-      </button>
-    );
-  } else if (type === "file") {
-    return (
-      <a
-        href={message.fileUrl}
-        target="_blank"
-        rel="noreferrer"
-        key={message._id}
-        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-      >
-        <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+        </button>
+      );
+    } else if (type === "file") {
+      if (!message.fileUrl) return null;
 
-        <div className="flex flex-1 flex-col items-start pl-3">
-          <span className="break-words text-sm">{message.fileName}</span>
-          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-            <span>100.00 KB</span>
-            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+      return (
+        <a
+          href={message.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+        >
+          <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
+          <div className="flex flex-1 flex-col items-start pl-3">
+            <span className="break-words text-sm">{message.fileName || "File"}</span>
+            <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+              <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+            </div>
           </div>
-        </div>
-      </a>
-    );
-  } else if (type === "link") {
-    return (
-      <a
-        href={message.text}
-        target="_blank"
-        rel="noreferrer"
-        key={message._id}
-        className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
-      >
-        <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
+        </a>
+      );
+    } else if (type === "link") {
+      if (!message.text) return null;
 
-        <div className="flex flex-1 flex-col items-start pl-3">
-          <span className="w-[270px] truncate text-sm">{message.text}</span>
-          <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
-            <span className="max-w-[220px] truncate font-medium text-blue-500">{message.text.slice(7)}</span>
-            <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+      return (
+        <a
+          href={message.text}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-16 items-center justify-center px-4 hover:bg-[#f1f2f4]"
+        >
+          <FontAwesomeIcon icon={faLink} width={20} className="text-[#ccc]" />
+          <div className="flex flex-1 flex-col items-start pl-3">
+            <span className="w-[270px] truncate text-sm">{message.text}</span>
+            <div className="flex w-full items-center justify-between text-xs font-bold text-[#42414180]">
+              <span className="max-w-[220px] truncate font-medium text-blue-500">
+                {message.text.replace(/^https?:\/\//, "")}
+              </span>
+              <span>{format(new Date(message.createdAt), "dd/MM/yyyy")}</span>
+            </div>
           </div>
-        </div>
-      </a>
-    );
-  }
-  return null;
+        </a>
+      );
+    }
+    return null;
+  };
+
+  return renderMediaContent();
 };
 
 MediaItem.propTypes = {
   message: PropTypes.object.isRequired,
   type: PropTypes.string.isRequired,
+};
+
+// Modernize the getAllMediaItems function to prioritize files array
+const getAllMediaItems = (messages, type) => {
+  const allItems = [];
+
+  messages.forEach((message) => {
+    // Handle links separately
+    if (type === "link") {
+      if (isLinkText(message.text)) {
+        allItems.push(message);
+      }
+      return;
+    }
+
+    // Use files array as primary source
+    if (message.files && Array.isArray(message.files) && message.files.length > 0) {
+      if (type === "photo") {
+        const mediaFiles = message.files.filter(
+          (file) => file.type?.startsWith("image/") || file.type?.startsWith("video/"),
+        );
+
+        mediaFiles.forEach((file) => {
+          allItems.push({
+            _id: `${message._id}-${file.url}`,
+            files: [file],
+            createdAt: message.createdAt,
+          });
+        });
+      } else if (type === "file") {
+        const docFiles = message.files.filter(
+          (file) => !file.type?.startsWith("image/") && !file.type?.startsWith("video/"),
+        );
+
+        docFiles.forEach((file) => {
+          allItems.push({
+            _id: `${message._id}-${file.url}`,
+            files: [file],
+            createdAt: message.createdAt,
+          });
+        });
+      }
+    }
+    else {
+      if (type === "photo") {
+        const url = message.imageUrl || message.fileUrl;
+        const isMediaFile = url && (isImageFile(url) || isVideoFile(url));
+
+        if (isMediaFile) {
+          // Convert to files array format
+          allItems.push({
+            _id: message._id,
+            files: [
+              {
+                url: url,
+                type: isImageFile(url) ? "image/jpeg" : "video/mp4",
+                name: "Media",
+              },
+            ],
+            createdAt: message.createdAt,
+          });
+        }
+      } else if (type === "file") {
+        if (message.fileUrl && !isImageFile(message.fileUrl) && !isVideoFile(message.fileUrl)) {
+          // Convert to files array format
+          allItems.push({
+            _id: message._id,
+            files: [
+              {
+                url: message.fileUrl,
+                type: "application/octet-stream",
+                name: message.fileName || "File",
+              },
+            ],
+            createdAt: message.createdAt,
+          });
+        }
+      }
+    }
+  });
+
+  return allItems;
 };
 
 export default function RightSidebar({
@@ -165,7 +313,6 @@ export default function RightSidebar({
   fileMessages,
   linkMessages,
   handleAddMember,
-  // handleDeleteConversation,
   showContextMenu,
   setShowContextMenu,
   setConfirmModal,
@@ -216,29 +363,43 @@ export default function RightSidebar({
     });
   };
 
+  const processedPhotoVideoMessages = getAllMediaItems(photoVideoMessages, "photo");
+  const processedFileMessages = getAllMediaItems(fileMessages, "file");
+  const processedLinkMessages = linkMessages.filter((msg) => isLinkText(msg.text));
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "Anh/Video":
         return (
-          <div className="grid grid-cols-4 gap-2 px-4">
-            {photoVideoMessages.map((message) => (
-              <MediaItem key={message._id} message={message} type="photo" />
+          <div className="grid grid-cols-4 gap-2 px-4 mt-4">
+            {processedPhotoVideoMessages.map((mediaItem, index) => (
+              <MediaItem
+                key={mediaItem._id || index}
+                message={mediaItem}
+                type="photo"
+                handleImageClick={handleImageClick}
+              />
             ))}
           </div>
         );
       case "Files":
         return (
           <div className="flex flex-col">
-            {fileMessages.map((message) => (
-              <MediaItem key={message._id} message={message} type="file" />
+            {processedFileMessages.map((mediaItem, index) => (
+              <MediaItem
+                key={mediaItem._id || index}
+                message={mediaItem}
+                type="file"
+                handleImageClick={handleImageClick}
+              />
             ))}
           </div>
         );
       case "Link":
         return (
           <div className="flex flex-col">
-            {linkMessages.map((message) => (
-              <MediaItem key={message._id} message={message} type="link" />
+            {processedLinkMessages.map((message, index) => (
+              <MediaItem key={message._id || index} message={message} type="link" handleImageClick={handleImageClick} />
             ))}
           </div>
         );
@@ -310,8 +471,13 @@ export default function RightSidebar({
             onViewAll={handleOpenArchive}
             activeTab="Anh/Video"
           >
-            {photoVideoMessages.slice(0, 8).map((message) => (
-              <MediaItem key={message._id} message={message} type="photo" handleImageClick={handleImageClick} />
+            {processedPhotoVideoMessages.slice(0, 8).map((mediaItem, index) => (
+              <MediaItem
+                key={mediaItem._id || `photo-${index}`}
+                message={mediaItem}
+                type="photo"
+                handleImageClick={handleImageClick}
+              />
             ))}
           </SidebarSection>
 
@@ -322,8 +488,13 @@ export default function RightSidebar({
             onViewAll={handleOpenArchive}
             activeTab="Files"
           >
-            {fileMessages.slice(0, 3).map((message) => (
-              <MediaItem key={message._id} message={message} type="file" />
+            {processedFileMessages.slice(0, 3).map((mediaItem, index) => (
+              <MediaItem
+                key={mediaItem._id || `file-${index}`}
+                message={mediaItem}
+                type="file"
+                handleImageClick={handleImageClick}
+              />
             ))}
           </SidebarSection>
 
@@ -334,8 +505,13 @@ export default function RightSidebar({
             onViewAll={handleOpenArchive}
             activeTab="Link"
           >
-            {linkMessages.slice(0, 3).map((message) => (
-              <MediaItem key={message._id} message={message} type="link" />
+            {processedLinkMessages.slice(0, 3).map((message, index) => (
+              <MediaItem
+                key={message._id || `link-${index}`}
+                message={message}
+                type="link"
+                handleImageClick={handleImageClick}
+              />
             ))}
           </SidebarSection>
           <div className="mt-2 flex flex-col items-center bg-white">

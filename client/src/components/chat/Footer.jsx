@@ -30,8 +30,8 @@ export default function Footer({
   handleUploadFile,
   isCurrentUserMuted,
   setSeenMessage,
-  selectedFile,
-  getSenderInfo
+  selectedFiles,
+  getSenderInfo,
 }) {
   const inputRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -40,19 +40,19 @@ export default function Footer({
   const [openEmoji, setOpenEmoji] = useState(false);
 
   useEffect(() => {
-      function handleClickOutside(event) {
-        if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
-          setOpenEmoji(false);
-        }
+    function handleClickOutside(event) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setOpenEmoji(false);
       }
+    }
 
-      if (openEmoji) {
-        document.addEventListener("mousedown", handleClickOutside);
-      }
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }, [openEmoji]);
+    if (openEmoji) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openEmoji]);
 
   //   Handle
   const handleInputFocus = () => {
@@ -142,10 +142,11 @@ export default function Footer({
         type="file"
         name="image"
         id="image"
-        accept="image/*"
+        accept="image/*,video/*"
         hidden
         onChange={handleUploadFile}
         ref={imageInputRef}
+        multiple
         disabled={isCurrentUserMuted()}
       />
       <input
@@ -155,6 +156,7 @@ export default function Footer({
         hidden
         onChange={handleUploadFile}
         ref={fileInputRef}
+        multiple
         disabled={isCurrentUserMuted()}
       />
       {replyingTo && (
@@ -184,7 +186,7 @@ export default function Footer({
           <button
             onClick={() => {
               setEditingMessage(null);
-              setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
+              setMessages({ text: "" });
             }}
             className="text-red-500 hover:text-red-700"
           >
@@ -219,7 +221,7 @@ export default function Footer({
               styleIcon={isCurrentUserMuted() ? "text-gray-400" : ""}
               disabled={isCurrentUserMuted()}
             />
-            {messages.text === "" && !selectedFile ? (
+            {messages.text === "" && (!selectedFiles || selectedFiles.length === 0) ? (
               <Button
                 title="Gửi nhanh biểu tưởng cảm xúc"
                 icon={faThumbsUp}

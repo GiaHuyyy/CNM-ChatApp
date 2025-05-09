@@ -4,59 +4,122 @@ const UserModel = require("../../models/UserModel");
 
 const messageHandler = (io, socket, userId) => {
   // New message
-  socket.on("newMessage", async (message) => {
+  socket.on("newMessage", async (data) => {
     try {
+      const { sender, receiver, text, files } = data;
+
+      // Create a new message object
+      const newMessageData = {
+        text: text || "",
+        msgByUserId: userId,
+        seenBy: [userId],
+      };
+
+      // If legacy file format is provided (for backward compatibility)
+      if (data.imageUrl) {
+        newMessageData.imageUrl = data.imageUrl;
+      }
+      if (data.fileUrl) {
+        newMessageData.fileUrl = data.fileUrl;
+        newMessageData.fileName = data.fileName || "File";
+      }
+
+      // Add replyTo if present
+      if (data.replyTo) {
+        newMessageData.replyTo = data.replyTo;
+      }
+
+      // Add shared content if present
+      if (data.sharedContent) {
+        newMessageData.sharedContent = data.sharedContent;
+        newMessageData.isShared = true;
+      }
+
+      // Handle multiple files
+      if (files && Array.isArray(files) && files.length > 0) {
+        newMessageData.files = files;
+      }
+
+      // Create message
+      const newMessage = await MessageModel.create(newMessageData);
+
       let conversation = await ConversationModel.findOne({
         $or: [
-          { sender: message?.sender, receiver: message?.receiver },
-          { sender: message?.receiver, receiver: message?.sender },
+          { sender: sender, receiver: receiver },
+          { sender: receiver, receiver: sender },
         ],
       });
 
       if (!conversation) {
         conversation = await ConversationModel.create({
-          sender: message?.sender,
-          receiver: message?.receiver,
+          sender: sender,
+          receiver: receiver,
         });
       }
-
-      const newMessage = await MessageModel.create({
-        text: message?.text,
-        imageUrl: message?.imageUrl,
-        fileUrl: message?.fileUrl,
-        fileName: message?.fileName,
-        msgByUserId: message?.msgByUserId,
-        replyTo: message?.replyTo || null,
-      });
 
       await ConversationModel.updateOne({ _id: conversation?._id }, { $push: { messages: newMessage?._id } });
 
       const getConversationMessage = await ConversationModel.findOne({
         $or: [
-          { sender: message?.sender, receiver: message?.receiver },
-          { sender: message?.receiver, receiver: message?.sender },
+          { sender: sender, receiver: receiver },
+          { sender: receiver, receiver: sender },
         ],
       })
         .populate("messages")
         .sort({ createdAt: -1 });
 
-      io.to(message?.sender).emit("message", getConversationMessage);
-      io.to(message?.receiver).emit("message", getConversationMessage);
+      io.to(sender).emit("message", getConversationMessage);
+      io.to(receiver).emit("message", getConversationMessage);
 
-      const conversationSender = await getConversation(message?.sender);
-      const conversationReceiver = await getConversation(message?.receiver);
+      const conversationSender = await getConversation(sender);
+      const conversationReceiver = await getConversation(receiver);
 
-      io.to(message?.sender).emit("conversation", conversationSender);
-      io.to(message?.receiver).emit("conversation", conversationReceiver);
+      io.to(sender).emit("conversation", conversationSender);
+      io.to(receiver).emit("conversation", conversationReceiver);
     } catch (error) {
       console.error("Error handling newMessage event:", error);
     }
   });
 
   // New message for group chats
-  socket.on("newGroupMessage", async (message) => {
+  socket.on("newGroupMessage", async (data) => {
     try {
-      const { conversationId, text, imageUrl, fileUrl, fileName, msgByUserId } = message;
+      const { conversationId, text, files } = data;
+
+      // Create a new message object
+      const newMessageData = {
+        text: text || "",
+        msgByUserId: userId,
+        seenBy: [userId],
+      };
+
+      // If legacy file format is provided (for backward compatibility)
+      if (data.imageUrl) {
+        newMessageData.imageUrl = data.imageUrl;
+      }
+      if (data.fileUrl) {
+        newMessageData.fileUrl = data.fileUrl;
+        newMessageData.fileName = data.fileName || "File";
+      }
+
+      // Add replyTo if present
+      if (data.replyTo) {
+        newMessageData.replyTo = data.replyTo;
+      }
+
+      // Add shared content if present
+      if (data.sharedContent) {
+        newMessageData.sharedContent = data.sharedContent;
+        newMessageData.isShared = true;
+      }
+
+      // Handle multiple files
+      if (files && Array.isArray(files) && files.length > 0) {
+        newMessageData.files = files;
+      }
+
+      // Create message
+      const newMessage = await MessageModel.create(newMessageData);
 
       const conversation = await ConversationModel.findById(conversationId);
 
@@ -65,21 +128,10 @@ const messageHandler = (io, socket, userId) => {
         return;
       }
 
-      if (!conversation.members.includes(msgByUserId)) {
+      if (!conversation.members.includes(userId)) {
         console.error("User not authorized to send message to this group");
         return;
       }
-
-      const newMessage = await MessageModel.create({
-        text,
-        imageUrl: imageUrl || "",
-        fileUrl: fileUrl || "",
-        fileName: fileName || "",
-        msgByUserId,
-        seen: false,
-        seenBy: [msgByUserId],
-        replyTo: message?.replyTo || null,
-      });
 
       await ConversationModel.updateOne({ _id: conversationId }, { $push: { messages: newMessage._id } });
 
