@@ -12,7 +12,7 @@ import ReactionDisplay from "../ReactionDisplay";
 import { faThumbsUp } from "@fortawesome/free-regular-svg-icons";
 import EmojiPicker from "emoji-picker-react";
 
-export default function MessageIsNormal({
+const MessageIsNormal = ({
   message,
   isCurrentUser,
   sender,
@@ -32,7 +32,7 @@ export default function MessageIsNormal({
   setOpenActionMessage,
   handleEditMessage,
   handleDeleteMessage,
-}) {
+}) => {
   const scrollToMessage = (messageId) => {
     if (!messageId) return;
 
@@ -53,6 +53,91 @@ export default function MessageIsNormal({
 
   const isDeletedMessage = (message) => {
     return message.isDeleted;
+  };
+
+  const renderFiles = () => {
+    if (!message.files || !Array.isArray(message.files) || message.files.length === 0) {
+      // Handle legacy data structure (for backward compatibility)
+      if (message.imageUrl) {
+        // Migrate legacy imageUrl to files array format in the UI
+        const imageFile = {
+          url: message.imageUrl,
+          type: "image/jpeg", // Assume JPEG for legacy
+          name: "Image",
+        };
+        return renderMediaContent([imageFile]);
+      }
+      if (message.fileUrl) {
+        // Migrate legacy fileUrl to files array format in the UI
+        const documentFile = {
+          url: message.fileUrl,
+          type: "application/octet-stream", // Generic file type
+          name: message.fileName || "File đính kèm",
+        };
+        return renderMediaContent([documentFile]);
+      }
+      return null;
+    }
+
+    return renderMediaContent(message.files);
+  };
+
+  const renderMediaContent = (files) => {
+    const imageVideos = files.filter((f) => f.type?.startsWith("image/") || f.type?.startsWith("video/"));
+
+    const documents = files.filter((f) => !f.type?.startsWith("image/") && !f.type?.startsWith("video/"));
+
+    return (
+      <div className="flex flex-col gap-2">
+        {imageVideos.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {imageVideos.map((file, index) => {
+              if (file.type?.startsWith("image/")) {
+                return (
+                  <img
+                    key={index}
+                    src={file.url}
+                    alt={file.name || `Image ${index}`}
+                    className="cursor-pointer rounded object-contain"
+                    style={{ maxHeight: imageVideos.length > 1 ? "170px" : "300px" }}
+                    onClick={() => handleImageClick(file.url)}
+                  />
+                );
+              } else {
+                return (
+                  <video
+                    key={index}
+                    controls
+                    className="cursor-pointer rounded object-contain"
+                    style={{ maxHeight: imageVideos.length > 1 ? "170px" : "300px" }}
+                  >
+                    <source src={file.url} type={file.type} />
+                    Your browser does not support the video tag.
+                  </video>
+                );
+              }
+            })}
+          </div>
+        )}
+
+        {documents.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {documents.map((file, index) => (
+              <div key={index} className="flex items-center gap-2 rounded bg-white p-2">
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-sm text-blue-600"
+                >
+                  <FontAwesomeIcon icon={faFilePen} /> {file.name || `File ${index + 1}`}
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -109,47 +194,21 @@ export default function MessageIsNormal({
           </div>
         ) : (
           <>
-            {message.imageUrl && (
-              <img
-                src={message.imageUrl}
-                alt="image"
-                className="cursor-pointer rounded-[3px] object-contain hover:opacity-90"
-                onClick={() => handleImageClick(message.imageUrl)}
-              />
+            {(message.files && message.files.length > 0) || message.imageUrl || message.fileUrl ? (
+              <div className="mt-1">{renderFiles()}</div>
+            ) : null}
+            {message.text.startsWith("https") || message.text.startsWith("http") ? (
+              <a href={message.text} target="_blank" rel="noreferrer" className="text-sm text-blue-500 underline">
+                {message.text}
+              </a>
+            ) : (
+              <p className="break-words text-sm">{message.text}</p>
             )}
-            {message.fileUrl && (
-              <div className="flex items-center gap-x-1">
-                {message.fileUrl.endsWith(".mp4") ||
-                message.fileUrl.endsWith(".webm") ||
-                message.fileUrl.endsWith(".ogg") ? (
-                  <video controls className="rounded-[3px] object-contain">
-                    <source src={message.fileUrl} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
-                ) : (
-                  <>
-                    <FontAwesomeIcon icon={faFilePen} width={20} className="text-[#ccc]" />
-                    <a href={message.fileUrl} className="break-words text-sm" target="_blank" rel="noreferrer">
-                      {message.fileName}
-                    </a>
-                  </>
-                )}
-              </div>
-            )}
-            <div>
-              {message.text.startsWith("https") || message.text.startsWith("http") ? (
-                <a href={message.text} target="_blank" rel="noreferrer" className="text-sm text-blue-500 underline">
-                  {message.text}
-                </a>
-              ) : (
-                <p className="break-words text-sm">{message.text}</p>
-              )}
-              <p className="mt-1 text-[11px] text-[#00000080]">
-                {format(new Date(message.createdAt), "HH:mm")}
-                {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
-              </p>
-              <ReactionDisplay reactions={message.reactions} currentUserId={user._id} />
-            </div>
+            <p className="mt-1 text-[11px] text-[#00000080]">
+              {format(new Date(message.createdAt), "HH:mm")}
+              {message.isEdited && <span className="ml-1 text-[10px] italic">(Đã chỉnh sửa)</span>}
+            </p>
+            <ReactionDisplay reactions={message.reactions} currentUserId={user._id} />
           </>
         )}
         {!isDeletedMessage(message) && (
@@ -251,4 +310,6 @@ export default function MessageIsNormal({
       </div>
     </div>
   );
-}
+};
+
+export default MessageIsNormal;

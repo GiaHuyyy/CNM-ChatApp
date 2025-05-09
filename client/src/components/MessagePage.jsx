@@ -1,9 +1,4 @@
-import {
-  faFilePen,
-  faPhone,
-  faTrash,
-  faVideo,
-} from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -26,6 +21,7 @@ import handleAudioCall from "./handles/handleAudioCall";
 import handleVideoCall from "./handles/handleVideoCall";
 import MessageIsCall from "./chat/MessageIsCall";
 import MessageIsNormal from "./chat/MessageIsNormal";
+import { toast } from "sonner";
 
 export default function MessagePage() {
   const params = useParams();
@@ -50,9 +46,6 @@ export default function MessagePage() {
 
   const [messages, setMessages] = useState({
     text: "",
-    imageUrl: "",
-    fileUrl: "",
-    fileName: "",
   });
 
   const [allMessages, setAllMessages] = useState([]);
@@ -60,7 +53,7 @@ export default function MessagePage() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [openTrash, setOpenTrash] = useState(false);
@@ -261,28 +254,23 @@ export default function MessagePage() {
   }, [socketConnection, params.userId]);
 
   const handleUploadFile = (e) => {
-    const file = e.target.files[0];
-    setSelectedFile(file);
+    const files = Array.from(e.target.files);
+    setSelectedFiles((prev) => [...prev, ...files]);
   };
 
   const handleClearUploadFile = () => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
     if (imageInputRef.current) imageInputRef.current.value = null;
     if (fileInputRef.current) fileInputRef.current.value = null;
   };
 
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSendMessage = async () => {
-    if ((!messages.text.trim() && !selectedFile) || !socketConnection) {
+    if ((!messages.text.trim() && selectedFiles.length === 0) || !socketConnection) {
       return;
-    }
-    console.log(selectedFile, "selectedFile");
-    let fileUrl = "";
-    if (selectedFile) {
-      // Upload use S3 AWS to report
-      // const uploadPhotoToCloud = await uploadFileToS3(selectedFile);
-      // Upload use Cloudinary to Test
-      const uploadPhotoToCloud = await uploadFileToCloud(selectedFile);
-      fileUrl = uploadPhotoToCloud.secure_url;
     }
 
     if (editingMessage) {
@@ -295,47 +283,71 @@ export default function MessagePage() {
       });
 
       setEditingMessage(null);
-    } else {
-      if (dataUser.isGroup) {
-        const groupMessage = {
-          conversationId: params.userId,
-          text: messages.text,
-          imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
-          fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
-          fileName: selectedFile?.name || "",
-          msgByUserId: user?._id,
-          replyTo: replyingTo
-            ? {
-                messageId: replyingTo._id,
-                text: replyingTo.text,
-                sender: replyingTo.msgByUserId,
-              }
-            : null,
-        };
-        socketConnection.emit("newGroupMessage", groupMessage);
-      } else {
-        const newMessage = {
-          sender: user._id,
-          receiver: params.userId,
-          text: messages.text,
-          imageUrl: selectedFile?.type?.startsWith("image/") ? fileUrl : "",
-          fileUrl: selectedFile && !selectedFile.type.startsWith("image/") ? fileUrl : "",
-          fileName: selectedFile?.name || "",
-          msgByUserId: user?._id,
-          replyTo: replyingTo
-            ? {
-                messageId: replyingTo._id,
-                text: replyingTo.text,
-                sender: replyingTo.msgByUserId,
-              }
-            : null,
-        };
-        socketConnection.emit("newMessage", newMessage);
+      setMessages({ text: "" });
+      return;
+    }
+
+    // Upload multiple files
+    const uploadedFiles = [];
+
+    if (selectedFiles.length > 0) {
+      toast.loading("Đang tải lên tệp tin...");
+
+      try {
+        // Upload files in parallel
+        const uploadPromises = selectedFiles.map(async (file) => {
+          const uploadResult = await uploadFileToCloud(file);
+          return {
+            url: uploadResult.secure_url,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+          };
+        });
+
+        const results = await Promise.all(uploadPromises);
+        uploadedFiles.push(...results);
+        toast.dismiss();
+        toast.success(`Đã tải lên ${results.length} tệp tin`);
+      } catch (error) {
+        console.error("Error uploading files:", error);
+        toast.error("Không thể tải lên tệp tin");
+        return;
       }
     }
 
-    setMessages({ text: "", imageUrl: "", fileUrl: "", fileName: "" });
-    setSelectedFile(null);
+    // Create message object
+    const messageData = {
+      text: messages.text,
+      files: uploadedFiles,
+      replyTo: replyingTo
+        ? {
+            messageId: replyingTo._id,
+            text: replyingTo.text,
+            sender: replyingTo.msgByUserId,
+          }
+        : null,
+    };
+
+    // Send through appropriate socket event
+    if (dataUser.isGroup) {
+      socketConnection.emit("newGroupMessage", {
+        conversationId: params.userId,
+        ...messageData,
+        msgByUserId: user?._id,
+      });
+    } else {
+      socketConnection.emit("newMessage", {
+        sender: user._id,
+        receiver: params.userId,
+        ...messageData,
+        msgByUserId: user?._id,
+      });
+    }
+
+    // Reset state
+    setMessages({ text: "" });
+    setSelectedFiles([]);
     setReplyingTo(null);
     handleClearUploadFile();
   };
@@ -430,27 +442,57 @@ export default function MessagePage() {
   };
 
   const renderFilePreview = () => {
-    if (!selectedFile) return null;
-
-    if (selectedFile.type.startsWith("image/")) {
-      return (
-        <img src={URL.createObjectURL(selectedFile)} alt="image" className="aspect-square max-w-sm object-scale-down" />
-      );
-    }
-
-    if (selectedFile.type.startsWith("video/")) {
-      return (
-        <video controls className="aspect-square max-w-sm object-scale-down">
-          <source src={URL.createObjectURL(selectedFile)} type={selectedFile.type} />
-          Your browser does not support the video tag.
-        </video>
-      );
-    }
+    if (selectedFiles.length === 0) return null;
 
     return (
-      <div className="mt-5 flex flex-col items-center">
-        <FontAwesomeIcon icon={faFilePen} width={50} className="text-[#ccc]" />
-        <p className="mt-2 text-sm">{selectedFile.name}</p>
+      <div className="flex flex-wrap gap-2 p-3">
+        {selectedFiles.map((file, index) => {
+          if (file.type.startsWith("image/")) {
+            return (
+              <div key={index} className="relative">
+                <img src={URL.createObjectURL(file)} alt={file.name} className="h-32 w-32 rounded object-contain" />
+                <button
+                  onClick={() => handleRemoveFile(index)}
+                  className="absolute -top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-800 bg-opacity-70 text-white"
+                >
+                  <FontAwesomeIcon icon={faXmark} width={8} />
+                </button>
+              </div>
+            );
+          }
+
+          if (file.type.startsWith("video/")) {
+            return (
+              <div key={index} className="relative">
+                <video className="h-32 w-32 rounded object-contain">
+                  <source src={URL.createObjectURL(file)} type={file.type} />
+                </video>
+                <button
+                  onClick={() => handleRemoveFile(index)}
+                  className="absolute -top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-800 bg-opacity-70 text-white"
+                >
+                  <FontAwesomeIcon icon={faXmark} width={8} />
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={index}
+              className="relative flex h-24 w-24 flex-col items-center justify-center rounded bg-gray-100 p-2"
+            >
+              <FontAwesomeIcon icon={faFilePen} width={20} className="text-gray-500" />
+              <span className="mt-1 truncate text-xs">{file.name}</span>
+              <button
+                onClick={() => handleRemoveFile(index)}
+                className="absolute right-1 top-1 rounded-full bg-gray-800 bg-opacity-70 p-1 text-white"
+              >
+                <FontAwesomeIcon icon={faXmark} width={10} />
+              </button>
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -462,7 +504,6 @@ export default function MessagePage() {
   const handleEditMessage = (message) => {
     setEditingMessage(message);
     setMessages({
-      ...messages,
       text: message.text,
     });
     inputRef.current?.focus();
@@ -489,18 +530,15 @@ export default function MessagePage() {
     });
   };
 
-  // const isDeletedMessage = (message) => {
-  //   return message.isDeleted;
-  // };
-
   const photoVideoMessages = allMessages.filter(
     (message) =>
-      (message.imageUrl || message.fileUrl) &&
-      !(message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf"))),
+      message.files && message.files.some((file) => file.type?.startsWith("image/") || file.type?.startsWith("video/")),
   );
 
   const fileMessages = allMessages.filter(
-    (message) => message.fileUrl && (message.fileUrl.endsWith(".docx") || message.fileUrl.endsWith(".pdf")),
+    (message) =>
+      message.files &&
+      message.files.some((file) => !file.type?.startsWith("image/") && !file.type?.startsWith("video/")),
   );
 
   const linkMessages = allMessages.filter(
@@ -727,10 +765,10 @@ export default function MessagePage() {
                 <div ref={messagesEndRef} />
               </div>
             )}
-            {selectedFile && (
+            {selectedFiles.length > 0 && (
               <div className="sticky top-0 z-50 flex h-full items-center justify-center bg-gray-400 bg-opacity-40">
                 <div
-                  className="relative rounded bg-[#fffefe] p-4"
+                  className="relative max-h-80 overflow-y-auto rounded bg-[#fffefe] p-4"
                   onMouseEnter={() => setOpenTrash(true)}
                   onMouseLeave={() => setOpenTrash(false)}
                 >
@@ -767,7 +805,7 @@ export default function MessagePage() {
             setSeenMessage={setSeenMessage}
             conversation={conversation}
             allMessages={allMessages}
-            selectedFile={selectedFile}
+            selectedFiles={selectedFiles}
             getSenderInfo={getSenderInfo}
           />
         )}
