@@ -130,28 +130,21 @@ const GroupChatItem = ({ group, onPress, currentUserId, onLongPress }) => {
                         {group?.latestMessage?.msgByUserId === currentUserId ? (
                             <Text>Bạn: </Text>
                         ) : (
-                            <Text>
-                                {group?.members?.find((m) => m._id === group?.latestMessage?.msgByUserId)
-                                    ?.name + ":" || ""}
-                            </Text>
-                        )}
-                        {group?.latestMessage?.text && group?.latestMessage?.text}
-                        {group?.latestMessage?.imageUrl && (
-                            <>
-                                <FontAwesomeIcon icon={faImage} size={15} color="#ccc" />
+                            group?.members?.find((m) => m._id === group?.latestMessage?.msgByUserId)?.name && (
                                 <Text>
-                                    {group?.latestMessage?.fileName
-                                        ? ` ${group?.latestMessage?.fileName}`
-                                        : " Hình ảnh"}
+                                    {group?.members?.find((m) => m._id === group?.latestMessage?.msgByUserId)?.name}:
                                 </Text>
-                            </>
+                            )
                         )}
-                        {group?.latestMessage?.fileUrl && (
-                            <>
-                                <FontAwesomeIcon icon={faFilePen} size={15} color="#ccc" />
-                                <Text>{group?.latestMessage?.fileName}</Text>
-                            </>
-                        )}
+                        <Text>
+                            {group?.latestMessage?.text || ""}
+                            {group?.latestMessage?.imageUrl && (
+                                " [Hình ảnh]"
+                            )}
+                            {group?.latestMessage?.fileUrl && !group?.latestMessage?.imageUrl && (
+                                ` [${group?.latestMessage?.fileName || "Tài liệu"}]`
+                            )}
+                        </Text>
                     </Text>
                 </View>
 
