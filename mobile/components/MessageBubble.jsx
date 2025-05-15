@@ -369,34 +369,6 @@ const MessageBubble = ({
     }
   };
 
-  const renderDocumentPreview = () => {
-    const docName = fileDetails?.name || message.fileName || "Document";
-    const docUrl = fileDetails?.url || message.fileUrl;
-
-    return (
-      <TouchableOpacity
-        onPress={() => onDocumentPress(docUrl, docName)}
-        className="mb-2 flex-row items-center p-3 bg-white bg-opacity-30 rounded-md"
-      >
-        <View className="w-10 h-10 rounded-md bg-white bg-opacity-50 flex items-center justify-center mr-2">
-          <FontAwesomeIcon
-            icon={getFileIcon(docName)}
-            size={20}
-            color={isCurrentUser ? "#fff" : "#333"}
-          />
-        </View>
-        <View className="flex-1">
-          <Text className={`text-sm font-medium ${isCurrentUser ? 'text-white' : 'text-gray-800'}`} numberOfLines={1}>
-            {docName}
-          </Text>
-          <Text className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'}`}>
-            Nhấn để mở / tải xuống
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   const renderMessageContent = () => {
     return (
       <>
@@ -404,7 +376,33 @@ const MessageBubble = ({
           <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
         ) : null}
 
-        {hasImage && (
+        {/* Render multiple images */}
+        {message.files && message.files.filter(file =>
+          file.type?.startsWith('image/') ||
+          file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+        ).map((file, index) => (
+          <TouchableOpacity
+            key={`img-${index}`}
+            onPress={() => onImagePress && onImagePress(file.url)}
+            className="mb-2"
+          >
+            <Image
+              source={{
+                uri: file.url,
+                ...(forceImageUpdate && { cache: 'reload' })
+              }}
+              className="rounded-lg max-w-[240px]"
+              style={{
+                width: 240,
+                height: 200,
+                resizeMode: 'cover'
+              }}
+            />
+          </TouchableOpacity>
+        ))}
+
+        {/* Fallback for legacy imageUrl */}
+        {hasImage && !message.files && (
           <TouchableOpacity
             onPress={() => onImagePress && onImagePress(fileDetails?.url)}
             className="mb-2"
@@ -420,13 +418,31 @@ const MessageBubble = ({
                 height: 200,
                 resizeMode: 'cover'
               }}
-              onLoad={() => console.log("Image loaded:", fileDetails?.url)}
-              onError={(e) => console.log("Image error:", e.nativeEvent.error)}
             />
           </TouchableOpacity>
         )}
 
-        {hasVideo && (
+        {/* Render multiple videos */}
+        {message.files && message.files.filter(file =>
+          file.type?.startsWith('video/') ||
+          file.url?.match(/\.(mp4|mov|avi|webm|mkv)$/i)
+        ).map((file, index) => (
+          <TouchableOpacity
+            key={`vid-${index}`}
+            onPress={() => onVideoPress && onVideoPress(file.url)}
+            className="mb-2 rounded-md overflow-hidden"
+          >
+            <View style={{ width: 240, height: 180 }} className="bg-black flex items-center justify-center rounded-md">
+              <FontAwesomeIcon icon={faPlay} size={30} color="rgba(255,255,255,0.8)" />
+              <Text className="mt-2 text-white text-xs" numberOfLines={1}>
+                {file.name || "Video"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        {/* Fallback for legacy video */}
+        {hasVideo && !message.files && (
           <TouchableOpacity
             onPress={() => onVideoPress && onVideoPress(fileDetails?.url)}
             className="mb-2 rounded-md overflow-hidden"
@@ -440,15 +456,35 @@ const MessageBubble = ({
           </TouchableOpacity>
         )}
 
-        {hasDocument && (
+        {/* Render multiple documents */}
+        {message.files && message.files.filter(file =>
+          (!file.type?.startsWith('image/') && !file.type?.startsWith('video/')) ||
+          (!file.url?.match(/\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|webm|mkv)$/i))
+        ).map((file, index) => (
           <TouchableOpacity
-            onPress={() => onDocumentPress && onDocumentPress(
-              fileDetails?.url,
-              fileDetails?.name
-            )}
+            key={`doc-${index}`}
+            onPress={() => onDocumentPress && onDocumentPress(file.url, file.name || "Document")}
             className="mb-2 p-3 bg-gray-100 rounded-md flex-row items-center"
           >
-            <FontAwesomeIcon icon={getFileIcon(fileDetails?.name)} size={20} color="#555" />
+            <FontAwesomeIcon icon={getFileIcon(file.name)} size={20} color="#555" />
+            <View className="ml-2 flex-1">
+              <Text className="text-sm font-medium" numberOfLines={1}>
+                {file.name || "Document"}
+              </Text>
+              <Text className="text-xs text-gray-500">
+                Document
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        {/* Fallback for legacy document */}
+        {hasFile && !hasVideo && !hasImage && !message.files && (
+          <TouchableOpacity
+            onPress={() => onDocumentPress && onDocumentPress(fileDetails?.url, fileDetails?.name)}
+            className="mb-2 p-3 bg-gray-100 rounded-md flex-row items-center"
+          >
+            <FontAwesomeIcon icon={faFileAlt} size={20} color="#555" />
             <View className="ml-2 flex-1">
               <Text className="text-sm font-medium" numberOfLines={1}>
                 {fileDetails?.name || "Document"}

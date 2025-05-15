@@ -43,8 +43,9 @@ export default function Chat() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
@@ -664,14 +665,16 @@ export default function Chat() {
           mimeType
         });
 
-        setSelectedFile({
+        const newFile = {
           uri,
           fileName,
           mimeType,
           isVideo: mimeType.includes('video'),
           name: fileName,
           type: mimeType
-        });
+        };
+
+        setSelectedFiles(prev => [...prev, newFile]);
       }
     } catch (error) {
       console.error("Error using camera:", error);
@@ -692,36 +695,34 @@ export default function Chat() {
         allowsEditing: false,
         quality: 0.7,
         videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+        allowsMultipleSelection: true,
       });
 
-      if (!result.canceled) {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const mimeType = asset.mimeType ||
-          (uri.endsWith('.mp4') ? 'video/mp4' :
-            uri.endsWith('.mov') ? 'video/quicktime' :
-              uri.endsWith('.webm') ? 'video/webm' : 'image/jpeg');
+      if (!result.canceled && result.assets.length > 0) {
+        const newFiles = result.assets.map(asset => {
+          const uri = asset.uri;
+          const mimeType = asset.mimeType ||
+            (uri.endsWith('.mp4') ? 'video/mp4' :
+              uri.endsWith('.mov') ? 'video/quicktime' :
+                uri.endsWith('.webm') ? 'video/webm' : 'image/jpeg');
 
-        const isVideo = mimeType.startsWith('video/');
-        const fileName = uri.split('/').pop() ||
-          `file_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
+          const isVideo = mimeType.startsWith('video/');
+          const fileName = uri.split('/').pop() ||
+            `file_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
 
-        console.log("Selected media:", {
-          uri: uri ? "URI present" : "No URI",
-          fileName,
-          mimeType,
-          isVideo
+          return {
+            uri,
+            fileName,
+            mimeType,
+            isVideo,
+            name: fileName,
+            type: mimeType,
+            ...(Platform.OS === "web" && { file: asset.file })
+          };
         });
 
-        setSelectedFile({
-          uri,
-          fileName,
-          mimeType,
-          isVideo,
-          name: fileName,
-          type: mimeType,
-          ...(Platform.OS === "web" && { file: result.file })
-        });
+        setSelectedFiles(prev => [...prev, ...newFiles]);
+        console.log(`Added ${newFiles.length} media files`);
       }
     } catch (error) {
       console.error("Error picking media:", error);
@@ -733,33 +734,34 @@ export default function Chat() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        copyToCacheDirectory: true
+        copyToCacheDirectory: true,
+        multiple: true
       });
 
-      if (result.canceled === false) {
-        const { uri, mimeType, name } = result.assets[0];
+      if (result.canceled === false && result.assets.length > 0) {
+        const newDocuments = result.assets.map(asset => {
+          const { uri, mimeType, name } = asset;
 
-        if (!uri) {
-          throw new Error("Document has no URI");
-        }
+          if (!uri) {
+            throw new Error("Document has no URI");
+          }
 
-        const fileName = name || uri.split('/').pop() || `document_${Date.now()}.${mimeType?.includes('pdf') ? 'pdf' : 'docx'}`;
+          const fileName = name || uri.split('/').pop() ||
+            `document_${Date.now()}.${mimeType?.includes('pdf') ? 'pdf' : 'docx'}`;
 
-        console.log("Selected document:", {
-          uri: uri ? "URI present" : "No URI",
-          fileName,
-          mimeType
+          return {
+            uri,
+            fileName,
+            mimeType,
+            isDocument: true,
+            name: fileName,
+            type: mimeType,
+            ...(Platform.OS === "web" && { file: asset.file })
+          };
         });
 
-        setSelectedFile({
-          uri,
-          fileName,
-          mimeType,
-          isDocument: true,
-          name: fileName,
-          type: mimeType,
-          ...(Platform.OS === "web" && { file: result.file })
-        });
+        setSelectedFiles(prev => [...prev, ...newDocuments]);
+        console.log(`Added ${newDocuments.length} documents`);
       }
     } catch (error) {
       console.error("Error picking document:", error);
@@ -768,85 +770,94 @@ export default function Chat() {
   };
 
   const handleClearUploadFile = () => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
   };
 
-  const handleImageClick = (imageUrl) => {
-    console.log("Opening image:", imageUrl);
-    if (!imageUrl) {
-      console.error("No image URL provided");
-      return;
-    }
-    setSelectedImage(imageUrl);
-    setShowImageModal(true);
-  };
-
-  const handleVideoClick = (videoUrl) => {
-    setSelectedVideo(videoUrl);
-    setShowVideoModal(true);
-  };
-
-  const handleDocumentClick = (documentUrl, documentName) => {
-    setSelectedDocument({ url: documentUrl, name: documentName || "Document" });
-    setShowDocumentModal(true);
+  const handleRemoveSingleFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const renderFilePreview = () => {
-    if (!selectedFile) return null;
+    if (selectedFiles.length === 0) return null;
 
-    if (selectedFile.isVideo) {
+    return (
+      <FlatList
+        horizontal
+        data={selectedFiles}
+        keyExtractor={(_, index) => `file-${index}`}
+        renderItem={({ item, index }) => renderSingleFilePreview(item, index)}
+        showsHorizontalScrollIndicator={true}
+        contentContainerStyle={{ paddingRight: 15 }}
+      />
+    );
+  };
+
+  const renderSingleFilePreview = (file, index) => {
+    if (file.isVideo) {
       return (
-        <View className="p-2 bg-gray-200 rounded">
+        <View className="p-2 bg-gray-200 rounded mx-2 relative">
           <Video
-            source={{ uri: selectedFile.uri }}
-            style={{ width: 160, height: 120 }} // Reduced size for better fit
+            source={{ uri: file.uri }}
+            style={{ width: 120, height: 100 }}
             useNativeControls
             resizeMode="contain"
             shouldPlay={false}
           />
           <View className="flex-row justify-between items-center mt-2">
-            <Text className="text-sm flex-1" numberOfLines={1}>{selectedFile.fileName || selectedFile.name}</Text>
-            <Text className="text-xs text-gray-500 ml-2">Video</Text>
+            <Text className="text-xs flex-1" numberOfLines={1}>{file.fileName || file.name}</Text>
           </View>
+          <TouchableOpacity
+            className="absolute top-1 right-1 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
+            onPress={() => handleRemoveSingleFile(index)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={10} color="#fff" />
+          </TouchableOpacity>
         </View>
       );
-    } else if (selectedFile.mimeType?.startsWith('image/') || selectedFile.type?.startsWith('image/')) {
+    } else if (file.mimeType?.startsWith('image/') || file.type?.startsWith('image/')) {
       return (
-        <View className="p-2 bg-gray-200 rounded">
+        <View className="p-2 bg-gray-200 rounded mx-2 relative">
           <Image
-            source={{ uri: selectedFile.uri }}
-            className="w-40 h-40 rounded"
+            source={{ uri: file.uri }}
+            className="w-30 h-30 rounded"
+            style={{ width: 120, height: 100 }}
             resizeMode="cover"
           />
-          <View className="flex-row justify-between items-center mt-2">
-            <Text className="text-sm flex-1" numberOfLines={1}>{selectedFile.fileName || selectedFile.name}</Text>
-            <Text className="text-xs text-gray-500 ml-2">Image</Text>
-          </View>
+          <Text className="text-xs" numberOfLines={1}>{file.fileName || file.name}</Text>
+          <TouchableOpacity
+            className="absolute top-1 right-1 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
+            onPress={() => handleRemoveSingleFile(index)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={10} color="#fff" />
+          </TouchableOpacity>
         </View>
       );
     } else {
-      const fileIcon = (selectedFile.fileName || selectedFile.name)?.endsWith('.pdf') ? faFileAlt : faFilePen;
+      const fileIcon = (file.fileName || file.name)?.endsWith('.pdf') ? faFileAlt : faFilePen;
 
       return (
-        <View className="p-4 bg-gray-200 rounded flex-row items-center">
+        <View className="p-3 bg-gray-200 rounded mx-2 relative" style={{ width: 120 }}>
           <FontAwesomeIcon
             icon={fileIcon}
             size={24}
             color="#555"
           />
-          <View className="flex-1 ml-3">
-            <Text className="text-sm" numberOfLines={1}>{selectedFile.fileName || selectedFile.name}</Text>
-            <Text className="text-xs text-gray-500 mt-1">Document</Text>
-          </View>
+          <Text className="text-xs mt-2" numberOfLines={2}>{file.fileName || file.name}</Text>
+          <TouchableOpacity
+            className="absolute top-1 right-1 bg-red-500 rounded-full w-5 h-5 items-center justify-center"
+            onPress={() => handleRemoveSingleFile(index)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={10} color="#fff" />
+          </TouchableOpacity>
         </View>
       );
     }
   };
 
   const handleSendMessage = async () => {
-    if ((!messageText.trim() && !selectedFile) || !socketConnection || !selectedChat) return;
+    if ((!messageText.trim() && selectedFiles.length === 0) || !socketConnection || !selectedChat) return;
 
-    setIsUploading(selectedFile ? true : false);
+    setIsUploading(selectedFiles.length > 0);
 
     try {
       if (editingMessage) {
@@ -863,94 +874,72 @@ export default function Chat() {
         return;
       }
 
-      let fileUrl = "";
-      let fileName = "";
-      let fileType = "";
+      let uploadedFiles = [];
 
-      if (selectedFile) {
-        console.log("Preparing to upload file:", selectedFile.name || selectedFile.fileName || "unnamed file");
+      if (selectedFiles.length > 0) {
+        const uploadPromises = selectedFiles.map(async (file) => {
+          try {
+            console.log(`Preparing to upload file: ${file.name || file.fileName || "unnamed file"}`);
+            let fileToUpload;
 
-        try {
-          let fileToUpload;
+            if (Platform.OS === "web") {
+              if (file.file) {
+                fileToUpload = file.file;
+              } else if (file.uri) {
+                try {
+                  const response = await fetch(file.uri);
+                  const blob = await response.blob();
 
-          if (Platform.OS === "web") {
-            if (selectedFile.file) {
-              fileToUpload = selectedFile.file;
-            } else if (selectedFile.uri) {
-              try {
-                const response = await fetch(selectedFile.uri);
-                const blob = await response.blob();
+                  fileToUpload = new File(
+                    [blob],
+                    file.fileName || file.name || `file_${Date.now()}.jpg`,
+                    { type: file.type || file.mimeType || 'image/jpeg' }
+                  );
+                } catch (fetchError) {
+                  console.error("Error fetching file from URI:", fetchError);
 
-                fileToUpload = new File(
-                  [blob],
-                  selectedFile.fileName || selectedFile.name || `file_${Date.now()}.jpg`,
-                  { type: selectedFile.type || selectedFile.mimeType || 'image/jpeg' }
-                );
-              } catch (fetchError) {
-                console.error("Error fetching file from URI:", fetchError);
-
-                const response = await fetch(selectedFile.uri);
-                const blob = await response.blob();
-                fileToUpload = blob;
+                  const response = await fetch(file.uri);
+                  const blob = await response.blob();
+                  fileToUpload = blob;
+                }
+              } else {
+                throw new Error("Invalid file format for upload");
               }
             } else {
-              throw new Error("Invalid file format for upload");
+              fileToUpload = {
+                uri: file.uri,
+                name: file.fileName || file.name || `file_${Date.now()}${file.type?.includes('image') ? '.jpg' : '.file'}`,
+                type: file.mimeType || file.type || 'application/octet-stream'
+              };
             }
-          } else {
-            fileToUpload = {
-              uri: selectedFile.uri,
-              name: selectedFile.fileName || selectedFile.name || `file_${Date.now()}${selectedFile.type?.includes('image') ? '.jpg' : '.file'}`,
-              type: selectedFile.mimeType || selectedFile.type || 'application/octet-stream'
+
+            const uploadResult = await uploadFileToCloud(fileToUpload);
+
+            if (!uploadResult || !uploadResult.secure_url) {
+              throw new Error("Upload failed - no URL returned");
+            }
+
+            return {
+              url: uploadResult.secure_url,
+              name: file.name || file.fileName || "unnamed_file",
+              type: file.type || file.mimeType || "",
+              isImage: (file.type?.startsWith('image/') || file.mimeType?.startsWith('image/'))
             };
+          } catch (error) {
+            console.error(`Error uploading file ${file.name || file.fileName}:`, error);
+            return null;
           }
+        });
 
-          console.log("File prepared for upload:", {
-            platform: Platform.OS || 'unknown',
-            fileType: typeof fileToUpload,
-            hasUri: Platform.OS === "web" ? !!fileToUpload.uri : !!fileToUpload.uri,
-            name: fileToUpload.name || fileToUpload.fileName || "(no name)",
-            type: fileToUpload.type || fileToUpload.mimeType || "(no type)"
-          });
+        const results = await Promise.all(uploadPromises);
+        uploadedFiles = results.filter(result => result !== null);
 
-          const uploadResult = await uploadFileToCloud(fileToUpload);
-
-          if (!uploadResult || !uploadResult.secure_url) {
-            console.error("Upload result:", uploadResult);
-            throw new Error("Upload failed - no URL returned");
-          }
-
-          fileUrl = uploadResult.secure_url;
-          fileName = selectedFile.name || selectedFile.fileName || "unnamed_file";
-          fileType = selectedFile.type || selectedFile.mimeType || "";
-
-          console.log("File uploaded successfully:", fileUrl);
-
-          // Only preload image in web environment using proper checks
-          if (Platform.OS === "web" && fileType && fileType.startsWith('image/')) {
-            try {
-              // Use window check to make sure we're in a browser environment
-              if (typeof window !== 'undefined' && window.Image) {
-                const img = new window.Image();
-                img.src = fileUrl;
-              }
-            } catch (preloadError) {
-              // Safely catch any preload errors without affecting message sending
-              console.log("Image preload failed:", preloadError);
-            }
-          }
-        } catch (uploadError) {
-          console.error("File upload error:", uploadError);
-          Alert.alert(
-            "Upload Failed",
-            "Could not upload file. Please check your internet connection and try again.",
-            [{ text: "OK" }]
-          );
+        if (selectedFiles.length > 0 && uploadedFiles.length === 0) {
+          Alert.alert("Upload Failed", "Could not upload any files. Please try again.");
           setIsUploading(false);
           return;
         }
       }
-
-      const isImage = selectedFile?.type?.startsWith('image/') || selectedFile?.mimeType?.startsWith('image/');
 
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
@@ -958,18 +947,18 @@ export default function Chat() {
         const groupMessage = {
           conversationId: selectedChat.userDetails?._id,
           text: messageText,
-          imageUrl: isImage ? fileUrl : "",
-          fileUrl: !isImage && fileUrl ? fileUrl : "",
-          fileName: fileName,
+          files: uploadedFiles.map(file => ({
+            url: file.url,
+            name: file.name,
+            type: file.type
+          })),
           msgByUserId: user?._id,
         };
 
-        console.log("Sending group message:", {
+        console.log("Sending group message with files:", {
           conversationId: selectedChat.userDetails?._id,
           hasText: !!messageText.trim(),
-          hasFile: !!fileUrl,
-          isImage,
-          imageUrl: isImage ? fileUrl : "none",
+          fileCount: uploadedFiles.length
         });
 
         socketConnection.emit("newGroupMessage", groupMessage);
@@ -979,27 +968,12 @@ export default function Chat() {
           receiver: selectedChat?.userDetails?._id,
           text: messageText,
           msgByUserId: user?._id,
-          files: isImage ? [
-            {
-              url: fileUrl,
-              name: fileName,
-              type: fileType
-            }
-          ] : fileUrl ? [
-            {
-              url: fileUrl,
-              name: fileName,
-              type: fileType
-            }
-          ] : []
+          files: uploadedFiles.map(file => ({
+            url: file.url,
+            name: file.name,
+            type: file.type
+          }))
         };
-
-        if (isImage) {
-          newMessage.imageUrl = fileUrl;
-        } else if (fileUrl) {
-          newMessage.fileUrl = fileUrl;
-          newMessage.fileName = fileName;
-        }
 
         const tempId = `temp_${Date.now()}`;
         const tempMessage = {
@@ -1009,26 +983,14 @@ export default function Chat() {
           createdAt: new Date().toISOString(),
           isTemp: true,
           key: tempId,
-          files: isImage ? [
-            {
-              url: fileUrl,
-              name: fileName,
-              type: fileType
-            }
-          ] : fileUrl ? [
-            {
-              url: fileUrl,
-              name: fileName,
-              type: fileType
-            }
-          ] : [],
-          imageUrl: isImage ? fileUrl : "",
-          fileUrl: !isImage && fileUrl ? fileUrl : "",
-          fileName: fileName,
+          files: uploadedFiles.map(file => ({
+            url: file.url,
+            name: file.name,
+            type: file.type
+          }))
         };
 
         setMessages(prev => [...prev, tempMessage]);
-
         socketConnection.emit("newMessage", newMessage);
 
         setTimeout(() => {
@@ -1039,7 +1001,7 @@ export default function Chat() {
       }
 
       setMessageText("");
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setIsUploading(false);
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1142,6 +1104,39 @@ export default function Chat() {
       console.error("Error sending reaction:", error);
       Alert.alert("Lỗi", "Có lỗi xảy ra khi thêm cảm xúc. Vui lòng thử lại.");
     }
+  };
+
+  const handleImageClick = (imageUrl) => {
+    console.log("Opening image:", imageUrl);
+    if (!imageUrl) {
+      console.error("No image URL provided");
+      return;
+    }
+    setSelectedImage(imageUrl);
+    setShowImageModal(true);
+  };
+
+  const handleDocumentClick = (documentUrl, documentName) => {
+    console.log("Opening document:", documentUrl);
+    if (!documentUrl) {
+      console.error("No document URL provided");
+      return;
+    }
+    setSelectedDocument({
+      url: documentUrl,
+      name: documentName || "Document"
+    });
+    setShowDocumentModal(true);
+  };
+
+  const handleVideoClick = (videoUrl) => {
+    console.log("Opening video:", videoUrl);
+    if (!videoUrl) {
+      console.error("No video URL provided");
+      return;
+    }
+    setSelectedVideo(videoUrl);
+    setShowVideoModal(true);
   };
 
   const renderMessage = ({ item }) => {
@@ -1581,10 +1576,10 @@ export default function Chat() {
             />
           )}
 
-          {selectedFile && (
+          {selectedFiles.length > 0 && (
             <View className="bg-gray-100 p-3 border-t border-gray-300">
-              <View className="flex-row justify-between items-center">
-                <Text className="font-medium">File đã chọn</Text>
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className="font-medium">Files đã chọn ({selectedFiles.length})</Text>
                 <TouchableOpacity onPress={handleClearUploadFile}>
                   <FontAwesomeIcon icon={faTimes} size={20} color="#888" />
                 </TouchableOpacity>
@@ -1661,7 +1656,7 @@ export default function Chat() {
             />
             <TouchableOpacity
               onPress={handleSendMessage}
-              disabled={(!messageText.trim() && !selectedFile) || isUploading}
+              disabled={(!messageText.trim() && selectedFiles.length === 0) || isUploading}
             >
               {isUploading ? (
                 <ActivityIndicator size="small" color="#0084ff" />
@@ -1669,7 +1664,7 @@ export default function Chat() {
                 <FontAwesomeIcon
                   icon={faPaperPlane}
                   size={20}
-                  color={(messageText.trim() || selectedFile) ? "#0084ff" : "#aaa"}
+                  color={(messageText.trim() || selectedFiles.length > 0) ? "#0084ff" : "#aaa"}
                 />
               )}
             </TouchableOpacity>
