@@ -2,13 +2,12 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { setOnlineUser } from "../redux/userSlice";
 import axios from "axios";
-// import { useNavigation } from "@react-navigation/native";
 import { setUser, setToken } from "../redux/userSlice";
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -24,7 +23,6 @@ import { REACT_APP_BACKEND_URL } from "@env";
 
 export default function Chat() {
   const dispatch = useDispatch();
-  // const navigation = useNavigation();
   const user = useSelector((state) => state.user);
   const { setSocketConnection, setSeenMessage } = useGlobalContext();
   const [searchQuery, setSearchQuery] = useState("");
@@ -38,7 +36,6 @@ export default function Chat() {
   const [socketConnection, setSocketConnectionState] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // New states for chat functionality
   const [selectedChat, setSelectedChat] = useState(null);
   const [messageText, setMessageText] = useState("");
   const [messages, setMessages] = useState([]);
@@ -46,36 +43,35 @@ export default function Chat() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // States for file handling
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
 
-  // Add state for media options menu visibility
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState("");
+
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState({ url: "", name: "" });
+
   const [showMediaOptions, setShowMediaOptions] = useState(false);
 
-  // Group chat states
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [currentGroupInfo, setCurrentGroupInfo] = useState(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [searchGroupUsers, setSearchGroupUsers] = useState("");
 
-  // Add state for tracking which message is being edited
   const [editingMessage, setEditingMessage] = useState(null);
 
-  // Add a ref for the input field
   const inputRef = useRef(null);
 
-  // Add a state to track if app is initialized
   const [isAppInitialized, setIsAppInitialized] = useState(false);
   const initializationAttempted = useRef(false);
 
-  // Add state to track if all conversations should be shown
   const [showAllConversations, setShowAllConversations] = useState(false);
+  const [forceRender, setForceRender] = useState(false);
 
-  // Add these new states for improved group management
   const [confirmModal, setConfirmModal] = useState({
     visible: false,
     title: "",
@@ -83,7 +79,6 @@ export default function Chat() {
     action: null
   });
 
-  // Enhanced initialization effect that runs only once on app load
   useEffect(() => {
     if (initializationAttempted.current) return;
     initializationAttempted.current = true;
@@ -93,22 +88,19 @@ export default function Chat() {
         console.log("Initializing app...");
         setLoading(true);
 
-        // Check for existing token
         const token = await AsyncStorage.getItem("token");
         if (!token) {
           console.log("No token found, redirecting to login");
           setLoading(false);
-          
+
           router.replace("/(auth)/sign-in");
           return;
         }
 
         console.log("Token found, fetching user details");
 
-        // Set token in redux (if not already set)
         dispatch(setToken(token));
 
-        // Fetch user details
         const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/user-details`, {
           headers: {
             Authorization: `Bearer ${token}`
@@ -116,13 +108,11 @@ export default function Chat() {
           withCredentials: true,
         });
 
-        // Update user in redux
         if (response?.data?.data) {
           dispatch(setUser(response.data.data));
           console.log("User details fetched successfully");
         }
 
-        // Connect socket with token
         await connectSocket(token);
 
         setIsAppInitialized(true);
@@ -141,7 +131,6 @@ export default function Chat() {
     initializeApp();
   }, []);
 
-  // Separate the socket connection logic to reuse it
   const connectSocket = async (token) => {
     try {
       if (!token) {
@@ -162,7 +151,6 @@ export default function Chat() {
 
       socket.on("connect", () => {
         console.log("🔌 Socket connected: ", socket.id);
-        // When socket connects, immediately request sidebar data
         if (user?._id) {
           socket.emit("sidebar", user?._id);
         }
@@ -177,7 +165,6 @@ export default function Chat() {
         console.error("Socket connection error:", error);
       });
 
-      // Set socket in context and local state
       setSocketConnection(socket);
       setSocketConnectionState(socket);
 
@@ -188,22 +175,18 @@ export default function Chat() {
     }
   };
 
-  // Modified useEffect that depends on user and socket initialization
   useEffect(() => {
     if (!socketConnection || !user?._id || !isAppInitialized) return;
 
     console.log("Fetching conversations for user:", user?._id);
     socketConnection.emit("sidebar", user?._id);
 
-    // Set up the conversation listener
     socketConnection.on("conversation", (data) => {
       console.log("Received conversations:", Array.isArray(data) ? data.length : "not an array");
       if (data) {
-        // Ensure data is an array before setting state
         const conversationsArray = Array.isArray(data) ? data : [];
         setAllUsers(conversationsArray);
 
-        // Store conversations in AsyncStorage for offline access
         try {
           AsyncStorage.setItem('cachedConversations', JSON.stringify(conversationsArray));
         } catch (error) {
@@ -212,7 +195,6 @@ export default function Chat() {
       }
     });
 
-    // Load cached conversations while waiting for server response
     const loadCachedConversations = async () => {
       try {
         const cachedData = await AsyncStorage.getItem('cachedConversations');
@@ -233,26 +215,6 @@ export default function Chat() {
     };
   }, [socketConnection, user?._id, isAppInitialized]);
 
-  // useEffect(() => {
-  //   const fetchFriendRequestsCount = async () => {
-  //     try {
-  //       const response = await axios.get(
-  //         `http://192.168.1.204:5000/api/pending-friend-requests`,
-  //         { withCredentials: true }
-  //       );
-  //       setFriendRequestsCount(response.data.data.length);
-  //     } catch (error) {
-  //       console.error("Error fetching friend requests:", error);
-  //     }
-  //   };
-
-  //   fetchFriendRequestsCount();
-
-  //   const interval = setInterval(fetchFriendRequestsCount, 30000);
-
-  //   return () => clearInterval(interval);
-  // }, []);
-
   useEffect(() => {
     const loadRecentSearches = async () => {
       try {
@@ -265,14 +227,12 @@ export default function Chat() {
       }
     };
 
-
     loadRecentSearches();
   }, []);
 
   const saveToRecentSearches = async (query, result = null) => {
     try {
       if (!query.trim()) return;
-
 
       const searchItem = {
         id: Date.now().toString(),
@@ -377,9 +337,8 @@ export default function Chat() {
   };
 
   const handleStartChatFromSearch = (userItem) => {
-    // Create a chat item structure based on the search result
     const chatItem = {
-      _id: Date.now().toString(), // Temporary ID until server creates a real conversation
+      _id: Date.now().toString(),
       userDetails: {
         _id: userItem._id,
         name: userItem.name,
@@ -389,11 +348,9 @@ export default function Chat() {
       unseenMessages: 0
     };
 
-    // Clear search and focus state
     clearSearch();
     setIsSearchFocused(false);
 
-    // Select the chat which will trigger the socket connection
     handleSelectChat(chatItem);
   };
 
@@ -426,18 +383,12 @@ export default function Chat() {
     </TouchableOpacity>
   );
 
-  // const navigateToChat = (chatId) => {
-  //   navigation.navigate('Messages', { chatId });
-  // };
-
   const handleSelectChat = (chatItem) => {
     if (!socketConnection) {
-      // Try to reconnect socket if not connected
       connectSocket().then(socket => {
         if (socket) {
           setSocketConnectionState(socket);
           setSocketConnection(socket);
-          // Delay selecting chat to ensure socket is ready
           setTimeout(() => handleSelectChat(chatItem), 500);
         } else {
           Alert.alert("Connection Error", "Could not connect to the chat server.");
@@ -449,11 +400,10 @@ export default function Chat() {
     setIsChatLoading(true);
     setSelectedChat(chatItem);
 
-    // Add array check before mapping
     setAllUsers(prev => {
       if (!Array.isArray(prev)) {
         console.warn("allUsers is not an array:", prev);
-        return [chatItem]; // Return a new array with just this chat item
+        return [chatItem];
       }
       return prev.map(item =>
         item._id === chatItem._id ? { ...item, unseenMessages: 0 } : item
@@ -462,10 +412,8 @@ export default function Chat() {
 
     setSeenMessage(true);
 
-    // Clear any existing messages to prevent showing old messages while loading
     setMessages([]);
 
-    // Make sure we disconnect from any previous room first
     if (selectedChat?.userDetails?._id) {
       socketConnection.emit("leaveRoom", selectedChat.userDetails._id);
     }
@@ -474,15 +422,12 @@ export default function Chat() {
     console.log("Joining chat:", chatItem.userDetails._id, "isGroup:", isGroup);
     socketConnection.emit("joinRoom", chatItem.userDetails._id);
 
-    // Mark messages as seen immediately
     if (isGroup) {
       socketConnection.emit("seenGroup", chatItem.userDetails._id);
     } else {
       socketConnection.emit("seen", chatItem.userDetails._id);
     }
 
-    // Save last selected chat for history, but don't auto-restore
-    // This is only for tracking purposes now
     try {
       AsyncStorage.setItem('lastSelectedChat', JSON.stringify(chatItem));
     } catch (error) {
@@ -499,13 +444,13 @@ export default function Chat() {
   useEffect(() => {
     if (!socketConnection || !selectedChat) return;
 
-    // Clear any existing listeners to prevent duplicates
     socketConnection.off("messageUser");
     socketConnection.off("message");
     socketConnection.off("groupMessage");
     socketConnection.off("error");
+    socketConnection.off("newMessageReceived");
+    socketConnection.off("messageSent");
 
-    // Define handlers with proper debugging
     const handleMessageUser = (payload) => {
       console.log("Received user data:", payload);
       setChatUser(payload);
@@ -515,9 +460,14 @@ export default function Chat() {
     const handleMessage = (conversation) => {
       console.log("Received direct messages:", conversation?.messages?.length || 0);
       if (conversation && Array.isArray(conversation.messages)) {
+        conversation.messages.forEach(msg => {
+          if (msg.imageUrl) {
+            console.log(`Message ${msg._id} has image: ${msg.imageUrl}`);
+          }
+        });
+
         setMessages(conversation.messages);
 
-        // Mark messages as seen
         if (conversation.messages.length > 0 && socketConnection) {
           socketConnection.emit("seen", selectedChat.userDetails?._id);
         }
@@ -533,7 +483,6 @@ export default function Chat() {
       if (groupData && Array.isArray(groupData.messages)) {
         setMessages(groupData.messages);
 
-        // Update chat user with group information
         setChatUser({
           _id: groupData._id,
           name: groupData.name || "Group Chat",
@@ -543,7 +492,6 @@ export default function Chat() {
           groupAdmin: groupData.groupAdmin,
         });
 
-        // Mark messages as seen for group
         if (groupData.messages.length > 0 && socketConnection) {
           socketConnection.emit("seenGroup", groupData._id);
         }
@@ -553,28 +501,94 @@ export default function Chat() {
       setIsChatLoading(false);
     };
 
+    const handleMessageSent = (message) => {
+      console.log("Message sent confirmation received:", message?._id);
+      console.log("Message details:", {
+        hasImage: !!message?.imageUrl,
+        imageUrl: message?.imageUrl || 'none',
+        hasText: !!message?.text,
+        text: message?.text
+      });
+
+      setMessages(prevMessages => {
+        const tempMessage = prevMessages.find(msg =>
+          msg.isTemp &&
+          ((msg.imageUrl && message.imageUrl && msg.imageUrl === message.imageUrl) ||
+            (msg.text && message.text && msg.text === message.text))
+        );
+
+        if (tempMessage) {
+          return prevMessages.map(msg =>
+            msg._id === tempMessage._id ? { ...message, key: Date.now().toString() } : msg
+          );
+        }
+
+        return [...prevMessages.filter(msg =>
+          !(msg.isTemp &&
+            ((msg.imageUrl && message.imageUrl && msg.imageUrl === message.imageUrl) ||
+              (msg.text && message.text && msg.text === message.text)))
+        ), { ...message, key: Date.now().toString() }];
+      });
+
+      setTimeout(() => {
+        if (socketConnection && user?._id) {
+          socketConnection.emit("sidebar", user?._id);
+        }
+      }, 500);
+
+      setTimeout(() => {
+        messagesEndRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    };
+
+    const handleNewMessage = (newMessage) => {
+      console.log("New message received:", {
+        id: newMessage?._id,
+        hasImage: !!newMessage?.imageUrl,
+        imageUrl: newMessage?.imageUrl || 'none',
+        hasText: !!newMessage?.text
+      });
+
+      if (newMessage &&
+        ((selectedChat.userDetails?._id === newMessage.sender) ||
+          (selectedChat.userDetails?._id === newMessage.receiver) ||
+          (selectedChat.userDetails?._id === newMessage.conversationId))) {
+
+        setMessages(prevMessages => {
+          const messageExists = prevMessages.some(msg => msg._id === newMessage._id);
+          if (messageExists) return prevMessages;
+          return [...prevMessages, newMessage];
+        });
+
+        setTimeout(() => {
+          messagesEndRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    };
+
     const handleError = (error) => {
       console.error("Socket error:", error);
       setIsChatLoading(false);
       Alert.alert("Error", error.message || "Failed to load conversation");
     };
 
-    // Register event handlers
     socketConnection.on("messageUser", handleMessageUser);
     socketConnection.on("message", handleMessage);
     socketConnection.on("groupMessage", handleGroupMessage);
+    socketConnection.on("newMessageReceived", handleNewMessage);
+    socketConnection.on("messageSent", handleMessageSent);
     socketConnection.on("error", handleError);
 
-    // Join the room - emit appropriate event based on whether it's a group
     const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
     console.log("Joining room:", selectedChat?.userDetails?._id, "isGroup:", isGroup);
     socketConnection.emit("joinRoom", selectedChat?.userDetails?._id);
 
-    // Cleanup function
     return () => {
       socketConnection.off("messageUser", handleMessageUser);
       socketConnection.off("message", handleMessage);
       socketConnection.off("groupMessage", handleGroupMessage);
+      socketConnection.off("newMessageReceived", handleNewMessage);
+      socketConnection.off("messageSent", handleMessageSent);
       socketConnection.off("error", handleError);
     };
   }, [socketConnection, selectedChat]);
@@ -588,10 +602,8 @@ export default function Chat() {
   useEffect(() => {
     if (!socketConnection) return;
 
-    // Listen for new message notifications when not in that chat
     socketConnection.on("newMessageNotification", (data) => {
       console.log("New message notification:", data);
-      // Update the conversation list to show new messages
       socketConnection.emit("sidebar", user?._id);
     });
 
@@ -600,11 +612,9 @@ export default function Chat() {
     };
   }, [socketConnection, user]);
 
-  // Update the global socket connection setup to add debugging for group-related events
   useEffect(() => {
     if (!socketConnection || !user?._id) return;
 
-    // Add a listener for member removal response
     socketConnection.on("memberRemovedFromGroup", (response) => {
       console.log("Received memberRemovedFromGroup event:", response);
       if (response.success) {
@@ -612,11 +622,9 @@ export default function Chat() {
       }
     });
 
-    // Add a listener for being removed from a group
     socketConnection.on("removedFromGroup", (data) => {
       console.log("You were removed from a group:", data);
 
-      // If you are viewing that group, go back to conversation list
       if (selectedChat?.userDetails?._id === data.groupId) {
         handleBackToList();
       }
@@ -639,7 +647,7 @@ export default function Chat() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ['image', 'video'],
         allowsEditing: true,
         quality: 0.7,
       });
@@ -682,26 +690,34 @@ export default function Chat() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
-        quality: 0.6,
+        quality: 0.7,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
       });
 
       if (!result.canceled) {
         const asset = result.assets[0];
         const uri = asset.uri;
-        const mimeType = asset.mimeType || (uri.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
-        const fileName = uri.split('/').pop() || `file_${Date.now()}.${mimeType.includes('video') ? 'mp4' : 'jpg'}`;
+        const mimeType = asset.mimeType ||
+          (uri.endsWith('.mp4') ? 'video/mp4' :
+            uri.endsWith('.mov') ? 'video/quicktime' :
+              uri.endsWith('.webm') ? 'video/webm' : 'image/jpeg');
+
+        const isVideo = mimeType.startsWith('video/');
+        const fileName = uri.split('/').pop() ||
+          `file_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
 
         console.log("Selected media:", {
           uri: uri ? "URI present" : "No URI",
           fileName,
-          mimeType
+          mimeType,
+          isVideo
         });
 
         setSelectedFile({
           uri,
           fileName,
           mimeType,
-          isVideo: mimeType.includes('video'),
+          isVideo,
           name: fileName,
           type: mimeType,
           ...(Platform.OS === "web" && { file: result.file })
@@ -756,8 +772,23 @@ export default function Chat() {
   };
 
   const handleImageClick = (imageUrl) => {
+    console.log("Opening image:", imageUrl);
+    if (!imageUrl) {
+      console.error("No image URL provided");
+      return;
+    }
     setSelectedImage(imageUrl);
     setShowImageModal(true);
+  };
+
+  const handleVideoClick = (videoUrl) => {
+    setSelectedVideo(videoUrl);
+    setShowVideoModal(true);
+  };
+
+  const handleDocumentClick = (documentUrl, documentName) => {
+    setSelectedDocument({ url: documentUrl, name: documentName || "Document" });
+    setShowDocumentModal(true);
   };
 
   const renderFilePreview = () => {
@@ -768,7 +799,7 @@ export default function Chat() {
         <View className="p-2 bg-gray-200 rounded">
           <Video
             source={{ uri: selectedFile.uri }}
-            style={{ width: 200, height: 200 }}
+            style={{ width: 160, height: 120 }} // Reduced size for better fit
             useNativeControls
             resizeMode="contain"
             shouldPlay={false}
@@ -818,9 +849,7 @@ export default function Chat() {
     setIsUploading(selectedFile ? true : false);
 
     try {
-      // Check if we're editing a message
       if (editingMessage) {
-        // If editing, emit the editMessage event
         socketConnection.emit("editMessage", {
           messageId: editingMessage._id,
           conversationId: selectedChat.userDetails?._id,
@@ -829,7 +858,6 @@ export default function Chat() {
           isGroup: selectedChat.isGroup || selectedChat.userDetails?.isGroup
         });
 
-        // Clear editing state
         setEditingMessage(null);
         setMessageText("");
         return;
@@ -840,21 +868,33 @@ export default function Chat() {
       let fileType = "";
 
       if (selectedFile) {
-        console.log("Preparing to upload file:", selectedFile.name);
-        try {
-          if (!selectedFile.uri) {
-            throw new Error("File has no URI");
-          }
+        console.log("Preparing to upload file:", selectedFile.name || selectedFile.fileName || "unnamed file");
 
+        try {
           let fileToUpload;
 
           if (Platform.OS === "web") {
             if (selectedFile.file) {
               fileToUpload = selectedFile.file;
+            } else if (selectedFile.uri) {
+              try {
+                const response = await fetch(selectedFile.uri);
+                const blob = await response.blob();
+
+                fileToUpload = new File(
+                  [blob],
+                  selectedFile.fileName || selectedFile.name || `file_${Date.now()}.jpg`,
+                  { type: selectedFile.type || selectedFile.mimeType || 'image/jpeg' }
+                );
+              } catch (fetchError) {
+                console.error("Error fetching file from URI:", fetchError);
+
+                const response = await fetch(selectedFile.uri);
+                const blob = await response.blob();
+                fileToUpload = blob;
+              }
             } else {
-              const response = await fetch(selectedFile.uri);
-              const blob = await response.blob();
-              fileToUpload = new File([blob], selectedFile.name, { type: selectedFile.type });
+              throw new Error("Invalid file format for upload");
             }
           } else {
             fileToUpload = {
@@ -865,9 +905,9 @@ export default function Chat() {
           }
 
           console.log("File prepared for upload:", {
-            platform: Platform.OS,
+            platform: Platform.OS || 'unknown',
             fileType: typeof fileToUpload,
-            hasUri: !!fileToUpload.uri,
+            hasUri: Platform.OS === "web" ? !!fileToUpload.uri : !!fileToUpload.uri,
             name: fileToUpload.name || fileToUpload.fileName || "(no name)",
             type: fileToUpload.type || fileToUpload.mimeType || "(no type)"
           });
@@ -884,11 +924,25 @@ export default function Chat() {
           fileType = selectedFile.type || selectedFile.mimeType || "";
 
           console.log("File uploaded successfully:", fileUrl);
+
+          // Only preload image in web environment using proper checks
+          if (Platform.OS === "web" && fileType && fileType.startsWith('image/')) {
+            try {
+              // Use window check to make sure we're in a browser environment
+              if (typeof window !== 'undefined' && window.Image) {
+                const img = new window.Image();
+                img.src = fileUrl;
+              }
+            } catch (preloadError) {
+              // Safely catch any preload errors without affecting message sending
+              console.log("Image preload failed:", preloadError);
+            }
+          }
         } catch (uploadError) {
-          console.error("File upload error:", uploadError.message);
+          console.error("File upload error:", uploadError);
           Alert.alert(
             "Upload Failed",
-            "Could not upload file. Please try again.",
+            "Could not upload file. Please check your internet connection and try again.",
             [{ text: "OK" }]
           );
           setIsUploading(false);
@@ -898,11 +952,9 @@ export default function Chat() {
 
       const isImage = selectedFile?.type?.startsWith('image/') || selectedFile?.mimeType?.startsWith('image/');
 
-      // Check if this is a group chat
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
       if (isGroup) {
-        // Send message to a group
         const groupMessage = {
           conversationId: selectedChat.userDetails?._id,
           text: messageText,
@@ -916,28 +968,74 @@ export default function Chat() {
           conversationId: selectedChat.userDetails?._id,
           hasText: !!messageText.trim(),
           hasFile: !!fileUrl,
+          isImage,
+          imageUrl: isImage ? fileUrl : "none",
         });
 
         socketConnection.emit("newGroupMessage", groupMessage);
       } else {
-        // Send direct message
         const newMessage = {
           sender: user._id,
           receiver: selectedChat?.userDetails?._id,
           text: messageText,
+          msgByUserId: user?._id,
+          files: isImage ? [
+            {
+              url: fileUrl,
+              name: fileName,
+              type: fileType
+            }
+          ] : fileUrl ? [
+            {
+              url: fileUrl,
+              name: fileName,
+              type: fileType
+            }
+          ] : []
+        };
+
+        if (isImage) {
+          newMessage.imageUrl = fileUrl;
+        } else if (fileUrl) {
+          newMessage.fileUrl = fileUrl;
+          newMessage.fileName = fileName;
+        }
+
+        const tempId = `temp_${Date.now()}`;
+        const tempMessage = {
+          _id: tempId,
+          text: messageText,
+          msgByUserId: user?._id,
+          createdAt: new Date().toISOString(),
+          isTemp: true,
+          key: tempId,
+          files: isImage ? [
+            {
+              url: fileUrl,
+              name: fileName,
+              type: fileType
+            }
+          ] : fileUrl ? [
+            {
+              url: fileUrl,
+              name: fileName,
+              type: fileType
+            }
+          ] : [],
           imageUrl: isImage ? fileUrl : "",
           fileUrl: !isImage && fileUrl ? fileUrl : "",
           fileName: fileName,
-          msgByUserId: user?._id,
         };
 
-        console.log("Sending direct message:", {
-          receiver: selectedChat?.userDetails?._id,
-          hasText: !!messageText.trim(),
-          hasFile: !!fileUrl,
-        });
+        setMessages(prev => [...prev, tempMessage]);
 
         socketConnection.emit("newMessage", newMessage);
+
+        setTimeout(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollToEnd({ animated: true });
+          }
+        }, 100);
       }
 
       setMessageText("");
@@ -1047,6 +1145,17 @@ export default function Chat() {
   };
 
   const renderMessage = ({ item }) => {
+    console.log(`Rendering message ${item._id}:`, {
+      hasImage: !!item.imageUrl,
+      imageUrl: item.imageUrl || 'none',
+      hasFile: !!item.fileUrl,
+      hasFiles: item.files ? item.files.length : 0,
+      fileTypes: item.files ? item.files.map(f => f.type || 'unknown').join(', ') : 'none',
+      fileUrls: item.files ? item.files.map(f => f.url ? 'present' : 'missing').join(', ') : 'none',
+      isTemp: !!item.isTemp,
+      key: item.key || 'none'
+    });
+
     if (item.text && (
       item.text.includes("đã tạo nhóm") ||
       item.text.includes("đã thêm") ||
@@ -1067,18 +1176,25 @@ export default function Chat() {
       ? selectedChat.members?.find(m => m._id === item.msgByUserId)?.name || "Unknown"
       : "";
 
+    const tempStyle = item.isTemp ? { opacity: 0.7 } : {};
+
     return (
-      <MessageBubble
-        message={item}
-        isCurrentUser={isCurrentUser}
-        userProfilePic={chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`}
-        onEditMessage={handleEditMessage}
-        onDeleteMessage={handleDeleteMessage}
-        onReaction={handleAddReaction}
-        senderName={senderName}
-        isGroupChat={selectedChat?.isGroup}
-        onImagePress={(imageUrl) => handleImageClick(imageUrl)}
-      />
+      <View style={tempStyle} key={item.key || item._id}>
+        <MessageBubble
+          message={item}
+          isCurrentUser={isCurrentUser}
+          userProfilePic={chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "User")}`}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
+          onReaction={handleAddReaction}
+          senderName={senderName}
+          isGroupChat={selectedChat?.isGroup}
+          onImagePress={(imageUrl) => handleImageClick(imageUrl)}
+          onVideoPress={(videoUrl) => handleVideoClick(videoUrl)}
+          onDocumentPress={(documentUrl, documentName) => handleDocumentClick(documentUrl, documentName)}
+          forceImageUpdate={true}
+        />
+      </View>
     );
   };
 
@@ -1090,7 +1206,6 @@ export default function Chat() {
   };
 
   const renderConversationItem = ({ item: chatItem }) => {
-    // Check if this is a group chat
     if (chatItem.isGroup || chatItem.userDetails?.isGroup) {
       return (
         <GroupChatItem
@@ -1102,7 +1217,6 @@ export default function Chat() {
       );
     }
 
-    // Original code for direct chat items
     return (
       <TouchableOpacity
         className="flex-row items-center px-4 py-3 border-b border-gray-100"
@@ -1227,7 +1341,6 @@ export default function Chat() {
       visible={showGroupInfoModal}
       onClose={() => {
         setShowGroupInfoModal(false);
-        // Force refresh conversations when modal closes
         setTimeout(() => refreshConversations(), 500);
       }}
       group={currentGroupInfo}
@@ -1272,7 +1385,6 @@ export default function Chat() {
 
   return (
     <View className="flex-1 bg-white">
-      {/* Header */}
       {!selectedChat ? (
         <View className="flex-row items-center justify-between px-4 pt-10 pb-3 bg-blue-500">
           <View className="flex-row items-center bg-white rounded-full px-3 py-1 flex-1 mr-2">
@@ -1299,11 +1411,6 @@ export default function Chat() {
             onPress={() => setShowCreateGroupModal(true)}
           >
             <FontAwesomeIcon icon={faPlus} size={18} color="white" />
-            {/* {friendRequestsCount > 0 && (
-              <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-5 h-5 items-center justify-center">
-                <Text className="text-white text-xs font-bold">{friendRequestsCount}</Text>
-              </View>
-            )} */}
           </TouchableOpacity>
         </View>
       ) : (
@@ -1340,7 +1447,6 @@ export default function Chat() {
         </View>
       )}
 
-      {/* Recent Searches */}
       {isSearchFocused && searchQuery.length === 0 && (
         <View className="flex-1 bg-white">
           <View className="flex-row justify-between items-center py-2 px-4 bg-gray-100">
@@ -1414,7 +1520,6 @@ export default function Chat() {
         </View>
       )}
 
-      {/* Search Results */}
       {searchResults.length > 0 && (
         <View className="flex-1 bg-white">
           <FlatList
@@ -1448,14 +1553,12 @@ export default function Chat() {
         </View>
       )}
 
-      {/* Loading State */}
       {searchLoading && !searchResults.length && (
         <View className="p-4 items-center justify-center">
           <Text className="text-gray-500">Đang tìm kiếm...</Text>
         </View>
       )}
 
-      {/* Chat Messages or Conversation List */}
       {selectedChat ? (
         <KeyboardAvoidingView
           className="flex-1"
@@ -1478,7 +1581,6 @@ export default function Chat() {
             />
           )}
 
-          {/* File Preview Area */}
           {selectedFile && (
             <View className="bg-gray-100 p-3 border-t border-gray-300">
               <View className="flex-row justify-between items-center">
@@ -1491,7 +1593,6 @@ export default function Chat() {
             </View>
           )}
 
-          {/* Add editing indicator above message input */}
           {editingMessage && (
             <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
               <Text className="text-blue-600 font-medium">Đang chỉnh sửa tin nhắn</Text>
@@ -1506,13 +1607,11 @@ export default function Chat() {
             </View>
           )}
 
-          {/* Message Input */}
           <View className="flex-row items-center bg-gray-100 p-2">
             <View className="relative">
               <TouchableOpacity className="mx-2" onPress={toggleMediaOptions}>
                 <FontAwesomeIcon icon={faPlus} size={20} color="#555" />
               </TouchableOpacity>
-              {/* Media Options Menu */}
               {showMediaOptions && (
                 <View className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg p-2 w-48 border border-gray-200">
                   <TouchableOpacity
@@ -1542,7 +1641,6 @@ export default function Chat() {
                     </View>
                     <Text>Chọn tài liệu</Text>
                   </TouchableOpacity>
-                  {/* Close button */}
                   <TouchableOpacity
                     className="absolute top-1 right-1 p-1"
                     onPress={() => setShowMediaOptions(false)}
@@ -1632,16 +1730,15 @@ export default function Chat() {
         </>
       )}
 
-      {/* Add all modals at the end of the component */}
       {renderCreateGroupModal()}
       {renderGroupInfoModal()}
       {renderConfirmationModal()}
 
-      {/* Image viewer modal */}
       <Modal
         visible={showImageModal}
         transparent={true}
         onRequestClose={() => setShowImageModal(false)}
+        animationType="fade"
       >
         <View className="flex-1 bg-black bg-opacity-90 justify-center items-center">
           <TouchableOpacity
@@ -1650,11 +1747,68 @@ export default function Chat() {
           >
             <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
           </TouchableOpacity>
-          <Image
-            source={{ uri: selectedImage }}
-            className="w-full h-3/4"
-            resizeMode="contain"
-          />
+          {selectedImage ? (
+            <Image
+              source={{ uri: selectedImage, cache: 'reload' }}
+              className="w-full h-3/4"
+              resizeMode="contain"
+            />
+          ) : (
+            <Text className="text-white">Không thể hiển thị hình ảnh</Text>
+          )}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showVideoModal}
+        transparent={true}
+        onRequestClose={() => setShowVideoModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+          <TouchableOpacity
+            className="absolute top-10 right-5 z-10"
+            onPress={() => setShowVideoModal(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+          </TouchableOpacity>
+          <View className="w-full h-1/2 flex justify-center items-center">
+            <Video
+              source={{ uri: selectedVideo }}
+              shouldPlay={true}
+              resizeMode="contain"
+              useNativeControls
+              style={{ width: '100%', height: '100%' }}
+              isLooping={false}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDocumentModal}
+        transparent={true}
+        onRequestClose={() => setShowDocumentModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+          <TouchableOpacity
+            className="absolute top-10 right-5 z-10"
+            onPress={() => setShowDocumentModal(false)}
+          >
+            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+          </TouchableOpacity>
+          <View className="bg-white p-5 w-4/5 rounded-lg">
+            <Text className="text-lg font-bold mb-4 text-center">{selectedDocument.name}</Text>
+            <Text className="text-center mb-4">Document Preview is not available</Text>
+            <View className="flex-row justify-center">
+              <TouchableOpacity
+                className="mt-3 bg-blue-500 px-4 py-2 rounded-full flex-row items-center"
+                onPress={() => Linking.openURL(selectedDocument.url)}
+              >
+                <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                <Text className="text-white font-semibold">Download Document</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
