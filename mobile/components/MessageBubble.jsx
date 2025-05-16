@@ -370,36 +370,60 @@ const MessageBubble = ({
   };
 
   const renderMessageContent = () => {
+    // Helper function to chunk array into groups of specified size
+    const chunkArray = (arr, size) => {
+      return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size)
+      );
+    };
+
+    // Get all image files
+    const imageFiles = message.files ? message.files.filter(file =>
+      file.type?.startsWith('image/') ||
+      file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+    ) : [];
+
+    // Group images into pairs
+    const imageGroups = chunkArray(imageFiles, 2);
+
     return (
       <>
         {isGroupChat && !isCurrentUser && senderName ? (
           <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
         ) : null}
 
-        {/* Render multiple images */}
-        {message.files && message.files.filter(file =>
-          file.type?.startsWith('image/') ||
-          file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
-        ).map((file, index) => (
-          <TouchableOpacity
-            key={`img-${index}`}
-            onPress={() => onImagePress && onImagePress(file.url)}
-            className="mb-2"
-          >
-            <Image
-              source={{
-                uri: file.url,
-                ...(forceImageUpdate && { cache: 'reload' })
-              }}
-              className="rounded-lg max-w-[240px]"
-              style={{
-                width: 240,
-                height: 200,
-                resizeMode: 'cover'
-              }}
-            />
-          </TouchableOpacity>
-        ))}
+        {/* Render grouped images in a grid */}
+        {imageFiles.length > 0 && (
+          <View className="mb-2">
+            {imageGroups.map((group, groupIndex) => (
+              <View key={`group-${groupIndex}`} className="flex-row justify-between mb-1">
+                {group.map((file, index) => (
+                  <TouchableOpacity
+                    key={`img-${groupIndex}-${index}`}
+                    onPress={() => onImagePress && onImagePress(file.url)}
+                    style={{
+                      width: group.length === 1 ? 240 : 118,
+                      marginRight: index === 0 && group.length > 1 ? 4 : 0
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: file.url,
+                        ...(forceImageUpdate && { cache: 'reload' })
+                      }}
+                      className="rounded-lg"
+                      style={{
+                        width: '100%',
+                        height: 120,
+                        resizeMode: 'cover'
+                      }}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Fallback for legacy imageUrl */}
         {hasImage && !message.files && (
