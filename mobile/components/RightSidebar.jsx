@@ -377,9 +377,8 @@ export default function RightSidebar({
               {["Anh/Video", "Files", "Link"].map((tab) => (
                 <TouchableOpacity
                   key={tab}
-                  className={`flex h-11 flex-1 items-center justify-center border-b-2 ${
-                    activeTab === tab ? "border-[#005ae0]" : "border-transparent"
-                  }`}
+                  className={`flex h-11 flex-1 items-center justify-center border-b-2 ${activeTab === tab ? "border-[#005ae0]" : "border-transparent"
+                    }`}
                   onPress={() => setActiveTab(tab)}
                   activeOpacity={0.7}
                 >

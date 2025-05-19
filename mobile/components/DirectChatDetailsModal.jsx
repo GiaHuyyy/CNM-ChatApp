@@ -37,7 +37,12 @@ import {
     faUserCircle,
     faEdit,
     faCheck,
-    faArrowRight
+    faArrowRight,
+    faUserPlus,
+    faUserMinus,
+    faUsers,
+    faSignOutAlt,
+    faChevronRight
 } from '@fortawesome/free-solid-svg-icons';
 import { Video } from 'expo-av';
 
@@ -69,12 +74,19 @@ const DirectChatDetailsModal = ({
     messages,
     onDeleteConversation,
     onUpdateNickname,
+    // New props for group functionality
+    onLeaveGroup,
+    onDeleteGroup,
+    onAddMember,
+    onRemoveMember,
+    group = null
 }) => {
     const [activeTab, setActiveTab] = useState('media');
     const [activeSection, setActiveSection] = useState('main');
     const [selectedMedia, setSelectedMedia] = useState(null);
     const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
     const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+    const [showMembersList, setShowMembersList] = useState(false);
 
     // Add animation values for swipe transition
     const translateX = useState(new Animated.Value(0))[0];
@@ -84,14 +96,21 @@ const DirectChatDetailsModal = ({
     const [isEditingNickname, setIsEditingNickname] = useState(false);
     const [nickname, setNickname] = useState('');
 
+    // Check if this is a group chat
+    const isGroupChat = !!group;
+
+    // Check if user is admin of group
+    const isAdmin = isGroupChat &&
+        (currentUser?._id === (group.groupAdmin?._id || group.groupAdmin));
+
     // Initialize nickname when component mounts or user changes
     useEffect(() => {
-        if (user && user.nickname) {
+        if (!isGroupChat && user && user.nickname) {
             setNickname(user.nickname);
         } else if (user && user.name) {
             setNickname(''); // Start with empty if no nickname exists
         }
-    }, [user]);
+    }, [user, isGroupChat]);
 
     // Function to handle saving the nickname
     const handleSaveNickname = () => {
@@ -302,6 +321,73 @@ const DirectChatDetailsModal = ({
         }
     };
 
+    const handleDeleteGroup = () => {
+        if (typeof onDeleteGroup === 'function' && isAdmin) {
+            Alert.alert(
+                "Xóa nhóm chat",
+                "Bạn có chắc chắn muốn xóa nhóm chat này? Hành động này không thể hoàn tác.",
+                [
+                    { text: "Hủy", style: "cancel" },
+                    {
+                        text: "Xóa",
+                        style: "destructive",
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                onDeleteGroup();
+                            }, 300);
+                        }
+                    }
+                ]
+            );
+        } else {
+            Alert.alert("Lỗi", "Không thể xóa nhóm chat. Vui lòng thử lại sau.");
+        }
+    };
+
+    const handleLeaveGroup = () => {
+        if (typeof onLeaveGroup === 'function') {
+            Alert.alert(
+                "Rời nhóm chat",
+                "Bạn có chắc chắn muốn rời khỏi nhóm chat này?",
+                [
+                    { text: "Hủy", style: "cancel" },
+                    {
+                        text: "Rời nhóm",
+                        style: "destructive",
+                        onPress: () => {
+                            onClose();
+                            setTimeout(() => {
+                                onLeaveGroup();
+                            }, 300);
+                        }
+                    }
+                ]
+            );
+        } else {
+            Alert.alert("Lỗi", "Không thể rời khỏi nhóm chat. Vui lòng thử lại sau.");
+        }
+    };
+
+    const handleRemoveMember = (memberId, memberName) => {
+        if (typeof onRemoveMember === 'function' && isAdmin) {
+            Alert.alert(
+                "Xóa thành viên",
+                `Bạn có chắc chắn muốn xóa ${memberName} khỏi nhóm?`,
+                [
+                    { text: "Hủy", style: "cancel" },
+                    {
+                        text: "Xóa",
+                        style: "destructive",
+                        onPress: () => {
+                            onRemoveMember(memberId, memberName);
+                        }
+                    }
+                ]
+            );
+        }
+    };
+
     // Get safe area insets to handle notches and status bars
     const insets = useSafeAreaInsets();
 
@@ -311,7 +397,9 @@ const DirectChatDetailsModal = ({
             <View style={styles.header}>
                 <TouchableOpacity
                     onPress={() => {
-                        if (activeSection !== 'main') {
+                        if (showMembersList) {
+                            setShowMembersList(false);
+                        } else if (activeSection !== 'main') {
                             setActiveSection('main');
                         } else {
                             onClose();
@@ -322,9 +410,10 @@ const DirectChatDetailsModal = ({
                     <FontAwesomeIcon icon={faArrowLeft} size={20} color="#333" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>
-                    {activeSection === 'main' ? 'Thông tin' :
-                        activeSection === 'media' ? 'Ảnh/Video' :
-                            activeSection === 'files' ? 'Tệp' : 'Liên kết'}
+                    {showMembersList ? "Thành viên nhóm" :
+                        activeSection === 'main' ? 'Thông tin' :
+                            activeSection === 'media' ? 'Ảnh/Video' :
+                                activeSection === 'files' ? 'Tệp' : 'Liên kết'}
                 </Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                     <FontAwesomeIcon icon={faTimes} size={20} color="#333" />
@@ -333,224 +422,390 @@ const DirectChatDetailsModal = ({
         </View>
     );
 
-    // Replace confirmDeleteConversation with our improved version
-    const confirmDeleteConversation = handleDeleteConversation;
+    const renderMemberListSection = () => {
+        if (!isGroupChat || !group || !group.members) return null;
 
-    const renderMainSection = () => (
-        <ScrollView style={styles.container}>
-            {/* Profile Section */}
-            <View style={styles.profileSection}>
-                <Image
-                    source={{ uri: user?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}` }}
-                    style={styles.avatar}
-                />
-                <View style={styles.nameContainer}>
-                    {isEditingNickname ? (
-                        <View style={styles.nicknameEditContainer}>
-                            <TextInput
-                                style={styles.nicknameInput}
-                                value={nickname}
-                                onChangeText={setNickname}
-                                placeholder={user?.name || 'Enter nickname'}
-                                autoFocus
+        return (
+            <ScrollView style={styles.container}>
+                <View style={styles.memberListHeader}>
+                    <Text style={styles.memberListTitle}>Thành viên ({group.members?.length || 0})</Text>
+
+                    {isAdmin && (
+                        <TouchableOpacity
+                            style={styles.addMemberButton}
+                            onPress={onAddMember}
+                        >
+                            <FontAwesomeIcon icon={faUserPlus} size={18} color="#0084ff" />
+                            <Text style={styles.addMemberText}>Thêm thành viên</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                {group.members?.map(member => (
+                    <View key={member._id} style={styles.memberItem}>
+                        <View style={styles.memberInfo}>
+                            <Image
+                                source={{ uri: member.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}` }}
+                                style={styles.memberAvatar}
                             />
+                            <View style={styles.memberNameContainer}>
+                                <Text style={styles.memberName}>
+                                    {member._id === currentUser._id ? "Bạn" : member.name}
+                                </Text>
+                                {(group.groupAdmin?._id === member._id || group.groupAdmin === member._id) && (
+                                    <View style={styles.adminBadge}>
+                                        <Text style={styles.adminBadgeText}>Quản trị viên</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+
+                        {isAdmin && member._id !== currentUser._id && (
                             <TouchableOpacity
-                                style={styles.saveNicknameButton}
-                                onPress={handleSaveNickname}
+                                style={styles.removeMemberButton}
+                                onPress={() => handleRemoveMember(member._id, member.name)}
                             >
-                                <FontAwesomeIcon icon={faCheck} size={16} color="#3b82f6" />
+                                <FontAwesomeIcon icon={faUserMinus} size={18} color="#FF3B30" />
                             </TouchableOpacity>
+                        )}
+                    </View>
+                ))}
+            </ScrollView>
+        );
+    };
+
+    const renderMainSection = () => {
+        if (showMembersList) {
+            return renderMemberListSection();
+        }
+
+        return (
+            <ScrollView style={styles.container}>
+                {/* Profile Section */}
+                <View style={styles.profileSection}>
+                    <Image
+                        source={{
+                            uri: isGroupChat
+                                ? (group?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || 'Group')}&background=random`)
+                                : (user?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}`)
+                        }}
+                        style={styles.avatar}
+                    />
+                    <View style={styles.nameContainer}>
+                        {isGroupChat ? (
+                            <Text style={styles.name}>{group?.name}</Text>
+                        ) : isEditingNickname ? (
+                            <View style={styles.nicknameEditContainer}>
+                                <TextInput
+                                    style={styles.nicknameInput}
+                                    value={nickname}
+                                    onChangeText={setNickname}
+                                    placeholder={user?.name || 'Enter nickname'}
+                                    autoFocus
+                                />
+                                <TouchableOpacity
+                                    style={styles.saveNicknameButton}
+                                    onPress={handleSaveNickname}
+                                >
+                                    <FontAwesomeIcon icon={faCheck} size={16} color="#3b82f6" />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.cancelNicknameButton}
+                                    onPress={() => setIsEditingNickname(false)}
+                                >
+                                    <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={styles.nameRow}>
+                                <Text style={styles.name}>
+                                    {user?.nickname || user?.name}
+                                    {user?.nickname && <Text style={styles.realName}> ({user?.name})</Text>}
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.editNicknameButton}
+                                    onPress={() => setIsEditingNickname(true)}
+                                >
+                                    <FontAwesomeIcon icon={faEdit} size={16} color="#888" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                        {isGroupChat ? (
+                            <Text style={styles.groupMembersCount}>
+                                {group.members?.length || 0} thành viên
+                            </Text>
+                        ) : (
+                            <Text style={styles.status}>{user?.online ? "Đang hoạt động" : "Không hoạt động"}</Text>
+                        )}
+                    </View>
+                </View>
+
+                {/* Action Buttons - Different for group and direct chat */}
+                {isGroupChat ? (
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => setShowMembersList(true)}
+                        >
+                            <View style={[styles.iconContainer, { backgroundColor: '#4299E1' }]}>
+                                <FontAwesomeIcon icon={faUsers} size={18} color="#fff" />
+                            </View>
+                            <Text style={styles.actionText}>Thành viên</Text>
+                        </TouchableOpacity>
+
+                        {isAdmin ? (
                             <TouchableOpacity
-                                style={styles.cancelNicknameButton}
-                                onPress={() => setIsEditingNickname(false)}
+                                style={styles.actionButton}
+                                onPress={onAddMember}
                             >
-                                <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+                                <View style={[styles.iconContainer, { backgroundColor: '#48BB78' }]}>
+                                    <FontAwesomeIcon icon={faUserPlus} size={18} color="#fff" />
+                                </View>
+                                <Text style={styles.actionText}>Thêm thành viên</Text>
                             </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                style={styles.actionButton}
+                                onPress={handleLeaveGroup}
+                            >
+                                <View style={[styles.iconContainer, { backgroundColor: '#ED8936' }]}>
+                                    <FontAwesomeIcon icon={faSignOutAlt} size={18} color="#fff" />
+                                </View>
+                                <Text style={styles.actionText}>Rời nhóm</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {isAdmin && (
+                            <TouchableOpacity
+                                style={styles.actionButton}
+                                onPress={handleDeleteGroup}
+                            >
+                                <View style={[styles.iconContainer, { backgroundColor: '#F56565' }]}>
+                                    <FontAwesomeIcon icon={faTrash} size={18} color="#fff" />
+                                </View>
+                                <Text style={styles.actionText}>Xóa nhóm</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                ) : (
+                    <View style={styles.actionButtons}>
+                        <TouchableOpacity style={styles.actionButton}>
+                            <View style={[styles.iconContainer, { backgroundColor: '#4299E1' }]}>
+                                <FontAwesomeIcon icon={faPhone} size={18} color="#fff" />
+                            </View>
+                            <Text style={styles.actionText}>Gọi thoại</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton}>
+                            <View style={[styles.iconContainer, { backgroundColor: '#48BB78' }]}>
+                                <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
+                            </View>
+                            <Text style={styles.actionText}>Gọi video</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.actionButton}>
+                            <View style={[styles.iconContainer, { backgroundColor: '#ED8936' }]}>
+                                <FontAwesomeIcon icon={faUserCircle} size={18} color="#fff" />
+                            </View>
+                            <Text style={styles.actionText}>Xem hồ sơ</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Group Members Section (Preview) */}
+                {isGroupChat && (
+                    <TouchableOpacity
+                        style={styles.membersPreview}
+                        onPress={() => setShowMembersList(true)}
+                    >
+                        <View style={styles.membersPreviewHeader}>
+                            <Text style={styles.membersPreviewTitle}>Thành viên nhóm</Text>
+                            <FontAwesomeIcon icon={faChevronRight} size={16} color="#888" />
+                        </View>
+
+                        <View style={styles.memberAvatarsRow}>
+                            {group.members?.slice(0, 5).map(member => (
+                                <Image
+                                    key={member._id}
+                                    source={{ uri: member.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}` }}
+                                    style={styles.memberAvatarSmall}
+                                />
+                            ))}
+                            {group.members?.length > 5 && (
+                                <View style={styles.moreMembersCircle}>
+                                    <Text style={styles.moreMembersText}>+{group.members.length - 5}</Text>
+                                </View>
+                            )}
+                        </View>
+                    </TouchableOpacity>
+                )}
+
+                {/* Additional info - only for direct chats */}
+                {!isGroupChat && (
+                    <View style={styles.infoSection}>
+                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                            <FontAwesomeIcon icon={faEnvelope} size={18} color="#666" />
+                            <Text style={styles.infoText}>{user?.email || "Email không có sẵn"}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                            <FontAwesomeIcon icon={faUserTie} size={18} color="#666" />
+                            <Text style={styles.infoText}>{user?.status || "Trạng thái chưa cập nhật"}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                            <FontAwesomeIcon icon={faBell} size={18} color="#666" />
+                            <Text style={styles.infoText}>Tắt thông báo</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Media Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Ảnh/Video</Text>
+                        <TouchableOpacity onPress={() => setActiveSection('media')}>
+                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {mediaItems.length > 0 ? (
+                        <FlatList
+                            horizontal
+                            data={mediaItems.slice(0, 6)}
+                            keyExtractor={(item, index) => `media-${item._id || index}`}
+                            renderItem={({ item, index }) => {
+                                const isVideo = item.mediaType === 'video';
+
+                                return (
+                                    <TouchableOpacity
+                                        style={styles.mediaItem}
+                                        onPress={() => handleMediaPress(item, index)}
+                                    >
+                                        {isVideo ? (
+                                            <View style={styles.videoContainer}>
+                                                <Video
+                                                    source={{ uri: item.mediaUrl }}
+                                                    style={styles.mediaThumbnail}
+                                                    resizeMode="cover"
+                                                    shouldPlay={false}
+                                                />
+                                                <View style={styles.playIconOverlay}>
+                                                    <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
+                                                </View>
+                                            </View>
+                                        ) : (
+                                            <Image source={{ uri: item.mediaUrl }} style={styles.mediaThumbnail} />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                            showsHorizontalScrollIndicator={false}
+                        />
+                    ) : (
+                        <Text style={styles.emptyText}>Không có ảnh hoặc video được chia sẻ</Text>
+                    )}
+                </View>
+
+                {/* Files Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Tệp tin</Text>
+                        <TouchableOpacity onPress={() => setActiveSection('files')}>
+                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {fileItems.length > 0 ? (
+                        <View>
+                            {fileItems.slice(0, 3).map((item, index) => (
+                                <TouchableOpacity
+                                    key={`file-${item._id || index}`}
+                                    style={styles.fileItem}
+                                    onPress={() => Linking.openURL(item.fileUrl)}
+                                >
+                                    <FontAwesomeIcon
+                                        icon={item.fileName?.toLowerCase().endsWith('.pdf') ? faFileAlt : faFilePen}
+                                        size={20}
+                                        color="#888"
+                                    />
+                                    <View style={styles.fileInfo}>
+                                        <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
+                                        <Text style={styles.fileDate}>
+                                            {new Date(item.createdAt).toLocaleDateString()}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
                         </View>
                     ) : (
-                        <View style={styles.nameRow}>
-                            <Text style={styles.name}>
-                                {user?.nickname || user?.name}
-                                {user?.nickname && <Text style={styles.realName}> ({user?.name})</Text>}
-                            </Text>
-                            <TouchableOpacity
-                                style={styles.editNicknameButton}
-                                onPress={() => setIsEditingNickname(true)}
-                            >
-                                <FontAwesomeIcon icon={faEdit} size={16} color="#888" />
-                            </TouchableOpacity>
-                        </View>
+                        <Text style={styles.emptyText}>Không có tệp tin được chia sẻ</Text>
                     )}
-                    <Text style={styles.status}>{user?.online ? "Đang hoạt động" : "Không hoạt động"}</Text>
-                </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-                <TouchableOpacity style={styles.actionButton}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#4299E1' }]}>
-                        <FontAwesomeIcon icon={faPhone} size={18} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Gọi thoại</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionButton}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#48BB78' }]}>
-                        <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Gọi video</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionButton}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#ED8936' }]}>
-                        <FontAwesomeIcon icon={faUserCircle} size={18} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Xem hồ sơ</Text>
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.infoSection}>
-                <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
-                    <FontAwesomeIcon icon={faEnvelope} size={18} color="#666" />
-                    <Text style={styles.infoText}>{user?.email || "Email không có sẵn"}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
-                    <FontAwesomeIcon icon={faUserTie} size={18} color="#666" />
-                    <Text style={styles.infoText}>{user?.status || "Trạng thái chưa cập nhật"}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
-                    <FontAwesomeIcon icon={faBell} size={18} color="#666" />
-                    <Text style={styles.infoText}>Tắt thông báo</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Media Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Ảnh/Video</Text>
-                    <TouchableOpacity onPress={() => setActiveSection('media')}>
-                        <Text style={styles.seeAllText}>Xem tất cả</Text>
-                    </TouchableOpacity>
                 </View>
 
-                {mediaItems.length > 0 ? (
-                    <FlatList
-                        horizontal
-                        data={mediaItems.slice(0, 6)}
-                        keyExtractor={(item, index) => `media-${item._id || index}`}
-                        renderItem={({ item, index }) => {
-                            const isVideo = item.mediaType === 'video';
+                {/* Links Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Liên kết</Text>
+                        <TouchableOpacity onPress={() => setActiveSection('links')}>
+                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                        </TouchableOpacity>
+                    </View>
 
-                            return (
+                    {linkItems.length > 0 ? (
+                        <View>
+                            {linkItems.slice(0, 3).map((item, index) => (
                                 <TouchableOpacity
-                                    style={styles.mediaItem}
-                                    onPress={() => handleMediaPress(item, index)}
+                                    key={`link-${item._id || index}`}
+                                    style={styles.linkItem}
+                                    onPress={() => Linking.openURL(item.text)}
                                 >
-                                    {isVideo ? (
-                                        <View style={styles.videoContainer}>
-                                            <Video
-                                                source={{ uri: item.mediaUrl }}
-                                                style={styles.mediaThumbnail}
-                                                resizeMode="cover"
-                                                shouldPlay={false}
-                                            />
-                                            <View style={styles.playIconOverlay}>
-                                                <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
-                                            </View>
-                                        </View>
-                                    ) : (
-                                        <Image source={{ uri: item.mediaUrl }} style={styles.mediaThumbnail} />
-                                    )}
+                                    <FontAwesomeIcon icon={faLink} size={20} color="#888" />
+                                    <View style={styles.linkInfo}>
+                                        <Text style={styles.linkUrl} numberOfLines={1}>{item.text}</Text>
+                                        <Text style={styles.linkDate}>
+                                            {new Date(item.createdAt).toLocaleDateString()}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
-                            );
-                        }}
-                        showsHorizontalScrollIndicator={false}
-                    />
-                ) : (
-                    <Text style={styles.emptyText}>Không có ảnh hoặc video được chia sẻ</Text>
-                )}
-            </View>
-
-            {/* Files Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Tệp tin</Text>
-                    <TouchableOpacity onPress={() => setActiveSection('files')}>
-                        <Text style={styles.seeAllText}>Xem tất cả</Text>
-                    </TouchableOpacity>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text style={styles.emptyText}>Không có liên kết được chia sẻ</Text>
+                    )}
                 </View>
 
-                {fileItems.length > 0 ? (
-                    <View>
-                        {fileItems.slice(0, 3).map((item, index) => (
-                            <TouchableOpacity
-                                key={`file-${item._id || index}`}
-                                style={styles.fileItem}
-                                onPress={() => Linking.openURL(item.fileUrl)}
-                            >
-                                <FontAwesomeIcon
-                                    icon={item.fileName?.toLowerCase().endsWith('.pdf') ? faFileAlt : faFilePen}
-                                    size={20}
-                                    color="#888"
-                                />
-                                <View style={styles.fileInfo}>
-                                    <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-                                    <Text style={styles.fileDate}>
-                                        {new Date(item.createdAt).toLocaleDateString()}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                {/* Delete/Leave Button */}
+                {isGroupChat ? (
+                    isAdmin ? (
+                        <TouchableOpacity
+                            style={styles.dangerButton}
+                            onPress={handleDeleteGroup}
+                        >
+                            <FontAwesomeIcon icon={faTrash} size={18} color="#ff3b30" />
+                            <Text style={styles.dangerButtonText}>Xóa nhóm chat</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity
+                            style={styles.dangerButton}
+                            onPress={handleLeaveGroup}
+                        >
+                            <FontAwesomeIcon icon={faSignOutAlt} size={18} color="#ff3b30" />
+                            <Text style={styles.dangerButtonText}>Rời nhóm chat</Text>
+                        </TouchableOpacity>
+                    )
                 ) : (
-                    <Text style={styles.emptyText}>Không có tệp tin được chia sẻ</Text>
-                )}
-            </View>
-
-            {/* Links Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Liên kết</Text>
-                    <TouchableOpacity onPress={() => setActiveSection('links')}>
-                        <Text style={styles.seeAllText}>Xem tất cả</Text>
+                    <TouchableOpacity
+                        style={styles.dangerButton}
+                        onPress={handleDeleteConversation}
+                    >
+                        <FontAwesomeIcon icon={faTrash} size={18} color="#ff3b30" />
+                        <Text style={styles.dangerButtonText}>Xóa lịch sử trò chuyện</Text>
                     </TouchableOpacity>
-                </View>
-
-                {linkItems.length > 0 ? (
-                    <View>
-                        {linkItems.slice(0, 3).map((item, index) => (
-                            <TouchableOpacity
-                                key={`link-${item._id || index}`}
-                                style={styles.linkItem}
-                                onPress={() => Linking.openURL(item.text)}
-                            >
-                                <FontAwesomeIcon icon={faLink} size={20} color="#888" />
-                                <View style={styles.linkInfo}>
-                                    <Text style={styles.linkUrl} numberOfLines={1}>{item.text}</Text>
-                                    <Text style={styles.linkDate}>
-                                        {new Date(item.createdAt).toLocaleDateString()}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                ) : (
-                    <Text style={styles.emptyText}>Không có liên kết được chia sẻ</Text>
                 )}
-            </View>
-
-            {/* Delete Button */}
-            <TouchableOpacity
-                style={styles.dangerButton}
-                onPress={confirmDeleteConversation}
-            >
-                <FontAwesomeIcon icon={faTrash} size={18} color="#ff3b30" />
-                <Text style={styles.dangerButtonText}>Xóa lịch sử trò chuyện</Text>
-            </TouchableOpacity>
-        </ScrollView>
-    );
+            </ScrollView>
+        );
+    };
 
     const renderMediaSection = () => (
         <View style={styles.fullSection}>
@@ -1150,6 +1405,123 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: '500',
     },
+
+    // Add new styles for group functionality
+    groupMembersCount: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 5,
+    },
+    memberListHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+        backgroundColor: '#fff',
+    },
+    memberListTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    addMemberButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#e6f7ff',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+    },
+    addMemberText: {
+        color: '#0084ff',
+        fontSize: 14,
+        marginLeft: 6,
+    },
+    memberItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+        backgroundColor: '#fff',
+    },
+    memberInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    memberAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+    },
+    memberNameContainer: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    memberName: {
+        fontSize: 16,
+    },
+    adminBadge: {
+        backgroundColor: '#e6f7ff',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        alignSelf: 'flex-start',
+        marginTop: 4,
+    },
+    adminBadgeText: {
+        color: '#0084ff',
+        fontSize: 12,
+    },
+    removeMemberButton: {
+        padding: 8,
+        backgroundColor: '#ffeeee',
+        borderRadius: 20,
+    },
+    membersPreview: {
+        backgroundColor: '#fff',
+        padding: 15,
+        marginTop: 10,
+    },
+    membersPreviewHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    membersPreviewTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    memberAvatarsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    memberAvatarSmall: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        marginRight: -8,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    moreMembersCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#e0e0e0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 4,
+    },
+    moreMembersText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#666',
+    }
 });
 
 export default DirectChatDetailsModal;
