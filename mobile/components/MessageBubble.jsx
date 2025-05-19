@@ -22,7 +22,6 @@ import {
 import { Video } from 'expo-av';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import ConfirmationModal from './ConfirmationModal';
 
 // Common emoji reactions
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
@@ -306,40 +305,59 @@ const MessageBubble = ({
     setShowMessageOptions(true);
   };
 
-  const [confirmationModal, setConfirmationModal] = useState({
-    visible: false,
-    messageId: null
-  });
-
   const handleDeleteMessageWithConfirmation = (messageId) => {
     console.log("Delete message requested for ID:", messageId);
 
-    if (!messageId || !onDeleteMessage) {
-      console.error("Cannot delete message: ", !messageId ? "No message ID" : "No delete handler");
+    // Added more debugging to verify the message ID and delete handler
+    if (!messageId) {
+      console.error("Cannot delete message: No message ID provided");
+      Alert.alert("Lỗi", "Không thể xoá tin nhắn (ID không xác định)");
       return;
     }
 
-    setConfirmationModal({
-      visible: true,
-      messageId: messageId
-    });
-  };
-
-  const handleConfirmDelete = () => {
-    const messageId = confirmationModal.messageId;
-    console.log("Confirmed deletion for message:", messageId);
-
-    if (onDeleteMessage && messageId) {
-      onDeleteMessage(messageId);
-      console.log("Delete function called");
+    if (!onDeleteMessage) {
+      console.error("Cannot delete message: No delete handler provided");
+      Alert.alert("Lỗi", "Chức năng xoá tin nhắn không khả dụng");
+      return;
     }
 
-    setConfirmationModal({ visible: false, messageId: null });
-    setShowMessageOptions(false);
-  };
+    // Use a timeout to ensure Alert is displayed properly
+    setTimeout(() => {
+      Alert.alert(
+        "Xóa tin nhắn",
+        "Bạn có chắc chắn muốn xóa tin nhắn này không?",
+        [
+          {
+            text: "Hủy",
+            style: "cancel"
+          },
+          {
+            text: "Xóa",
+            style: "destructive",
+            onPress: () => {
+              console.log("Delete confirmed for message ID:", messageId);
 
-  const handleCancelDelete = () => {
-    setConfirmationModal({ visible: false, messageId: null });
+              try {
+                // Call the delete handler and pass the message ID
+                onDeleteMessage(messageId);
+                console.log("Delete function called successfully");
+
+                // Close the options modal
+                setShowMessageOptions(false);
+
+                // Show confirmation to user
+                setTimeout(() => {
+                  Alert.alert("Thành công", "Tin nhắn đã được xoá");
+                }, 300);
+              } catch (error) {
+                console.error("Error deleting message:", error);
+                Alert.alert("Lỗi", "Không thể xoá tin nhắn. Vui lòng thử lại.");
+              }
+            }
+          }
+        ]
+      );
+    }, 100);
   };
 
   const getFileIcon = (fileName) => {
@@ -748,11 +766,13 @@ const MessageBubble = ({
               className="flex-row items-center px-4 py-3"
               onPress={() => {
                 console.log("Delete button pressed for message:", message._id);
-                if (message._id) {
-                  handleDeleteMessageWithConfirmation(message._id);
-                } else {
-                  console.error("Message has no ID");
+                // Enhanced logging and error handling
+                if (!message || !message._id) {
+                  console.error("Invalid message or missing ID", message);
+                  Alert.alert("Lỗi", "Không thể xoá tin nhắn không có ID");
+                  return;
                 }
+                handleDeleteMessageWithConfirmation(message._id);
               }}
             >
               <FontAwesomeIcon icon={faTrash} size={16} color="#ff4444" className="mr-3" />
@@ -761,16 +781,6 @@ const MessageBubble = ({
           </View>
         </TouchableOpacity>
       </Modal>
-
-      {/* Confirmation modal */}
-      <ConfirmationModal
-        visible={confirmationModal.visible}
-        title="Xóa tin nhắn"
-        message="Bạn có chắc chắn muốn xóa tin nhắn này không?"
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
-        type="danger"
-      />
 
       {/* Image modal */}
       <Modal
