@@ -16,7 +16,8 @@ import {
   faFileImage,
   faFileVideo,
   faTimes,
-  faDownload
+  faDownload,
+  faReply
 } from '@fortawesome/free-solid-svg-icons';
 import { Video } from 'expo-av';
 import { format } from 'date-fns';
@@ -36,6 +37,8 @@ const MessageBubble = ({
   onImagePress,
   onVideoPress,
   onDocumentPress,
+  onReply,
+  onReplyClick, // Add new prop for handling clicks on reply references
   senderName = "",
   isGroupChat = false,
   showTime = true,
@@ -266,18 +269,16 @@ const MessageBubble = ({
   };
 
   const handleLongPress = (event) => {
-    if (messageRef.current && messageRef.current.measureInWindow) {
-      messageRef.current.measureInWindow((x, y, width, height) => {
-        const position = {
-          x: x,
-          y: y - 50,
-        };
-        setReactionPosition(position);
-        setShowReactionSelector(true);
-      });
-    } else {
-      setShowReactionSelector(true);
-    }
+    // Instead of positioning relative to message, center on screen
+    const screenWidth = Dimensions.get('window').width;
+    const screenHeight = Dimensions.get('window').height;
+
+    // Center in the screen
+    const posX = screenWidth / 2;
+    const posY = screenHeight / 2;
+
+    setReactionPosition({ x: posX, y: posY });
+    setShowReactionSelector(true);
 
     if (isCurrentUser && !message.isDeleted) {
       setIsLongPressed(true);
@@ -289,6 +290,13 @@ const MessageBubble = ({
       onReaction(message._id, emoji);
 
       addLocalReaction(emoji);
+    }
+    setShowReactionSelector(false);
+  };
+
+  const handleReply = () => {
+    if (onReply) {
+      onReply(message);
     }
     setShowReactionSelector(false);
   };
@@ -417,6 +425,24 @@ const MessageBubble = ({
         {isGroupChat && !isCurrentUser && senderName ? (
           <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
         ) : null}
+
+        {/* Show replied message if present - make it clickable, passing the original message ID */}
+        {message.replyTo && (
+          <TouchableOpacity
+            className="mb-2 bg-black/5 rounded px-2 py-1 border-l-2 border-gray-400"
+            onPress={() => onReplyClick && message.replyTo.messageId && onReplyClick(message.replyTo.messageId)}
+            activeOpacity={0.7}
+          >
+            <Text className="text-xs font-medium text-gray-600" numberOfLines={1}>
+              {isCurrentUser && message.replyTo.sender === message.msgByUserId ?
+                "Replied to yourself:" :
+                `Replied to ${isGroupChat ? "someone" : isCurrentUser ? "them" : "you"}:`}
+            </Text>
+            <Text className="text-xs text-gray-500" numberOfLines={2}>
+              {message.replyTo.text || "Media message"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Render grouped images in a grid */}
         {imageFiles.length > 0 && (
@@ -637,33 +663,51 @@ const MessageBubble = ({
           onPress={() => setShowReactionSelector(false)}
         >
           <View
-            className="absolute bg-white rounded-full py-2 px-1 shadow-lg flex-row"
+            className="bg-white rounded-2xl py-1 px-2 shadow-lg"
             style={{
-              left: reactionPosition.x,
-              top: reactionPosition.y,
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: [{ translateX: -125 }, { translateY: -20 }],
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.25,
               shadowRadius: 3.84,
-              elevation: 5
+              elevation: 5,
+              flexDirection: 'row',
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              width: 250, // Wider to accommodate reply button
+              height: 40, // Fixed height to ensure proper alignment
             }}
           >
             {EMOJI_REACTIONS.map((emoji, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={() => handleReactionSelect(emoji)}
-                className="mx-2 items-center justify-center"
+                className="items-center justify-center"
+                style={{ width: 28, height: 28 }} // Even smaller, fixed-size touch targets
               >
-                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                <Text style={{ fontSize: 16 }}>{emoji}</Text>
               </TouchableOpacity>
             ))}
 
+            {/* Reply button - available for both own and others' messages */}
+            <TouchableOpacity
+              className="bg-blue-100 rounded-full items-center justify-center"
+              onPress={handleReply}
+              style={{ width: 28, height: 28 }}
+            >
+              <FontAwesomeIcon icon={faReply} size={12} color="#0084ff" />
+            </TouchableOpacity>
+
             {isCurrentUser && !message.isDeleted && (
               <TouchableOpacity
-                className="ml-2 bg-gray-200 rounded-full w-10 h-10 items-center justify-center"
+                className="bg-gray-200 rounded-full items-center justify-center"
                 onPress={handleShowMessageOptions}
+                style={{ width: 28, height: 28 }} // Match size with emojis
               >
-                <FontAwesomeIcon icon={faEllipsisVertical} size={16} color="#555" />
+                <FontAwesomeIcon icon={faEllipsisVertical} size={12} color="#555" />
               </TouchableOpacity>
             )}
           </View>
@@ -837,12 +881,20 @@ MessageBubble.propTypes = {
         type: PropTypes.string,
       })
     ),
+    // Add replyTo to PropTypes
+    replyTo: PropTypes.shape({
+      messageId: PropTypes.string,
+      text: PropTypes.string,
+      sender: PropTypes.string
+    })
   }).isRequired,
   isCurrentUser: PropTypes.bool.isRequired,
   onReaction: PropTypes.func,
   userProfilePic: PropTypes.string.isRequired,
   onEditMessage: PropTypes.func,
   onDeleteMessage: PropTypes.func,
+  onReply: PropTypes.func, // New prop type for reply functionality
+  onReplyClick: PropTypes.func, // Add prop type for reply click handler
   onImagePress: PropTypes.func,
   onVideoPress: PropTypes.func,
   onDocumentPress: PropTypes.func,

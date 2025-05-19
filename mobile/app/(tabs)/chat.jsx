@@ -64,6 +64,7 @@ export default function Chat() {
   const [searchGroupUsers, setSearchGroupUsers] = useState("");
 
   const [editingMessage, setEditingMessage] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
 
   const inputRef = useRef(null);
 
@@ -987,6 +988,13 @@ export default function Chat() {
         }
       }
 
+      // Prepare reply info if replying to a message
+      const replyInfo = replyingTo ? {
+        messageId: replyingTo._id,
+        text: replyingTo.text || "",
+        sender: replyingTo.msgByUserId
+      } : null;
+
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
       if (isGroup) {
@@ -995,10 +1003,11 @@ export default function Chat() {
           text: messageText,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
           })),
           msgByUserId: user?._id,
+          replyTo: replyInfo // Add reply info
         };
 
         console.log("Sending group message with files:", {
@@ -1016,9 +1025,10 @@ export default function Chat() {
           msgByUserId: user?._id,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
-          }))
+          })),
+          replyTo: replyInfo // Add reply info
         };
 
         // Create temporary message with the same file information
@@ -1032,7 +1042,7 @@ export default function Chat() {
           key: tempId,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
           }))
         };
@@ -1050,6 +1060,7 @@ export default function Chat() {
       setMessageText("");
       setSelectedFiles([]);
       setIsUploading(false);
+      setReplyingTo(null); // Clear reply state after sending
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert("Error", "Failed to send message. Please try again.");
@@ -1186,6 +1197,63 @@ export default function Chat() {
     setShowVideoModal(true);
   };
 
+  const handleReply = (message) => {
+    console.log("Replying to message:", message);
+    setReplyingTo(message);
+
+    // Focus the input when replying
+    if (inputRef && inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // Add a function to scroll to the original message when clicking on a reply
+  const scrollToMessage = (messageId) => {
+    if (!messageId || !messages || !messagesEndRef.current) return;
+
+    console.log("Scrolling to message:", messageId);
+
+    // Find the index of the message in the current list
+    const messageIndex = messages.findIndex(msg => msg._id === messageId);
+
+    if (messageIndex !== -1) {
+      // Scroll to the message
+      messagesEndRef.current.scrollToIndex({
+        index: messageIndex,
+        animated: true,
+        viewOffset: 50, // Add some space at the top
+        viewPosition: 0.5 // Position in the middle of the screen
+      });
+
+      // Briefly highlight the message (optional)
+      const updatedMessages = [...messages];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        isHighlighted: true
+      };
+      setMessages(updatedMessages);
+
+      // Remove highlight after a short delay
+      setTimeout(() => {
+        const resetMessages = [...messages];
+        if (resetMessages[messageIndex]) {
+          resetMessages[messageIndex] = {
+            ...resetMessages[messageIndex],
+            isHighlighted: false
+          };
+          setMessages(resetMessages);
+        }
+      }, 1500);
+    } else {
+      // Message not found in the current view - might need to fetch it
+      console.log("Message not found in current view");
+    }
+  };
+
   const renderMessage = ({ item }) => {
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
@@ -1222,9 +1290,9 @@ export default function Chat() {
 
     return (
       <View
-        style={tempStyle}
+        style={item.isHighlighted ? { ...tempStyle, backgroundColor: '#f0f8ff' } : tempStyle}
         key={item.key || item._id}
-        className="mb-1 px-1"  // Add proper vertical spacing between messages
+        className="mb-1 px-1"
       >
         <MessageBubble
           message={item}
@@ -1233,6 +1301,8 @@ export default function Chat() {
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
           onReaction={handleAddReaction}
+          onReply={handleReply}
+          onReplyClick={scrollToMessage} // Add the handler to navigate to original messages
           senderName={senderName}
           isGroupChat={selectedChat?.isGroup}
           onImagePress={(imageUrl) => handleImageClick(imageUrl)}
@@ -1634,9 +1704,13 @@ export default function Chat() {
               renderItem={renderMessage}
               keyExtractor={(item) => item._id}
               contentContainerStyle={{ paddingVertical: 15 }}
-              ItemSeparatorComponent={() => <View className="h-1" />} // Add separator between messages
+              ItemSeparatorComponent={() => <View className="h-1" />}
               onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: true })}
               onLayout={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
+              onScrollToIndexFailed={(info) => {
+                console.log("Failed to scroll to index", info);
+                // Handle scroll failure - can retry or show an error
+              }}
             />
           )}
 
@@ -1649,6 +1723,23 @@ export default function Chat() {
                 </TouchableOpacity>
               </View>
               <View className="mt-2">{renderFilePreview()}</View>
+            </View>
+          )}
+
+          {/* Add reply UI before the input field */}
+          {replyingTo && (
+            <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
+              <View className="flex-1">
+                <Text className="text-blue-600 font-medium">Đang trả lời tin nhắn</Text>
+                <Text className="text-gray-600 text-sm" numberOfLines={1}>
+                  {replyingTo.text || (replyingTo.files?.length > 0 ? "Media message" : "Message")}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={cancelReply}
+              >
+                <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+              </TouchableOpacity>
             </View>
           )}
 
