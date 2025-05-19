@@ -31,7 +31,9 @@ import {
   faFileVideo,
   faTimes,
   faDownload,
-  faReply
+  faReply,
+  faShareFromSquare,
+  faForward
 } from '@fortawesome/free-solid-svg-icons';
 import { Video } from 'expo-av';
 import { format } from 'date-fns';
@@ -51,7 +53,8 @@ const MessageBubble = ({
   onVideoPress,
   onDocumentPress,
   onReply,
-  onReplyClick, // Add new prop for handling clicks on reply references
+  onReplyClick,
+  onShareMessage, // Ensure this prop is defined
   senderName = "",
   isGroupChat = false,
   showTime = true,
@@ -458,6 +461,16 @@ const MessageBubble = ({
           <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
         ) : null}
 
+        {/* Show shared message indicator when message is shared */}
+        {message.isShared && message.sharedContent && (
+          <View className="mb-2 bg-blue-50 rounded-md px-2 py-1">
+            <Text className="text-xs font-medium text-blue-600">Tin nhắn được chia sẻ</Text>
+            {message.sharedContent.originalSender && (
+              <Text className="text-xs text-gray-600">Từ: {message.sharedContent.originalSender}</Text>
+            )}
+          </View>
+        )}
+
         {/* Show replied message if present - make it clickable, passing the original message ID */}
         {message.replyTo && (
           <TouchableOpacity
@@ -634,6 +647,17 @@ const MessageBubble = ({
     return acc;
   }, {});
 
+  // Fix the handleShareMessage function - define it clearly at the top level
+  const handleShareMessage = () => {
+    if (typeof onShareMessage === 'function') {
+      onShareMessage(message);
+      setShowMessageOptions(false);
+    } else {
+      console.warn("Share message handler not provided");
+      setShowMessageOptions(false);
+    }
+  };
+
   return (
     <View className="flex-row items-start mb-3 mx-1">
       {!isCurrentUser && (
@@ -774,6 +798,20 @@ const MessageBubble = ({
             >
               <FontAwesomeIcon icon={faPencil} size={16} color="#0084ff" className="mr-3" />
               <Text className="text-[15px]">Chỉnh sửa tin nhắn</Text>
+            </TouchableOpacity>
+
+            {/* Share Message Option with direct function reference */}
+            <TouchableOpacity
+              className="flex-row items-center px-4 py-3 border-b border-gray-100"
+              onPress={() => {
+                if (typeof onShareMessage === 'function') {
+                  onShareMessage(message);
+                }
+                setShowMessageOptions(false);
+              }}
+            >
+              <FontAwesomeIcon icon={faForward} size={16} color="#4CAF50" className="mr-3" />
+              <Text className="text-[15px]">Chia sẻ tin nhắn</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -939,6 +977,7 @@ MessageBubble.propTypes = {
   onDeleteMessage: PropTypes.func,
   onReply: PropTypes.func, // New prop type for reply functionality
   onReplyClick: PropTypes.func, // Add prop type for reply click handler
+  onShareMessage: PropTypes.func, // Add prop type for sharing functionality
   onImagePress: PropTypes.func,
   onVideoPress: PropTypes.func,
   onDocumentPress: PropTypes.func,

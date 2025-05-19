@@ -20,6 +20,7 @@ import CreateGroupChat from "../../components/CreateGroupChat";
 import GroupChatItem from "../../components/GroupChatItem";
 import GroupInfoModal from "../../components/GroupInfoModal";
 import DirectChatDetailsModal from "../../components/DirectChatDetailsModal";
+import ShareMessageModal from "../../components/ShareMessageModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
 
@@ -84,6 +85,10 @@ export default function Chat() {
   });
 
   const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
+
+  const [messageToShare, setMessageToShare] = useState(null);
+  const [shareSearchQuery, setShareSearchQuery] = useState('');
+  const [shareSearchResults, setShareSearchResults] = useState([]);
 
   useEffect(() => {
     if (initializationAttempted.current) return;
@@ -1264,6 +1269,12 @@ export default function Chat() {
     }
   };
 
+  // Ensure handleShareMessage function is defined in the main component scope
+  const handleShareMessage = (message) => {
+    console.log("Opening share message dialog for:", message?._id);
+    setMessageToShare(message);
+  };
+
   const renderMessage = ({ item }) => {
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
@@ -1312,7 +1323,8 @@ export default function Chat() {
           onDeleteMessage={handleDeleteMessage}
           onReaction={handleAddReaction}
           onReply={handleReply}
-          onReplyClick={scrollToMessage} // Add the handler to navigate to original messages
+          onReplyClick={scrollToMessage}
+          onShareMessage={handleShareMessage} // Ensure this is correctly passed
           senderName={senderName}
           isGroupChat={selectedChat?.isGroup}
           onImagePress={(imageUrl) => handleImageClick(imageUrl)}
@@ -1622,6 +1634,12 @@ export default function Chat() {
   // Add state variables for scroll tracking
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
+
+  // Add this handler for share success notifications
+  const handleShareSuccess = (recipient) => {
+    const recipientName = recipient.userDetails?.name || recipient.name;
+    Alert.alert("Thành công", `Đã chia sẻ tin nhắn đến ${recipientName}`);
+  };
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
@@ -2181,6 +2199,17 @@ export default function Chat() {
             </View>
           </TouchableWithoutFeedback>
         </Modal>
+
+        {/* Share Message Modal */}
+        <ShareMessageModal
+          visible={!!messageToShare}
+          onClose={() => setMessageToShare(null)}
+          message={messageToShare}
+          allUsers={allUsers}
+          socketConnection={socketConnection}
+          currentUser={user}
+          onSuccess={handleShareSuccess}
+        />
       </View>
     </SafeAreaView>
   );
