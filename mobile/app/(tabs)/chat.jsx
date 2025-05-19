@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload, faPhone, faVideo, faSearch } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1478,9 +1478,21 @@ export default function Chat() {
               </>
             )}
           </View>
-          <View className="flex-row">
+          <View className="flex-row items-center">
+            {!selectedChat.isGroup && (
+              <>
+                <TouchableOpacity className="mr-4">
+                  <FontAwesomeIcon icon={faPhone} size={18} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity className="mr-4">
+                  <FontAwesomeIcon icon={faVideo} size={18} color="white" />
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity className="mr-4">
+              <FontAwesomeIcon icon={faSearch} size={18} color="white" />
+            </TouchableOpacity>
             <TouchableOpacity
-              className="mr-4"
               onPress={() => selectedChat.isGroup && handleShowGroupInfo(selectedChat)}
             >
               <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
