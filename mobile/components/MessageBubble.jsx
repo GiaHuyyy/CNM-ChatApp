@@ -377,6 +377,32 @@ const MessageBubble = ({
       );
     };
 
+    // Helper function to get clean display filename
+    const getDisplayName = (file) => {
+      if (!file) return "File";
+
+      // Use name property directly if available - this should be the original name
+      if (file.name) return file.name;
+
+      // Otherwise try to get a filename from the URL
+      if (file.url) {
+        const urlParts = file.url.split('/');
+        const lastPart = urlParts[urlParts.length - 1];
+
+        // Remove any query parameters
+        const cleanName = lastPart.split('?')[0];
+
+        // Try to decode URI component for better display
+        try {
+          return decodeURIComponent(cleanName);
+        } catch (e) {
+          return cleanName;
+        }
+      }
+
+      return "File";
+    };
+
     // Get all image files
     const imageFiles = message.files ? message.files.filter(file =>
       file.type?.startsWith('image/') ||
@@ -418,6 +444,9 @@ const MessageBubble = ({
                         resizeMode: 'cover'
                       }}
                     />
+                    <Text className="text-xs text-gray-500 mt-1 text-center" numberOfLines={1}>
+                      {getDisplayName(file)}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -443,6 +472,9 @@ const MessageBubble = ({
                 resizeMode: 'cover'
               }}
             />
+            <Text className="text-xs text-gray-500 mt-1 text-center" numberOfLines={1}>
+              {getDisplayName(fileDetails) || message.fileName || "Image"}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -459,26 +491,11 @@ const MessageBubble = ({
             <View style={{ width: 240, height: 180 }} className="bg-black flex items-center justify-center rounded-md">
               <FontAwesomeIcon icon={faPlay} size={30} color="rgba(255,255,255,0.8)" />
               <Text className="mt-2 text-white text-xs" numberOfLines={1}>
-                {file.name || "Video"}
+                {getDisplayName(file) || "Video"}
               </Text>
             </View>
           </TouchableOpacity>
         ))}
-
-        {/* Fallback for legacy video */}
-        {hasVideo && !message.files && (
-          <TouchableOpacity
-            onPress={() => onVideoPress && onVideoPress(fileDetails?.url)}
-            className="mb-2 rounded-md overflow-hidden"
-          >
-            <View style={{ width: 240, height: 180 }} className="bg-black flex items-center justify-center rounded-md">
-              <FontAwesomeIcon icon={faPlay} size={30} color="rgba(255,255,255,0.8)" />
-              <Text className="mt-2 text-white text-xs" numberOfLines={1}>
-                {fileDetails?.name || "Video"}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
 
         {/* Render multiple documents */}
         {message.files && message.files.filter(file =>
@@ -487,16 +504,16 @@ const MessageBubble = ({
         ).map((file, index) => (
           <TouchableOpacity
             key={`doc-${index}`}
-            onPress={() => onDocumentPress && onDocumentPress(file.url, file.name || "Document")}
+            onPress={() => onDocumentPress && onDocumentPress(file.url, file.name || getDisplayName(file) || "Document")}
             className="mb-2 p-3 bg-gray-100 rounded-md flex-row items-center"
           >
             <FontAwesomeIcon icon={getFileIcon(file.name)} size={20} color="#555" />
             <View className="ml-2 flex-1">
               <Text className="text-sm font-medium" numberOfLines={1}>
-                {file.name || "Document"}
+                {file.name || getDisplayName(file) || "Document"}
               </Text>
               <Text className="text-xs text-gray-500">
-                Document
+                {file.type?.split('/')[1]?.toUpperCase() || 'Document'}
               </Text>
             </View>
           </TouchableOpacity>
