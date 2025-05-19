@@ -682,6 +682,7 @@ export default function Chat() {
     }
   };
 
+  // Update pickImage to preserve original filenames
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -696,33 +697,60 @@ export default function Chat() {
         quality: 0.7,
         videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
         allowsMultipleSelection: true,
+        exif: true // Get extra metadata when available
       });
 
       if (!result.canceled && result.assets.length > 0) {
         const newFiles = result.assets.map(asset => {
           const uri = asset.uri;
+
+          // Get the file extension
+          const fileExtension = uri.split('.').pop().toLowerCase();
+
+          // Determine the MIME type
           const mimeType = asset.mimeType ||
-            (uri.endsWith('.mp4') ? 'video/mp4' :
-              uri.endsWith('.mov') ? 'video/quicktime' :
-                uri.endsWith('.webm') ? 'video/webm' : 'image/jpeg');
+            (fileExtension === 'mp4' ? 'video/mp4' :
+              fileExtension === 'mov' ? 'video/quicktime' :
+                fileExtension === 'jpg' || fileExtension === 'jpeg' ? 'image/jpeg' :
+                  fileExtension === 'png' ? 'image/png' : 'application/octet-stream');
 
           const isVideo = mimeType.startsWith('video/');
-          const fileName = uri.split('/').pop() ||
-            `file_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
+
+          // Extract real filename from either fileName property or URI
+          let originalName = '';
+
+          if (asset.fileName) {
+            originalName = asset.fileName;
+          } else if (asset.assetId) {
+            // For iOS assets with an assetId
+            originalName = `${asset.assetId}.${fileExtension}`;
+          } else {
+            // Extract filename from URI
+            const uriParts = uri.split('/');
+            originalName = uriParts[uriParts.length - 1];
+
+            // If the URI doesn't have a good filename, create one
+            if (!originalName || originalName.indexOf('.') === -1) {
+              originalName = `image_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`;
+            }
+          }
+
+          console.log(`Selected file: ${originalName} (${mimeType})`);
 
           return {
             uri,
-            fileName,
+            fileName: originalName,
+            originalName: originalName,
             mimeType,
             isVideo,
-            name: fileName,
+            name: originalName,
             type: mimeType,
             ...(Platform.OS === "web" && { file: asset.file })
           };
         });
 
         setSelectedFiles(prev => [...prev, ...newFiles]);
-        console.log(`Added ${newFiles.length} media files`);
+        console.log(`Added ${newFiles.length} media files with original names`);
       }
     } catch (error) {
       console.error("Error picking media:", error);
@@ -730,6 +758,7 @@ export default function Chat() {
     }
   };
 
+  // Update pickDocument to ensure original filenames are preserved
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -746,22 +775,25 @@ export default function Chat() {
             throw new Error("Document has no URI");
           }
 
-          const fileName = name || uri.split('/').pop() ||
-            `document_${Date.now()}.${mimeType?.includes('pdf') ? 'pdf' : 'docx'}`;
+          // The document picker usually provides the original filename in the name property
+          const originalName = name || uri.split('/').pop() || `document_${Date.now()}`;
+
+          console.log(`Selected document: ${originalName} (${mimeType})`);
 
           return {
             uri,
-            fileName,
+            fileName: originalName,
+            originalName: originalName,
             mimeType,
             isDocument: true,
-            name: fileName,
+            name: originalName,
             type: mimeType,
             ...(Platform.OS === "web" && { file: asset.file })
           };
         });
 
         setSelectedFiles(prev => [...prev, ...newDocuments]);
-        console.log(`Added ${newDocuments.length} documents`);
+        console.log(`Added ${newDocuments.length} documents with original names`);
       }
     } catch (error) {
       console.error("Error picking document:", error);
@@ -879,12 +911,20 @@ export default function Chat() {
       if (selectedFiles.length > 0) {
         const uploadPromises = selectedFiles.map(async (file) => {
           try {
-            console.log(`Preparing to upload file: ${file.name || file.fileName || "unnamed file"}`);
+            // Get the original filename
+            const originalName = file.originalName || file.name || file.fileName || "unnamed file";
+            console.log(`Preparing to upload file with original name: ${originalName}`);
+
             let fileToUpload;
 
             if (Platform.OS === "web") {
               if (file.file) {
-                fileToUpload = file.file;
+                // For web File objects, preserve the name
+                fileToUpload = new File(
+                  [file.file],
+                  originalName,
+                  { type: file.type || file.mimeType || 'application/octet-stream' }
+                );
               } else if (file.uri) {
                 try {
                   const response = await fetch(file.uri);
@@ -892,15 +932,16 @@ export default function Chat() {
 
                   fileToUpload = new File(
                     [blob],
-                    file.fileName || file.name || `file_${Date.now()}.jpg`,
+                    originalName,
                     { type: file.type || file.mimeType || 'image/jpeg' }
                   );
                 } catch (fetchError) {
                   console.error("Error fetching file from URI:", fetchError);
-
                   const response = await fetch(file.uri);
                   const blob = await response.blob();
                   fileToUpload = blob;
+                  // Attach the name to the blob for Cloudinary
+                  blob.name = originalName;
                 }
               } else {
                 throw new Error("Invalid file format for upload");
@@ -908,10 +949,14 @@ export default function Chat() {
             } else {
               fileToUpload = {
                 uri: file.uri,
-                name: file.fileName || file.name || `file_${Date.now()}${file.type?.includes('image') ? '.jpg' : '.file'}`,
+                name: originalName,  // Use the original name for the upload
+                originalName: originalName, // Preserve original name in an extra property
                 type: file.mimeType || file.type || 'application/octet-stream'
               };
             }
+
+            // Add original name to the file object for the upload
+            fileToUpload.originalName = originalName;
 
             const uploadResult = await uploadFileToCloud(fileToUpload);
 
@@ -919,9 +964,10 @@ export default function Chat() {
               throw new Error("Upload failed - no URL returned");
             }
 
+            // Return the file info with the original filename
             return {
               url: uploadResult.secure_url,
-              name: file.name || file.fileName || "unnamed_file",
+              name: originalName, // Use original name consistently
               type: file.type || file.mimeType || "",
               isImage: (file.type?.startsWith('image/') || file.mimeType?.startsWith('image/'))
             };
@@ -949,7 +995,7 @@ export default function Chat() {
           text: messageText,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name,
+            name: file.name, // Original filename preserved
             type: file.type
           })),
           msgByUserId: user?._id,
@@ -958,7 +1004,7 @@ export default function Chat() {
         console.log("Sending group message with files:", {
           conversationId: selectedChat.userDetails?._id,
           hasText: !!messageText.trim(),
-          fileCount: uploadedFiles.length
+          files: uploadedFiles.map(f => f.name) // Log filenames for debugging
         });
 
         socketConnection.emit("newGroupMessage", groupMessage);
@@ -970,11 +1016,12 @@ export default function Chat() {
           msgByUserId: user?._id,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name,
+            name: file.name, // Original filename preserved
             type: file.type
           }))
         };
 
+        // Create temporary message with the same file information
         const tempId = `temp_${Date.now()}`;
         const tempMessage = {
           _id: tempId,
@@ -985,7 +1032,7 @@ export default function Chat() {
           key: tempId,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name,
+            name: file.name, // Original filename preserved
             type: file.type
           }))
         };
