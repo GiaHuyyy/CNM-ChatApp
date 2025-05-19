@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking } from "react-native";
+import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking, Animated } from "react-native";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload, faPhone, faVideo, faSearch, faArrowDown } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -64,6 +64,7 @@ export default function Chat() {
   const [searchGroupUsers, setSearchGroupUsers] = useState("");
 
   const [editingMessage, setEditingMessage] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
 
   const inputRef = useRef(null);
 
@@ -467,7 +468,13 @@ export default function Chat() {
           }
         });
 
-        setMessages(conversation.messages);
+        // Sort messages from newest to oldest for inverted FlatList
+        // The backend likely returns oldest to newest, so we need to reverse
+        const sortedMessages = [...conversation.messages].sort((a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        setMessages(sortedMessages);
 
         if (conversation.messages.length > 0 && socketConnection) {
           socketConnection.emit("seen", selectedChat.userDetails?._id);
@@ -482,7 +489,12 @@ export default function Chat() {
       console.log("Received group messages:", groupData?.messages?.length || 0);
 
       if (groupData && Array.isArray(groupData.messages)) {
-        setMessages(groupData.messages);
+        // Sort messages from newest to oldest for inverted FlatList
+        const sortedMessages = [...groupData.messages].sort((a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        setMessages(sortedMessages);
 
         setChatUser({
           _id: groupData._id,
@@ -524,11 +536,14 @@ export default function Chat() {
           );
         }
 
-        return [...prevMessages.filter(msg =>
-          !(msg.isTemp &&
-            ((msg.imageUrl && message.imageUrl && msg.imageUrl === message.imageUrl) ||
-              (msg.text && message.text && msg.text === message.text)))
-        ), { ...message, key: Date.now().toString() }];
+        // For inverted list, add to beginning of array
+        return [
+          { ...message, key: Date.now().toString() },
+          ...prevMessages.filter(msg =>
+            !(msg.isTemp &&
+              ((msg.imageUrl && message.imageUrl && msg.imageUrl === message.imageUrl) ||
+                (msg.text && message.text && msg.text === message.text))))
+        ];
       });
 
       setTimeout(() => {
@@ -536,10 +551,6 @@ export default function Chat() {
           socketConnection.emit("sidebar", user?._id);
         }
       }, 500);
-
-      setTimeout(() => {
-        messagesEndRef.current?.scrollToEnd({ animated: true });
-      }, 100);
     };
 
     const handleNewMessage = (newMessage) => {
@@ -558,7 +569,8 @@ export default function Chat() {
         setMessages(prevMessages => {
           const messageExists = prevMessages.some(msg => msg._id === newMessage._id);
           if (messageExists) return prevMessages;
-          return [...prevMessages, newMessage];
+          // For inverted list, add to beginning of array
+          return [newMessage, ...prevMessages];
         });
 
         setTimeout(() => {
@@ -594,50 +606,10 @@ export default function Chat() {
     };
   }, [socketConnection, selectedChat]);
 
+  // Remove or modify the scrollToEnd effect since we're using inverted mode
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollToEnd({ animated: true });
-    }
+    // No need to automatically scroll to end with inverted list
   }, [messages]);
-
-  useEffect(() => {
-    if (!socketConnection) return;
-
-    socketConnection.on("newMessageNotification", (data) => {
-      console.log("New message notification:", data);
-      socketConnection.emit("sidebar", user?._id);
-    });
-
-    return () => {
-      socketConnection.off("newMessageNotification");
-    };
-  }, [socketConnection, user]);
-
-  useEffect(() => {
-    if (!socketConnection || !user?._id) return;
-
-    socketConnection.on("memberRemovedFromGroup", (response) => {
-      console.log("Received memberRemovedFromGroup event:", response);
-      if (response.success) {
-        refreshConversations();
-      }
-    });
-
-    socketConnection.on("removedFromGroup", (data) => {
-      console.log("You were removed from a group:", data);
-
-      if (selectedChat?.userDetails?._id === data.groupId) {
-        handleBackToList();
-      }
-
-      refreshConversations();
-    });
-
-    return () => {
-      socketConnection.off("memberRemovedFromGroup");
-      socketConnection.off("removedFromGroup");
-    };
-  }, [socketConnection, user?._id, selectedChat]);
 
   const takePhoto = async () => {
     try {
@@ -987,6 +959,13 @@ export default function Chat() {
         }
       }
 
+      // Prepare reply info if replying to a message
+      const replyInfo = replyingTo ? {
+        messageId: replyingTo._id,
+        text: replyingTo.text || "",
+        sender: replyingTo.msgByUserId
+      } : null;
+
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
       if (isGroup) {
@@ -995,10 +974,11 @@ export default function Chat() {
           text: messageText,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
           })),
           msgByUserId: user?._id,
+          replyTo: replyInfo // Add reply info
         };
 
         console.log("Sending group message with files:", {
@@ -1016,9 +996,10 @@ export default function Chat() {
           msgByUserId: user?._id,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
-          }))
+          })),
+          replyTo: replyInfo // Add reply info
         };
 
         // Create temporary message with the same file information
@@ -1032,12 +1013,13 @@ export default function Chat() {
           key: tempId,
           files: uploadedFiles.map(file => ({
             url: file.url,
-            name: file.name, // Original filename preserved
+            name: file.name,
             type: file.type
           }))
         };
 
-        setMessages(prev => [...prev, tempMessage]);
+        // For inverted list, add to beginning of array
+        setMessages(prev => [tempMessage, ...prev]);
         socketConnection.emit("newMessage", newMessage);
 
         setTimeout(() => {
@@ -1050,6 +1032,7 @@ export default function Chat() {
       setMessageText("");
       setSelectedFiles([]);
       setIsUploading(false);
+      setReplyingTo(null); // Clear reply state after sending
     } catch (error) {
       console.error("Error sending message:", error);
       Alert.alert("Error", "Failed to send message. Please try again.");
@@ -1186,6 +1169,87 @@ export default function Chat() {
     setShowVideoModal(true);
   };
 
+  // Add scroll handler function
+  const handleScroll = (event) => {
+    // For inverted lists, contentOffset.y > 0 means we're scrolled away from the bottom (newest messages)
+    const isScrolled = event.nativeEvent.contentOffset.y > 150;
+
+    if (isScrolled !== isScrolledUp) {
+      setIsScrolledUp(isScrolled);
+
+      // Animate button visibility
+      Animated.timing(scrollButtonOpacity, {
+        toValue: isScrolled ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Function to scroll to newest messages
+  const scrollToNewestMessages = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollToOffset({ offset: 0, animated: true });
+    }
+  };
+
+  const handleReply = (message) => {
+    console.log("Replying to message:", message);
+    setReplyingTo(message);
+
+    // Focus the input when replying
+    if (inputRef && inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // Add a function to scroll to the original message when clicking on a reply
+  const scrollToMessage = (messageId) => {
+    if (!messageId || !messages || !messagesEndRef.current) return;
+
+    console.log("Scrolling to message:", messageId);
+
+    // Find the index of the message in the current list
+    const messageIndex = messages.findIndex(msg => msg._id === messageId);
+
+    if (messageIndex !== -1) {
+      // Scroll to the message
+      messagesEndRef.current.scrollToIndex({
+        index: messageIndex,
+        animated: true,
+        viewOffset: 50, // Add some space at the top
+        viewPosition: 0.5 // Position in the middle of the screen
+      });
+
+      // Briefly highlight the message (optional)
+      const updatedMessages = [...messages];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        isHighlighted: true
+      };
+      setMessages(updatedMessages);
+
+      // Remove highlight after a short delay
+      setTimeout(() => {
+        const resetMessages = [...messages];
+        if (resetMessages[messageIndex]) {
+          resetMessages[messageIndex] = {
+            ...resetMessages[messageIndex],
+            isHighlighted: false
+          };
+          setMessages(resetMessages);
+        }
+      }, 1500);
+    } else {
+      // Message not found in the current view - might need to fetch it
+      console.log("Message not found in current view");
+    }
+  };
+
   const renderMessage = ({ item }) => {
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
@@ -1221,7 +1285,11 @@ export default function Chat() {
     const tempStyle = item.isTemp ? { opacity: 0.7 } : {};
 
     return (
-      <View style={tempStyle} key={item.key || item._id}>
+      <View
+        style={item.isHighlighted ? { ...tempStyle, backgroundColor: '#f0f8ff' } : tempStyle}
+        key={item.key || item._id}
+        className="mb-1 px-1"
+      >
         <MessageBubble
           message={item}
           isCurrentUser={isCurrentUser}
@@ -1229,6 +1297,8 @@ export default function Chat() {
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
           onReaction={handleAddReaction}
+          onReply={handleReply}
+          onReplyClick={scrollToMessage} // Add the handler to navigate to original messages
           senderName={senderName}
           isGroupChat={selectedChat?.isGroup}
           onImagePress={(imageUrl) => handleImageClick(imageUrl)}
@@ -1425,6 +1495,10 @@ export default function Chat() {
     setShowAllConversations(prevState => !prevState);
   };
 
+  // Add state variables for scroll tracking
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
+
   return (
     <View className="flex-1 bg-white">
       {!selectedChat ? (
@@ -1478,9 +1552,21 @@ export default function Chat() {
               </>
             )}
           </View>
-          <View className="flex-row">
+          <View className="flex-row items-center">
+            {!selectedChat.isGroup && (
+              <>
+                <TouchableOpacity className="mr-4">
+                  <FontAwesomeIcon icon={faPhone} size={18} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity className="mr-4">
+                  <FontAwesomeIcon icon={faVideo} size={18} color="white" />
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity className="mr-4">
+              <FontAwesomeIcon icon={faSearch} size={18} color="white" />
+            </TouchableOpacity>
             <TouchableOpacity
-              className="mr-4"
               onPress={() => selectedChat.isGroup && handleShowGroupInfo(selectedChat)}
             >
               <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
@@ -1612,15 +1698,47 @@ export default function Chat() {
               <Text className="text-gray-500">Đang tải tin nhắn...</Text>
             </View>
           ) : (
-            <FlatList
-              ref={messagesEndRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item._id}
-              contentContainerStyle={{ paddingVertical: 15 }}
-              onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: true })}
-              onLayout={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
-            />
+            <View className="flex-1 relative">
+              <FlatList
+                ref={messagesEndRef}
+                data={messages}
+                inverted={true} // This ensures newest messages show up at the bottom immediately
+                renderItem={renderMessage}
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={{ paddingVertical: 15 }}
+                ItemSeparatorComponent={() => <View className="h-1" />}
+                onScroll={handleScroll}
+                scrollEventThrottle={200}
+                onScrollToIndexFailed={(info) => {
+                  console.log("Failed to scroll to index", info);
+                }}
+              />
+
+              {/* Scroll to bottom button */}
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  right: 16,
+                  bottom: 16,
+                  opacity: scrollButtonOpacity,
+                  transform: [{
+                    scale: scrollButtonOpacity.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 1]
+                    })
+                  }],
+                }}
+                pointerEvents={isScrolledUp ? 'auto' : 'none'}
+              >
+                <TouchableOpacity
+                  className="bg-blue-500 w-12 h-12 rounded-full items-center justify-center shadow-md"
+                  onPress={scrollToNewestMessages}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesomeIcon icon={faArrowDown} size={18} color="#fff" />
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
           )}
 
           {selectedFiles.length > 0 && (
@@ -1632,6 +1750,23 @@ export default function Chat() {
                 </TouchableOpacity>
               </View>
               <View className="mt-2">{renderFilePreview()}</View>
+            </View>
+          )}
+
+          {/* Add reply UI before the input field */}
+          {replyingTo && (
+            <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
+              <View className="flex-1">
+                <Text className="text-blue-600 font-medium">Đang trả lời tin nhắn</Text>
+                <Text className="text-gray-600 text-sm" numberOfLines={1}>
+                  {replyingTo.text || (replyingTo.files?.length > 0 ? "Media message" : "Message")}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={cancelReply}
+              >
+                <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+              </TouchableOpacity>
             </View>
           )}
 
