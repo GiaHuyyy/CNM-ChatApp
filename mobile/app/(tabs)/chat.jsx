@@ -18,6 +18,7 @@ import ConfirmationModal from "../../components/ConfirmationModal";
 import CreateGroupChat from "../../components/CreateGroupChat";
 import GroupChatItem from "../../components/GroupChatItem";
 import GroupInfoModal from "../../components/GroupInfoModal";
+import DirectChatDetailsModal from "../../components/DirectChatDetailsModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
 
@@ -80,6 +81,8 @@ export default function Chat() {
     message: "",
     action: null
   });
+
+  const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
 
   useEffect(() => {
     if (initializationAttempted.current) return;
@@ -1317,6 +1320,105 @@ export default function Chat() {
     }
   };
 
+  const handleDeleteDirectConversation = () => {
+    if (!socketConnection || !selectedChat) {
+      Alert.alert("Error", "Unable to connect to server. Please try again later.");
+      return;
+    }
+
+    setConfirmModal({
+      visible: true,
+      title: "Delete Conversation",
+      message: "Are you sure you want to delete all chat history with this user?",
+      action: () => {
+        // Set loading state if needed
+        setIsChatLoading(true);
+
+        socketConnection.emit("deleteConversation", {
+          conversationId: selectedChat.userDetails?._id,
+          userId: user._id
+        });
+
+        socketConnection.once("conversationDeleted", (response) => {
+          setIsChatLoading(false);
+
+          if (response.success) {
+            Alert.alert("Success", "Chat history has been deleted");
+            handleBackToList();
+            refreshConversations();
+          } else {
+            Alert.alert("Error", response.message || "Failed to delete conversation");
+          }
+        });
+      }
+    });
+  };
+
+  const handleUpdateNickname = (newNickname) => {
+    if (!socketConnection || !selectedChat) {
+      Alert.alert("Error", "Unable to connect to server. Please try again later.");
+      return;
+    }
+
+    // Only proceed if the nickname changed
+    if (newNickname === chatUser?.nickname) return;
+
+    // If nickname is empty, it means we want to remove it
+    const nicknamePayload = {
+      userId: user._id,
+      contactId: selectedChat.userDetails?._id,
+      nickname: newNickname || null // If empty, set to null to remove nickname
+    };
+
+    console.log("Updating nickname:", nicknamePayload);
+
+    // Send the update to the server
+    socketConnection.emit("updateContactNickname", nicknamePayload);
+
+    // Handle the response from the server
+    socketConnection.once("nicknameUpdated", (response) => {
+      if (response.success) {
+        // Update the local chat user data with the new nickname
+        setChatUser(prev => ({
+          ...prev,
+          nickname: newNickname || null
+        }));
+
+        // Update in the all users list for the conversation list
+        setAllUsers(prev => {
+          return prev.map(chat => {
+            if (chat.userDetails?._id === selectedChat.userDetails?._id) {
+              return {
+                ...chat,
+                userDetails: {
+                  ...chat.userDetails,
+                  nickname: newNickname || null
+                }
+              };
+            }
+            return chat;
+          });
+        });
+
+        // Flash a success message
+        Alert.alert("Success", "Contact name updated successfully");
+      } else {
+        Alert.alert("Error", response.message || "Failed to update contact name");
+      }
+    });
+  };
+
+  // Add the missing function
+  const handleShowChatDetails = () => {
+    if (selectedChat?.userDetails?.isGroup) {
+      // For group chats, show the group info modal
+      handleShowGroupInfo(selectedChat);
+    } else {
+      // For direct chats, show the chat details modal
+      setShowDirectChatDetails(true);
+    }
+  };
+
   const renderConversationItem = ({ item: chatItem }) => {
     if (chatItem.isGroup || chatItem.userDetails?.isGroup) {
       return (
@@ -1328,6 +1430,9 @@ export default function Chat() {
         />
       );
     }
+
+    // Use nickname if available, otherwise use real name
+    const displayName = chatItem?.userDetails?.nickname || chatItem?.userDetails?.name;
 
     return (
       <TouchableOpacity
@@ -1341,7 +1446,7 @@ export default function Chat() {
           />
         </View>
         <View className="ml-3 flex-1 overflow-hidden">
-          <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
+          <Text className="text-[15px] font-semibold">{displayName}</Text>
           <Text numberOfLines={1} className="text-gray-500 text-sm">
             {chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? <Text>Bạn: </Text> : null}
             {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
@@ -1542,9 +1647,14 @@ export default function Chat() {
                   className="w-9 h-9 rounded-full mr-2"
                 />
                 <View>
-                  <Text className="text-white font-semibold">{chatUser?.name}</Text>
+                  <Text className="text-white font-semibold">
+                    {selectedChat.userDetails?.isGroup
+                      ? chatUser?.name
+                      : (chatUser?.nickname || chatUser?.name)
+                    }
+                  </Text>
                   <Text className="text-white text-xs opacity-80">
-                    {selectedChat.isGroup
+                    {selectedChat.userDetails?.isGroup
                       ? `${selectedChat.members?.length || 0} members`
                       : (chatUser?.online ? 'Đang hoạt động' : 'Không hoạt động')}
                   </Text>
@@ -1553,7 +1663,7 @@ export default function Chat() {
             )}
           </View>
           <View className="flex-row items-center">
-            {!selectedChat.isGroup && (
+            {!selectedChat.userDetails?.isGroup && (
               <>
                 <TouchableOpacity className="mr-4">
                   <FontAwesomeIcon icon={faPhone} size={18} color="white" />
@@ -1567,7 +1677,7 @@ export default function Chat() {
               <FontAwesomeIcon icon={faSearch} size={18} color="white" />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => selectedChat.isGroup && handleShowGroupInfo(selectedChat)}
+              onPress={handleShowChatDetails}
             >
               <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
             </TouchableOpacity>
@@ -1906,6 +2016,17 @@ export default function Chat() {
           )}
         </>
       )}
+
+      {/* Add the DirectChatDetailsModal for 1-on-1 chats */}
+      <DirectChatDetailsModal
+        visible={showDirectChatDetails}
+        onClose={() => setShowDirectChatDetails(false)}
+        user={chatUser}
+        currentUser={user}
+        messages={messages}
+        onDeleteConversation={handleDeleteDirectConversation}
+        onUpdateNickname={handleUpdateNickname} // Pass the function as prop
+      />
 
       {renderCreateGroupModal()}
       {renderGroupInfoModal()}
