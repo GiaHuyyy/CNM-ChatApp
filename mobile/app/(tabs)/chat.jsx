@@ -565,11 +565,10 @@ export default function Chat() {
         ];
       });
 
+      // Scroll to the new message
       setTimeout(() => {
-        if (socketConnection && user?._id) {
-          socketConnection.emit("sidebar", user?._id);
-        }
-      }, 500);
+        messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
     };
 
     const handleNewMessage = (newMessage) => {
@@ -588,12 +587,14 @@ export default function Chat() {
         setMessages(prevMessages => {
           const messageExists = prevMessages.some(msg => msg._id === newMessage._id);
           if (messageExists) return prevMessages;
+
           // For inverted list, add to beginning of array
           return [newMessage, ...prevMessages];
         });
 
+        // Scroll to the new message
         setTimeout(() => {
-          messagesEndRef.current?.scrollToEnd({ animated: true });
+          messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
         }, 100);
       }
     };
@@ -987,6 +988,31 @@ export default function Chat() {
 
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
+      // Create temporary message with unique ID
+      const tempId = `temp_${Date.now()}`;
+      const tempMessage = {
+        _id: tempId,
+        text: messageText,
+        msgByUserId: user?._id,
+        createdAt: new Date().toISOString(),
+        isTemp: true,
+        key: tempId,
+        files: uploadedFiles.map(file => ({
+          url: file.url,
+          name: file.name,
+          type: file.type
+        })),
+        replyTo: replyInfo
+      };
+
+      // Add temporary message to start of list for immediate feedback
+      setMessages(prev => [tempMessage, ...prev]);
+
+      // Scroll to show the new message immediately
+      setTimeout(() => {
+        messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
+
       if (isGroup) {
         const groupMessage = {
           conversationId: selectedChat.userDetails?._id,
@@ -997,7 +1023,7 @@ export default function Chat() {
             type: file.type
           })),
           msgByUserId: user?._id,
-          replyTo: replyInfo // Add reply info
+          replyTo: replyInfo
         };
 
         console.log("Sending group message with files:", {
@@ -1021,31 +1047,7 @@ export default function Chat() {
           replyTo: replyInfo // Add reply info
         };
 
-        // Create temporary message with the same file information
-        const tempId = `temp_${Date.now()}`;
-        const tempMessage = {
-          _id: tempId,
-          text: messageText,
-          msgByUserId: user?._id,
-          createdAt: new Date().toISOString(),
-          isTemp: true,
-          key: tempId,
-          files: uploadedFiles.map(file => ({
-            url: file.url,
-            name: file.name,
-            type: file.type
-          }))
-        };
-
-        // For inverted list, add to beginning of array
-        setMessages(prev => [tempMessage, ...prev]);
         socketConnection.emit("newMessage", newMessage);
-
-        setTimeout(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollToEnd({ animated: true });
-          }
-        }, 100);
       }
 
       setMessageText("");
@@ -1865,6 +1867,10 @@ export default function Chat() {
                   scrollEventThrottle={200}
                   onScrollToIndexFailed={(info) => {
                     console.log("Failed to scroll to index", info);
+                  }}
+                  maintainVisibleContentPosition={{
+                    minIndexForVisible: 0, // Keep the first item visible
+                    autoscrollToTopThreshold: 10 // Autoscroll when within 10px of top
                   }}
                 />
 
