@@ -1221,7 +1221,11 @@ export default function Chat() {
     const tempStyle = item.isTemp ? { opacity: 0.7 } : {};
 
     return (
-      <View style={tempStyle} key={item.key || item._id}>
+      <View
+        style={tempStyle}
+        key={item.key || item._id}
+        className="mb-1 px-1"  // Add proper vertical spacing between messages
+      >
         <MessageBubble
           message={item}
           isCurrentUser={isCurrentUser}
@@ -1630,6 +1634,7 @@ export default function Chat() {
               renderItem={renderMessage}
               keyExtractor={(item) => item._id}
               contentContainerStyle={{ paddingVertical: 15 }}
+              ItemSeparatorComponent={() => <View className="h-1" />} // Add separator between messages
               onContentSizeChange={() => messagesEndRef.current?.scrollToEnd({ animated: true })}
               onLayout={() => messagesEndRef.current?.scrollToEnd({ animated: false })}
             />

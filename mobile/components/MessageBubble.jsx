@@ -537,14 +537,19 @@ const MessageBubble = ({
           </TouchableOpacity>
         )}
 
+        {/* Message text with better wrapping */}
         {message.text ? (
-          <Text className={`text-sm ${isCurrentUser ? 'text-white' : 'text-gray-800'}`}>
+          <Text
+            className={`text-sm flex-wrap ${isCurrentUser ? 'text-white' : 'text-gray-900'}`}
+            style={{ flexShrink: 1 }}
+            numberOfLines={undefined} // Allow unlimited lines
+          >
             {message.text}
           </Text>
         ) : null}
 
         {showTime ? (
-          <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-white/80' : 'text-gray-500'}`}>
+          <Text className={`text-xs mt-1 ${isCurrentUser ? 'text-white/80' : 'text-purple-700'}`}>
             {format(new Date(message.createdAt), 'HH:mm', { locale: vi })}
             {message.isEdited ? " (Đã chỉnh sửa)" : ""}
           </Text>
@@ -572,7 +577,7 @@ const MessageBubble = ({
   }, {});
 
   return (
-    <View className="flex-row items-start mb-2 mx-1">
+    <View className="flex-row items-start mb-3 mx-1">
       {!isCurrentUser && (
         <Image
           source={{ uri: userProfilePic }}
@@ -590,12 +595,13 @@ const MessageBubble = ({
           <View
             className={`rounded-lg ${isCurrentUser
               ? 'bg-blue-500 rounded-tr-sm'
-              : 'bg-gray-100 rounded-tl-sm'
-              } px-3 py-2 max-w-[100%]`}
+              : 'bg-purple-100 rounded-tl-sm'
+              } px-3 py-2`}
             style={{
               backgroundColor: isLongPressed
-                ? (isCurrentUser ? '#0074e0' : '#e2e2e2')
-                : (isCurrentUser ? '#0084ff' : '#f0f0f0'),
+                ? (isCurrentUser ? '#0074e0' : '#e2c6ff')
+                : (isCurrentUser ? '#0084ff' : '#f0e6ff'),
+              maxWidth: screenWidth * 0.75, // Limit message width to 75% of screen
             }}
           >
             {renderMessageContent()}
