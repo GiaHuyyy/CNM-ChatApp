@@ -1,5 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, Image, Modal, SafeAreaView, Dimensions, Platform, Linking, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Pressable,
+  Image,
+  Modal,
+  SafeAreaView,
+  Dimensions,
+  Platform,
+  Linking,
+  Alert,
+  Share
+} from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faThumbsUp } from '@fortawesome/free-regular-svg-icons';
@@ -17,12 +31,13 @@ import {
   faFileVideo,
   faTimes,
   faDownload,
-  faReply
+  faReply,
+  faShareFromSquare,
+  faForward
 } from '@fortawesome/free-solid-svg-icons';
 import { Video } from 'expo-av';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import ConfirmationModal from './ConfirmationModal';
 
 // Common emoji reactions
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
@@ -38,7 +53,8 @@ const MessageBubble = ({
   onVideoPress,
   onDocumentPress,
   onReply,
-  onReplyClick, // Add new prop for handling clicks on reply references
+  onReplyClick,
+  onShareMessage, // Ensure this prop is defined
   senderName = "",
   isGroupChat = false,
   showTime = true,
@@ -306,40 +322,59 @@ const MessageBubble = ({
     setShowMessageOptions(true);
   };
 
-  const [confirmationModal, setConfirmationModal] = useState({
-    visible: false,
-    messageId: null
-  });
-
   const handleDeleteMessageWithConfirmation = (messageId) => {
     console.log("Delete message requested for ID:", messageId);
 
-    if (!messageId || !onDeleteMessage) {
-      console.error("Cannot delete message: ", !messageId ? "No message ID" : "No delete handler");
+    // Added more debugging to verify the message ID and delete handler
+    if (!messageId) {
+      console.error("Cannot delete message: No message ID provided");
+      Alert.alert("Lỗi", "Không thể xoá tin nhắn (ID không xác định)");
       return;
     }
 
-    setConfirmationModal({
-      visible: true,
-      messageId: messageId
-    });
-  };
-
-  const handleConfirmDelete = () => {
-    const messageId = confirmationModal.messageId;
-    console.log("Confirmed deletion for message:", messageId);
-
-    if (onDeleteMessage && messageId) {
-      onDeleteMessage(messageId);
-      console.log("Delete function called");
+    if (!onDeleteMessage) {
+      console.error("Cannot delete message: No delete handler provided");
+      Alert.alert("Lỗi", "Chức năng xoá tin nhắn không khả dụng");
+      return;
     }
 
-    setConfirmationModal({ visible: false, messageId: null });
-    setShowMessageOptions(false);
-  };
+    // Use a timeout to ensure Alert is displayed properly
+    setTimeout(() => {
+      Alert.alert(
+        "Xóa tin nhắn",
+        "Bạn có chắc chắn muốn xóa tin nhắn này không?",
+        [
+          {
+            text: "Hủy",
+            style: "cancel"
+          },
+          {
+            text: "Xóa",
+            style: "destructive",
+            onPress: () => {
+              console.log("Delete confirmed for message ID:", messageId);
 
-  const handleCancelDelete = () => {
-    setConfirmationModal({ visible: false, messageId: null });
+              try {
+                // Call the delete handler and pass the message ID
+                onDeleteMessage(messageId);
+                console.log("Delete function called successfully");
+
+                // Close the options modal
+                setShowMessageOptions(false);
+
+                // Show confirmation to user
+                setTimeout(() => {
+                  Alert.alert("Thành công", "Tin nhắn đã được xoá");
+                }, 300);
+              } catch (error) {
+                console.error("Error deleting message:", error);
+                Alert.alert("Lỗi", "Không thể xoá tin nhắn. Vui lòng thử lại.");
+              }
+            }
+          }
+        ]
+      );
+    }, 100);
   };
 
   const getFileIcon = (fileName) => {
@@ -425,6 +460,16 @@ const MessageBubble = ({
         {isGroupChat && !isCurrentUser && senderName ? (
           <Text className="text-xs font-semibold text-blue-600 mb-1">{senderName}</Text>
         ) : null}
+
+        {/* Show shared message indicator when message is shared */}
+        {message.isShared && message.sharedContent && (
+          <View className="mb-2 bg-blue-50 rounded-md px-2 py-1">
+            <Text className="text-xs font-medium text-blue-600">Tin nhắn được chia sẻ</Text>
+            {message.sharedContent.originalSender && (
+              <Text className="text-xs text-gray-600">Từ: {message.sharedContent.originalSender}</Text>
+            )}
+          </View>
+        )}
 
         {/* Show replied message if present - make it clickable, passing the original message ID */}
         {message.replyTo && (
@@ -602,6 +647,17 @@ const MessageBubble = ({
     return acc;
   }, {});
 
+  // Fix the handleShareMessage function - define it clearly at the top level
+  const handleShareMessage = () => {
+    if (typeof onShareMessage === 'function') {
+      onShareMessage(message);
+      setShowMessageOptions(false);
+    } else {
+      console.warn("Share message handler not provided");
+      setShowMessageOptions(false);
+    }
+  };
+
   return (
     <View className="flex-row items-start mb-3 mx-1">
       {!isCurrentUser && (
@@ -744,15 +800,31 @@ const MessageBubble = ({
               <Text className="text-[15px]">Chỉnh sửa tin nhắn</Text>
             </TouchableOpacity>
 
+            {/* Share Message Option with direct function reference */}
+            <TouchableOpacity
+              className="flex-row items-center px-4 py-3 border-b border-gray-100"
+              onPress={() => {
+                if (typeof onShareMessage === 'function') {
+                  onShareMessage(message);
+                }
+                setShowMessageOptions(false);
+              }}
+            >
+              <FontAwesomeIcon icon={faForward} size={16} color="#4CAF50" className="mr-3" />
+              <Text className="text-[15px]">Chia sẻ tin nhắn</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               className="flex-row items-center px-4 py-3"
               onPress={() => {
                 console.log("Delete button pressed for message:", message._id);
-                if (message._id) {
-                  handleDeleteMessageWithConfirmation(message._id);
-                } else {
-                  console.error("Message has no ID");
+                // Enhanced logging and error handling
+                if (!message || !message._id) {
+                  console.error("Invalid message or missing ID", message);
+                  Alert.alert("Lỗi", "Không thể xoá tin nhắn không có ID");
+                  return;
                 }
+                handleDeleteMessageWithConfirmation(message._id);
               }}
             >
               <FontAwesomeIcon icon={faTrash} size={16} color="#ff4444" className="mr-3" />
@@ -762,98 +834,108 @@ const MessageBubble = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* Confirmation modal */}
-      <ConfirmationModal
-        visible={confirmationModal.visible}
-        title="Xóa tin nhắn"
-        message="Bạn có chắc chắn muốn xóa tin nhắn này không?"
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
-        type="danger"
-      />
-
-      {/* Image modal */}
+      {/* Image modal - Updated with lower X button position */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={showImageModal}
         onRequestClose={() => setShowImageModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-black bg-opacity-95 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-5 z-10 p-2"
-            onPress={() => setShowImageModal(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-          </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setShowImageModal(false)}>
+          <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+            <TouchableOpacity
+              className="absolute top-24 right-5 z-10 p-3 bg-black/50 rounded-full"
+              onPress={() => setShowImageModal(false)}
+            >
+              <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+            </TouchableOpacity>
 
-          <Image
-            source={{ uri: imageUrl }}
-            className="w-full h-3/4"
-            resizeMode="contain"
-          />
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View className="items-center justify-center">
+                <Image
+                  source={{ uri: imageUrl }}
+                  className="w-full h-3/4"
+                  resizeMode="contain"
+                />
 
-          <TouchableOpacity
-            className="mt-5 flex-row items-center bg-blue-500 px-4 py-2 rounded-full"
-            onPress={() => Linking.openURL(imageUrl)}
-          >
-            <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
-            <Text className="text-white font-semibold">Tải xuống</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
+                <View className="flex-row mt-5 justify-center">
+                  <TouchableOpacity
+                    className="flex-row items-center bg-blue-500 px-4 py-2 rounded-full mr-4"
+                    onPress={() => handleDownloadMedia(imageUrl, 'image')}
+                  >
+                    <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Lưu ảnh</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="flex-row items-center bg-green-500 px-4 py-2 rounded-full"
+                    onPress={() => handleShareMedia(imageUrl)}
+                  >
+                    <FontAwesomeIcon icon={faShare} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Chia sẻ</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Document modal */}
+      {/* Document modal - Updated with lower X button position */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={showDocumentModal}
         onRequestClose={() => setShowDocumentModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-black bg-opacity-90 justify-center items-center">
-          <View className="bg-white w-4/5 rounded-xl p-6">
-            <TouchableOpacity
-              className="absolute top-2 right-2"
-              onPress={() => setShowDocumentModal(false)}
-            >
-              <FontAwesomeIcon icon={faTimes} size={18} color="#555" />
-            </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setShowDocumentModal(false)}>
+          <View className="flex-1 bg-black bg-opacity-90 justify-center items-center">
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View className="bg-white w-4/5 rounded-xl p-6">
+                <TouchableOpacity
+                  className="absolute top-4 right-4 bg-gray-200 p-2 rounded-full"
+                  onPress={() => setShowDocumentModal(false)}
+                >
+                  <FontAwesomeIcon icon={faTimes} size={18} color="#555" />
+                </TouchableOpacity>
 
-            <View className="items-center p-4">
-              <FontAwesomeIcon
-                icon={getFileIcon(fileDetails?.name || message.fileName)}
-                size={60}
-                color="#2563eb"
-              />
-              <Text className="text-lg font-bold mt-4 text-center">
-                {fileDetails?.name || message.fileName || "Document"}
-              </Text>
-              <Text className="text-sm text-gray-500 mb-6">
-                Không thể hiển thị trực tiếp tài liệu này
-              </Text>
+                <View className="items-center p-4">
+                  <FontAwesomeIcon
+                    icon={getFileIcon(fileDetails?.name || message.fileName)}
+                    size={60}
+                    color="#2563eb"
+                  />
+                  <Text className="text-lg font-bold mt-4 text-center">
+                    {fileDetails?.name || message.fileName || "Document"}
+                  </Text>
+                  <Text className="text-sm text-gray-500 mb-6">
+                    Không thể hiển thị trực tiếp tài liệu này
+                  </Text>
 
-              <TouchableOpacity
-                className="flex-row items-center bg-blue-500 px-6 py-3 rounded-full mb-2"
-                onPress={() => {
-                  const fileUrl = fileDetails?.url || message.fileUrl;
-                  if (!fileUrl) {
-                    Alert.alert("Lỗi", "Không tìm thấy đường dẫn tập tin");
-                    return;
-                  }
+                  <TouchableOpacity
+                    className="flex-row items-center bg-blue-500 px-6 py-3 rounded-full mb-2"
+                    onPress={() => {
+                      const fileUrl = fileDetails?.url || message.fileUrl;
+                      if (!fileUrl) {
+                        Alert.alert("Lỗi", "Không tìm thấy đường dẫn tập tin");
+                        return;
+                      }
 
-                  Linking.openURL(fileUrl)
-                    .catch(err => {
-                      console.error("Error opening URL:", err);
-                      Alert.alert("Lỗi", "Không thể mở tài liệu này");
-                    });
-                }}
-              >
-                <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
-                <Text className="text-white font-semibold">Tải xuống</Text>
-              </TouchableOpacity>
-            </View>
+                      Linking.openURL(fileUrl)
+                        .catch(err => {
+                          console.error("Error opening URL:", err);
+                          Alert.alert("Lỗi", "Không thể mở tài liệu này");
+                        });
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Tải xuống</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </SafeAreaView>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -895,6 +977,7 @@ MessageBubble.propTypes = {
   onDeleteMessage: PropTypes.func,
   onReply: PropTypes.func, // New prop type for reply functionality
   onReplyClick: PropTypes.func, // Add prop type for reply click handler
+  onShareMessage: PropTypes.func, // Add prop type for sharing functionality
   onImagePress: PropTypes.func,
   onVideoPress: PropTypes.func,
   onDocumentPress: PropTypes.func,

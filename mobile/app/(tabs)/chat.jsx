@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { View, TextInput, TouchableOpacity, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking, Animated } from "react-native";
+import { View, TextInput, TouchableOpacity, TouchableWithoutFeedback, FlatList, Text, Image, KeyboardAvoidingView, Platform, Modal, ActivityIndicator, Alert, Linking, Animated, StatusBar, Share } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useSelector, useDispatch } from "react-redux";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
-import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload, faPhone, faVideo, faSearch, faArrowDown } from "@fortawesome/free-solid-svg-icons";
+import { faMagnifyingGlass, faPlus, faQrcode, faTimes, faHistory, faTrash, faImage, faFilePen, faUsers, faAngleDown, faEllipsis, faArrowLeft, faPaperPlane, faFile, faFileImage, faFileVideo, faFileAlt, faCamera, faCheck, faXmark, faUserShield, faDownload, faPhone, faVideo, faSearch, faArrowDown, faShare } from "@fortawesome/free-solid-svg-icons";
 import { useGlobalContext } from "../context/GlobalProvider";
 import io from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -18,6 +19,8 @@ import ConfirmationModal from "../../components/ConfirmationModal";
 import CreateGroupChat from "../../components/CreateGroupChat";
 import GroupChatItem from "../../components/GroupChatItem";
 import GroupInfoModal from "../../components/GroupInfoModal";
+import DirectChatDetailsModal from "../../components/DirectChatDetailsModal";
+import ShareMessageModal from "../../components/ShareMessageModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
 
@@ -80,6 +83,12 @@ export default function Chat() {
     message: "",
     action: null
   });
+
+  const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
+
+  const [messageToShare, setMessageToShare] = useState(null);
+  const [shareSearchQuery, setShareSearchQuery] = useState('');
+  const [shareSearchResults, setShareSearchResults] = useState([]);
 
   useEffect(() => {
     if (initializationAttempted.current) return;
@@ -438,9 +447,19 @@ export default function Chat() {
   };
 
   const handleBackToList = () => {
+    console.log("Navigating back to chat list");
     setSelectedChat(null);
     setMessages([]);
     setChatUser(null);
+
+    // Close any open modals
+    setShowDirectChatDetails(false);
+    setShowGroupInfoModal(false);
+
+    // Force refresh of conversation list
+    if (socketConnection && user?._id) {
+      socketConnection.emit("sidebar", user._id);
+    }
   };
 
   useEffect(() => {
@@ -546,11 +565,10 @@ export default function Chat() {
         ];
       });
 
+      // Scroll to the new message
       setTimeout(() => {
-        if (socketConnection && user?._id) {
-          socketConnection.emit("sidebar", user?._id);
-        }
-      }, 500);
+        messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
     };
 
     const handleNewMessage = (newMessage) => {
@@ -569,12 +587,14 @@ export default function Chat() {
         setMessages(prevMessages => {
           const messageExists = prevMessages.some(msg => msg._id === newMessage._id);
           if (messageExists) return prevMessages;
+
           // For inverted list, add to beginning of array
           return [newMessage, ...prevMessages];
         });
 
+        // Scroll to the new message
         setTimeout(() => {
-          messagesEndRef.current?.scrollToEnd({ animated: true });
+          messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
         }, 100);
       }
     };
@@ -968,6 +988,31 @@ export default function Chat() {
 
       const isGroup = selectedChat.isGroup || selectedChat.userDetails?.isGroup;
 
+      // Create temporary message with unique ID
+      const tempId = `temp_${Date.now()}`;
+      const tempMessage = {
+        _id: tempId,
+        text: messageText,
+        msgByUserId: user?._id,
+        createdAt: new Date().toISOString(),
+        isTemp: true,
+        key: tempId,
+        files: uploadedFiles.map(file => ({
+          url: file.url,
+          name: file.name,
+          type: file.type
+        })),
+        replyTo: replyInfo
+      };
+
+      // Add temporary message to start of list for immediate feedback
+      setMessages(prev => [tempMessage, ...prev]);
+
+      // Scroll to show the new message immediately
+      setTimeout(() => {
+        messagesEndRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
+
       if (isGroup) {
         const groupMessage = {
           conversationId: selectedChat.userDetails?._id,
@@ -978,7 +1023,7 @@ export default function Chat() {
             type: file.type
           })),
           msgByUserId: user?._id,
-          replyTo: replyInfo // Add reply info
+          replyTo: replyInfo
         };
 
         console.log("Sending group message with files:", {
@@ -1002,31 +1047,7 @@ export default function Chat() {
           replyTo: replyInfo // Add reply info
         };
 
-        // Create temporary message with the same file information
-        const tempId = `temp_${Date.now()}`;
-        const tempMessage = {
-          _id: tempId,
-          text: messageText,
-          msgByUserId: user?._id,
-          createdAt: new Date().toISOString(),
-          isTemp: true,
-          key: tempId,
-          files: uploadedFiles.map(file => ({
-            url: file.url,
-            name: file.name,
-            type: file.type
-          }))
-        };
-
-        // For inverted list, add to beginning of array
-        setMessages(prev => [tempMessage, ...prev]);
         socketConnection.emit("newMessage", newMessage);
-
-        setTimeout(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollToEnd({ animated: true });
-          }
-        }, 100);
       }
 
       setMessageText("");
@@ -1250,6 +1271,12 @@ export default function Chat() {
     }
   };
 
+  // Ensure handleShareMessage function is defined in the main component scope
+  const handleShareMessage = (message) => {
+    console.log("Opening share message dialog for:", message?._id);
+    setMessageToShare(message);
+  };
+
   const renderMessage = ({ item }) => {
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
@@ -1298,7 +1325,8 @@ export default function Chat() {
           onDeleteMessage={handleDeleteMessage}
           onReaction={handleAddReaction}
           onReply={handleReply}
-          onReplyClick={scrollToMessage} // Add the handler to navigate to original messages
+          onReplyClick={scrollToMessage}
+          onShareMessage={handleShareMessage} // Ensure this is correctly passed
           senderName={senderName}
           isGroupChat={selectedChat?.isGroup}
           onImagePress={(imageUrl) => handleImageClick(imageUrl)}
@@ -1317,6 +1345,113 @@ export default function Chat() {
     }
   };
 
+  const handleDeleteDirectConversation = () => {
+    console.log("Delete conversation handler called in Chat component");
+    if (!socketConnection || !selectedChat) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    // Set loading state if needed
+    setIsChatLoading(true);
+
+    console.log("Emitting deleteConversation event to socket", {
+      conversationId: selectedChat.userDetails?._id,
+      userId: user._id
+    });
+
+    socketConnection.emit("deleteConversation", {
+      conversationId: selectedChat.userDetails?._id,
+      userId: user._id
+    });
+
+    socketConnection.once("conversationDeleted", (response) => {
+      setIsChatLoading(false);
+      console.log("Received conversationDeleted response:", response);
+
+      if (response.success) {
+        // Close the chat details modal
+        setShowDirectChatDetails(false);
+
+        // Navigate back to chat list
+        handleBackToList();
+
+        // Show success alert
+        Alert.alert("Thành công", "Cuộc hội thoại đã được xóa");
+
+        // Refresh the conversation list
+        refreshConversations();
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể xóa cuộc hội thoại");
+      }
+    });
+  };
+
+  const handleUpdateNickname = (newNickname) => {
+    if (!socketConnection || !selectedChat) {
+      Alert.alert("Error", "Unable to connect to server. Please try again later.");
+      return;
+    }
+
+    // Only proceed if the nickname changed
+    if (newNickname === chatUser?.nickname) return;
+
+    // If nickname is empty, it means we want to remove it
+    const nicknamePayload = {
+      userId: user._id,
+      contactId: selectedChat.userDetails?._id,
+      nickname: newNickname || null // If empty, set to null to remove nickname
+    };
+
+    console.log("Updating nickname:", nicknamePayload);
+
+    // Send the update to the server
+    socketConnection.emit("updateContactNickname", nicknamePayload);
+
+    // Handle the response from the server
+    socketConnection.once("nicknameUpdated", (response) => {
+      if (response.success) {
+        // Update the local chat user data with the new nickname
+        setChatUser(prev => ({
+          ...prev,
+          nickname: newNickname || null
+        }));
+
+        // Update in the all users list for the conversation list
+        setAllUsers(prev => {
+          return prev.map(chat => {
+            if (chat.userDetails?._id === selectedChat.userDetails?._id) {
+              return {
+                ...chat,
+                userDetails: {
+                  ...chat.userDetails,
+                  nickname: newNickname || null
+                }
+              };
+            }
+            return chat;
+          });
+        });
+
+        // Flash a success message
+        Alert.alert("Success", "Contact name updated successfully");
+      } else {
+        Alert.alert("Error", response.message || "Failed to update contact name");
+      }
+    });
+  };
+
+  // Add the missing function
+  const handleShowChatDetails = () => {
+    if (selectedChat?.userDetails?.isGroup) {
+      // For group chats, show the group info modal
+      handleShowGroupInfo(selectedChat);
+    } else {
+      // For direct chats, show the chat details modal
+      setShowDirectChatDetails(true);
+    }
+  };
+
   const renderConversationItem = ({ item: chatItem }) => {
     if (chatItem.isGroup || chatItem.userDetails?.isGroup) {
       return (
@@ -1328,6 +1463,9 @@ export default function Chat() {
         />
       );
     }
+
+    // Use nickname if available, otherwise use real name
+    const displayName = chatItem?.userDetails?.nickname || chatItem?.userDetails?.name;
 
     return (
       <TouchableOpacity
@@ -1341,7 +1479,7 @@ export default function Chat() {
           />
         </View>
         <View className="ml-3 flex-1 overflow-hidden">
-          <Text className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</Text>
+          <Text className="text-[15px] font-semibold">{displayName}</Text>
           <Text numberOfLines={1} className="text-gray-500 text-sm">
             {chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? <Text>Bạn: </Text> : null}
             {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
@@ -1499,495 +1637,586 @@ export default function Chat() {
   const [isScrolledUp, setIsScrolledUp] = useState(false);
   const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
 
+  // Add this handler for share success notifications
+  const handleShareSuccess = (recipient) => {
+    const recipientName = recipient.userDetails?.name || recipient.name;
+    Alert.alert("Thành công", `Đã chia sẻ tin nhắn đến ${recipientName}`);
+  };
+
   return (
-    <View className="flex-1 bg-white">
-      {!selectedChat ? (
-        <View className="flex-row items-center justify-between px-4 pt-10 pb-3 bg-blue-500">
-          <View className="flex-row items-center bg-white rounded-full px-3 py-1 flex-1 mr-2">
-            <FontAwesomeIcon icon={faMagnifyingGlass} size={16} color="#888" />
-            <TextInput
-              placeholder="Tìm kiếm"
-              className="ml-2 flex-1 text-sm"
-              placeholderTextColor="#888"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => setIsSearchFocused(true)}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={clearSearch}>
-                <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
+      <View className="flex-1 bg-white">
+        {!selectedChat ? (
+          <View className="bg-blue-500">
+            <View className="flex-row items-center justify-between px-4 pb-3">
+              <View className="flex-row items-center bg-white rounded-full px-3 py-1 flex-1 mr-2">
+                <FontAwesomeIcon icon={faMagnifyingGlass} size={16} color="#888" />
+                <TextInput
+                  placeholder="Tìm kiếm"
+                  className="ml-2 flex-1 text-sm"
+                  placeholderTextColor="#888"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={clearSearch}>
+                    <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity className="mx-1">
+                <FontAwesomeIcon icon={faQrcode} size={18} color="white" />
               </TouchableOpacity>
+              <TouchableOpacity
+                className="ml-1"
+                onPress={() => setShowCreateGroupModal(true)}
+              >
+                <FontAwesomeIcon icon={faPlus} size={18} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View className="bg-blue-500">
+            <View className="flex-row items-center justify-between px-4 pb-3">
+              <TouchableOpacity onPress={handleBackToList} className="mr-2">
+                <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
+              </TouchableOpacity>
+              <View className="flex-row items-center flex-1">
+                {chatUser && (
+                  <>
+                    <Image
+                      source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "Group")}` }}
+                      className="w-9 h-9 rounded-full mr-2"
+                    />
+                    <View>
+                      <Text className="text-white font-semibold">
+                        {selectedChat.userDetails?.isGroup
+                          ? chatUser?.name
+                          : (chatUser?.nickname || chatUser?.name)
+                        }
+                      </Text>
+                      <Text className="text-white text-xs opacity-80">
+                        {selectedChat.userDetails?.isGroup
+                          ? `${selectedChat.members?.length || 0} members`
+                          : (chatUser?.online ? 'Đang hoạt động' : 'Không hoạt động')}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+              <View className="flex-row items-center">
+                {!selectedChat.userDetails?.isGroup && (
+                  <>
+                    <TouchableOpacity className="mr-4">
+                      <FontAwesomeIcon icon={faPhone} size={18} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity className="mr-4">
+                      <FontAwesomeIcon icon={faVideo} size={18} color="white" />
+                    </TouchableOpacity>
+                  </>
+                )}
+                <TouchableOpacity className="mr-4">
+                  <FontAwesomeIcon icon={faSearch} size={18} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleShowChatDetails}
+                >
+                  <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {isSearchFocused && searchQuery.length === 0 && (
+          <View className="flex-1 bg-white">
+            <View className="flex-row justify-between items-center py-2 px-4 bg-gray-100">
+              <Text className="text-gray-600 font-medium">Liên hệ đã tìm</Text>
+              <View className="flex-row items-center">
+                <TouchableOpacity
+                  className="bg-blue-500 px-3 py-1 rounded-full mr-3"
+                  onPress={() => setIsSearchFocused(false)}
+                >
+                  <Text className="text-white font-medium">Quay lại</Text>
+                </TouchableOpacity>
+                {recentSearches.length > 0 && (
+                  <TouchableOpacity onPress={clearAllRecentSearches}>
+                    <FontAwesomeIcon icon={faTrash} size={16} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {recentSearches.length > 0 ? (
+              <FlatList
+                data={recentSearches}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    className="flex-row items-center p-3 border-b border-gray-100 justify-between"
+                    onPress={() => searchFromHistory(item.query)}
+                  >
+                    <View className="flex-row items-center flex-1">
+                      <FontAwesomeIcon icon={faHistory} size={16} color="#888" className="mr-3" />
+                      {item.firstResult ? (
+                        <View className="flex-row items-center flex-1">
+                          {item.firstResult.profilePic ? (
+                            <Image
+                              source={{ uri: item.firstResult.profilePic }}
+                              className="w-8 h-8 rounded-full mr-3"
+                            />
+                          ) : (
+                            <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-3">
+                              <Text className="text-white font-bold">
+                                {(item.firstResult.name || "")?.charAt(0)?.toUpperCase()
+                                }
+                              </Text>
+                            </View>
+                          )}
+                          <View className="flex-1">
+                            <Text className="text-gray-700">{item.query}</Text>
+                            <Text className="text-sm text-gray-500">{item.firstResult.name}</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <Text className="text-gray-700">{item.query}</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        removeSearchItem(item.id);
+                      }}
+                      className="px-2"
+                    >
+                      <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <View className="flex-1 items-center justify-center p-4">
+                <Text className="text-gray-500">Không có lịch sử tìm kiếm</Text>
+              </View>
             )}
           </View>
-          <TouchableOpacity className="mx-1">
-            <FontAwesomeIcon icon={faQrcode} size={18} color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="ml-1"
-            onPress={() => setShowCreateGroupModal(true)}
-          >
-            <FontAwesomeIcon icon={faPlus} size={18} color="white" />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View className="flex-row items-center justify-between px-4 pt-10 pb-3 bg-blue-500">
-          <TouchableOpacity onPress={handleBackToList} className="mr-2">
-            <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
-          </TouchableOpacity>
-          <View className="flex-row items-center flex-1">
-            {chatUser && (
-              <>
-                <Image
-                  source={{ uri: chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || "Group")}` }}
-                  className="w-9 h-9 rounded-full mr-2"
-                />
-                <View>
-                  <Text className="text-white font-semibold">{chatUser?.name}</Text>
-                  <Text className="text-white text-xs opacity-80">
-                    {selectedChat.isGroup
-                      ? `${selectedChat.members?.length || 0} members`
-                      : (chatUser?.online ? 'Đang hoạt động' : 'Không hoạt động')}
+        )}
+
+        {searchResults.length > 0 && (
+          <View className="flex-1 bg-white">
+            <FlatList
+              data={searchResults}
+              renderItem={renderSearchResult}
+              keyExtractor={(item) => item.id?.toString() || item._id?.toString()}
+              ListHeaderComponent={() => (
+                <View className="p-2 bg-gray-100">
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-gray-600">Kết quả tìm kiếm ({searchResults.length})</Text>
+                    <TouchableOpacity
+                      className="bg-blue-500 px-3 py-1 rounded-full"
+                      onPress={() => {
+                        clearSearch();
+                        setIsSearchFocused(false);
+                      }}
+                    >
+                      <Text className="text-white font-medium">Tất cả</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              ListEmptyComponent={() => (
+                <View className="p-4 items-center justify-center">
+                  <Text className="text-gray-500">
+                    {searchLoading ? "Đang tìm kiếm..." : "Không tìm thấy kết quả"}
                   </Text>
                 </View>
-              </>
-            )}
-          </View>
-          <View className="flex-row items-center">
-            {!selectedChat.isGroup && (
-              <>
-                <TouchableOpacity className="mr-4">
-                  <FontAwesomeIcon icon={faPhone} size={18} color="white" />
-                </TouchableOpacity>
-                <TouchableOpacity className="mr-4">
-                  <FontAwesomeIcon icon={faVideo} size={18} color="white" />
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity className="mr-4">
-              <FontAwesomeIcon icon={faSearch} size={18} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => selectedChat.isGroup && handleShowGroupInfo(selectedChat)}
-            >
-              <FontAwesomeIcon icon={faEllipsis} size={18} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {isSearchFocused && searchQuery.length === 0 && (
-        <View className="flex-1 bg-white">
-          <View className="flex-row justify-between items-center py-2 px-4 bg-gray-100">
-            <Text className="text-gray-600 font-medium">Liên hệ đã tìm</Text>
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                className="bg-blue-500 px-3 py-1 rounded-full mr-3"
-                onPress={() => setIsSearchFocused(false)}
-              >
-                <Text className="text-white font-medium">Quay lại</Text>
-              </TouchableOpacity>
-              {recentSearches.length > 0 && (
-                <TouchableOpacity onPress={clearAllRecentSearches}>
-                  <FontAwesomeIcon icon={faTrash} size={16} color="#666" />
-                </TouchableOpacity>
               )}
-            </View>
+            />
           </View>
+        )}
 
-          {recentSearches.length > 0 ? (
-            <FlatList
-              data={recentSearches}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className="flex-row items-center p-3 border-b border-gray-100 justify-between"
-                  onPress={() => searchFromHistory(item.query)}
+        {searchLoading && !searchResults.length && (
+          <View className="p-4 items-center justify-center">
+            <Text className="text-gray-500">Đang tìm kiếm...</Text>
+          </View>
+        )}
+
+        {selectedChat ? (
+          <KeyboardAvoidingView
+            className="flex-1"
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 30}
+          >
+            {isChatLoading ? (
+              <View className="flex-1 items-center justify-center">
+                <Text className="text-gray-500">Đang tải tin nhắn...</Text>
+              </View>
+            ) : (
+              <View className="flex-1 relative">
+                <FlatList
+                  ref={messagesEndRef}
+                  data={messages}
+                  inverted={true} // This ensures newest messages show up at the bottom immediately
+                  renderItem={renderMessage}
+                  keyExtractor={(item) => item._id}
+                  contentContainerStyle={{ paddingVertical: 15 }}
+                  ItemSeparatorComponent={() => <View className="h-1" />}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={200}
+                  onScrollToIndexFailed={(info) => {
+                    console.log("Failed to scroll to index", info);
+                  }}
+                  maintainVisibleContentPosition={{
+                    minIndexForVisible: 0, // Keep the first item visible
+                    autoscrollToTopThreshold: 10 // Autoscroll when within 10px of top
+                  }}
+                />
+
+                {/* Scroll to bottom button */}
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    right: 16,
+                    bottom: 16,
+                    opacity: scrollButtonOpacity,
+                    transform: [{
+                      scale: scrollButtonOpacity.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1]
+                      })
+                    }],
+                  }}
+                  pointerEvents={isScrolledUp ? 'auto' : 'none'}
                 >
-                  <View className="flex-row items-center flex-1">
-                    <FontAwesomeIcon icon={faHistory} size={16} color="#888" className="mr-3" />
-                    {item.firstResult ? (
-                      <View className="flex-row items-center flex-1">
-                        {item.firstResult.profilePic ? (
-                          <Image
-                            source={{ uri: item.firstResult.profilePic }}
-                            className="w-8 h-8 rounded-full mr-3"
-                          />
-                        ) : (
-                          <View className="w-8 h-8 rounded-full bg-gray-300 items-center justify-center mr-3">
-                            <Text className="text-white font-bold">
-                              {(item.firstResult.name || "")?.charAt(0)?.toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-                        <View className="flex-1">
-                          <Text className="text-gray-700">{item.query}</Text>
-                          <Text className="text-sm text-gray-500">{item.firstResult.name}</Text>
-                        </View>
+                  <TouchableOpacity
+                    className="bg-blue-500 w-12 h-12 rounded-full items-center justify-center shadow-md"
+                    onPress={scrollToNewestMessages}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesomeIcon icon={faArrowDown} size={18} color="#fff" />
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+            )}
+
+            {selectedFiles.length > 0 && (
+              <View className="bg-gray-100 p-3 border-t border-gray-300">
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text className="font-medium">Files đã chọn ({selectedFiles.length})</Text>
+                  <TouchableOpacity onPress={handleClearUploadFile}>
+                    <FontAwesomeIcon icon={faTimes} size={20} color="#888" />
+                  </TouchableOpacity>
+                </View>
+                <View className="mt-2">{renderFilePreview()}</View>
+              </View>
+            )}
+
+            {/* Add reply UI before the input field */}
+            {replyingTo && (
+              <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
+                <View className="flex-1">
+                  <Text className="text-blue-600 font-medium">Đang trả lời tin nhắn</Text>
+                  <Text className="text-gray-600 text-sm" numberOfLines={1}>
+                    {replyingTo.text || (replyingTo.files?.length > 0 ? "Media message" : "Message")}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={cancelReply}
+                >
+                  <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {editingMessage && (
+              <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
+                <Text className="text-blue-600 font-medium">Đang chỉnh sửa tin nhắn</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditingMessage(null);
+                    setMessageText("");
+                  }}
+                >
+                  <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View className="flex-row items-center bg-gray-100 p-2">
+              <View className="relative">
+                <TouchableOpacity className="mx-2" onPress={toggleMediaOptions}>
+                  <FontAwesomeIcon icon={faPlus} size={20} color="#555" />
+                </TouchableOpacity>
+                {showMediaOptions && (
+                  <View className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg p-2 w-48 border border-gray-200">
+                    <TouchableOpacity
+                      className="flex-row items-center p-3"
+                      onPress={() => hideMediaOptionsAndPick(takePhoto)}
+                    >
+                      <View className="w-8 h-8 rounded-full bg-red-500 items-center justify-center mr-3">
+                        <FontAwesomeIcon icon={faCamera} size={16} color="#fff" />
                       </View>
-                    ) : (
-                      <Text className="text-gray-700">{item.query}</Text>
+                      <Text>Chụp ảnh/video</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-row items-center p-3"
+                      onPress={() => hideMediaOptionsAndPick(pickImage)}
+                    >
+                      <View className="w-8 h-8 rounded-full bg-blue-500 items-center justify-center mr-3">
+                        <FontAwesomeIcon icon={faImage} size={16} color="#fff" />
+                      </View>
+                      <Text>Chọn từ thư viện</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-row items-center p-3"
+                      onPress={() => hideMediaOptionsAndPick(pickDocument)}
+                    >
+                      <View className="w-8 h-8 rounded-full bg-green-500 items-center justify-center mr-3">
+                        <FontAwesomeIcon icon={faFilePen} size={16} color="#fff" />
+                      </View>
+                      <Text>Chọn tài liệu</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="absolute top-1 right-1 p-1"
+                      onPress={() => setShowMediaOptions(false)}
+                    >
+                      <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+              <TextInput
+                ref={inputRef}
+                className="flex-1 bg-white rounded-full px-4 py-2 mr-2"
+                placeholder={editingMessage ? "Chỉnh sửa tin nhắn..." : "Aa"}
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                onFocus={() => setShowMediaOptions(false)}
+              />
+              <TouchableOpacity
+                onPress={handleSendMessage}
+                disabled={(!messageText.trim() && selectedFiles.length === 0) || isUploading}
+              >
+                {isUploading ? (
+                  <ActivityIndicator size="small" color="#0084ff" />
+                ) : (
+                  <FontAwesomeIcon
+                    icon={faPaperPlane}
+                    size={20}
+                    color={(messageText.trim() || selectedFiles.length > 0) ? "#0084ff" : "#aaa"}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        ) : (
+          <>
+            {!searchResults.length && !searchLoading && !isSearchFocused && (
+              <View className="flex-1">
+                <View className="flex-row items-center border-b border-gray-300 px-4">
+                  <View className="h-8">
+                    <TouchableOpacity className="mr-3 h-full border-b-2 border-blue-500">
+                      <Text className="text-[13px] font-semibold text-blue-500">Tất cả</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View>
+                    <TouchableOpacity>
+                      <Text className="text-[13px] font-semibold text-gray-500">Chưa đọc</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View className="ml-auto flex-row items-center">
+                    <TouchableOpacity className="flex-row items-center gap-x-2 pl-2 pr-1">
+                      <Text className="text-[13px]">Phân loại</Text>
+                      <FontAwesomeIcon icon={faAngleDown} size={12} />
+                    </TouchableOpacity>
+                    <TouchableOpacity className="ml-4">
+                      <FontAwesomeIcon icon={faEllipsis} size={12} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {allUsers.length > 0 ? (
+                  <View className="flex-1">
+                    <FlatList
+                      data={displayedConversations}
+                      renderItem={renderConversationItem}
+                      keyExtractor={(item) => item._id}
+                      contentContainerStyle={{ flexGrow: 1 }}
+                    />
+
+                    {(Array.isArray(allUsers) && allUsers.length > 10) && (
+                      <TouchableOpacity
+                        className="py-3 border-t border-gray-200 items-center bg-gray-50"
+                        onPress={toggleShowAllConversations}
+                      >
+                        <Text className="text-blue-500 font-medium">
+                          {showAllConversations ? "Hiển thị ít hơn" : `Xem tất cả (${allUsers.length})`}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </View>
-                  <TouchableOpacity
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      removeSearchItem(item.id);
-                    }}
-                    className="px-2"
-                  >
-                    <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              )}
-            />
-          ) : (
-            <View className="flex-1 items-center justify-center p-4">
-              <Text className="text-gray-500">Không có lịch sử tìm kiếm</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {searchResults.length > 0 && (
-        <View className="flex-1 bg-white">
-          <FlatList
-            data={searchResults}
-            renderItem={renderSearchResult}
-            keyExtractor={(item) => item.id?.toString() || item._id?.toString()}
-            ListHeaderComponent={() => (
-              <View className="p-2 bg-gray-100">
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-gray-600">Kết quả tìm kiếm ({searchResults.length})</Text>
-                  <TouchableOpacity
-                    className="bg-blue-500 px-3 py-1 rounded-full"
-                    onPress={() => {
-                      clearSearch();
-                      setIsSearchFocused(false);
-                    }}
-                  >
-                    <Text className="text-white font-medium">Tất cả</Text>
-                  </TouchableOpacity>
-                </View>
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <Text className="text-gray-500">Không có cuộc hội thoại nào</Text>
+                  </View>
+                )}
               </View>
             )}
-            ListEmptyComponent={() => (
-              <View className="p-4 items-center justify-center">
-                <Text className="text-gray-500">
-                  {searchLoading ? "Đang tìm kiếm..." : "Không tìm thấy kết quả"}
-                </Text>
-              </View>
-            )}
-          />
-        </View>
-      )}
+          </>
+        )}
 
-      {searchLoading && !searchResults.length && (
-        <View className="p-4 items-center justify-center">
-          <Text className="text-gray-500">Đang tìm kiếm...</Text>
-        </View>
-      )}
+        {/* Add the DirectChatDetailsModal for 1-on-1 chats */}
+        <DirectChatDetailsModal
+          visible={showDirectChatDetails}
+          onClose={() => setShowDirectChatDetails(false)}
+          user={chatUser}
+          currentUser={user}
+          messages={messages}
+          onDeleteConversation={handleDeleteDirectConversation} // Ensure this prop is passed correctly
 
-      {selectedChat ? (
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 30}
+          onUpdateNickname={handleUpdateNickname}
+        />
+
+        {renderCreateGroupModal()}
+        {renderGroupInfoModal()}
+        {renderConfirmationModal()}
+
+        <Modal
+          visible={showImageModal}
+          transparent={true}
+          onRequestClose={() => setShowImageModal(false)}
+          animationType="fade"
         >
-          {isChatLoading ? (
-            <View className="flex-1 items-center justify-center">
-              <Text className="text-gray-500">Đang tải tin nhắn...</Text>
-            </View>
-          ) : (
-            <View className="flex-1 relative">
-              <FlatList
-                ref={messagesEndRef}
-                data={messages}
-                inverted={true} // This ensures newest messages show up at the bottom immediately
-                renderItem={renderMessage}
-                keyExtractor={(item) => item._id}
-                contentContainerStyle={{ paddingVertical: 15 }}
-                ItemSeparatorComponent={() => <View className="h-1" />}
-                onScroll={handleScroll}
-                scrollEventThrottle={200}
-                onScrollToIndexFailed={(info) => {
-                  console.log("Failed to scroll to index", info);
-                }}
-              />
-
-              {/* Scroll to bottom button */}
-              <Animated.View
-                style={{
-                  position: 'absolute',
-                  right: 16,
-                  bottom: 16,
-                  opacity: scrollButtonOpacity,
-                  transform: [{
-                    scale: scrollButtonOpacity.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.8, 1]
-                    })
-                  }],
-                }}
-                pointerEvents={isScrolledUp ? 'auto' : 'none'}
-              >
-                <TouchableOpacity
-                  className="bg-blue-500 w-12 h-12 rounded-full items-center justify-center shadow-md"
-                  onPress={scrollToNewestMessages}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesomeIcon icon={faArrowDown} size={18} color="#fff" />
-                </TouchableOpacity>
-              </Animated.View>
-            </View>
-          )}
-
-          {selectedFiles.length > 0 && (
-            <View className="bg-gray-100 p-3 border-t border-gray-300">
-              <View className="flex-row justify-between items-center mb-2">
-                <Text className="font-medium">Files đã chọn ({selectedFiles.length})</Text>
-                <TouchableOpacity onPress={handleClearUploadFile}>
-                  <FontAwesomeIcon icon={faTimes} size={20} color="#888" />
-                </TouchableOpacity>
-              </View>
-              <View className="mt-2">{renderFilePreview()}</View>
-            </View>
-          )}
-
-          {/* Add reply UI before the input field */}
-          {replyingTo && (
-            <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
-              <View className="flex-1">
-                <Text className="text-blue-600 font-medium">Đang trả lời tin nhắn</Text>
-                <Text className="text-gray-600 text-sm" numberOfLines={1}>
-                  {replyingTo.text || (replyingTo.files?.length > 0 ? "Media message" : "Message")}
-                </Text>
-              </View>
+          <TouchableWithoutFeedback onPress={() => setShowImageModal(false)}>
+            <View className="flex-1 bg-black bg-opacity-90 justify-center items-center">
               <TouchableOpacity
-                onPress={cancelReply}
+                className="absolute top-24 right-5 z-10 p-3 bg-black/50 rounded-full"
+                onPress={() => setShowImageModal(false)}
               >
-                <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
+                <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
               </TouchableOpacity>
-            </View>
-          )}
-
-          {editingMessage && (
-            <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-t border-blue-100">
-              <Text className="text-blue-600 font-medium">Đang chỉnh sửa tin nhắn</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setEditingMessage(null);
-                  setMessageText("");
-                }}
-              >
-                <FontAwesomeIcon icon={faXmark} size={18} color="#555" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View className="flex-row items-center bg-gray-100 p-2">
-            <View className="relative">
-              <TouchableOpacity className="mx-2" onPress={toggleMediaOptions}>
-                <FontAwesomeIcon icon={faPlus} size={20} color="#555" />
-              </TouchableOpacity>
-              {showMediaOptions && (
-                <View className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg p-2 w-48 border border-gray-200">
-                  <TouchableOpacity
-                    className="flex-row items-center p-3"
-                    onPress={() => hideMediaOptionsAndPick(takePhoto)}
-                  >
-                    <View className="w-8 h-8 rounded-full bg-red-500 items-center justify-center mr-3">
-                      <FontAwesomeIcon icon={faCamera} size={16} color="#fff" />
-                    </View>
-                    <Text>Chụp ảnh/video</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className="flex-row items-center p-3"
-                    onPress={() => hideMediaOptionsAndPick(pickImage)}
-                  >
-                    <View className="w-8 h-8 rounded-full bg-blue-500 items-center justify-center mr-3">
-                      <FontAwesomeIcon icon={faImage} size={16} color="#fff" />
-                    </View>
-                    <Text>Chọn từ thư viện</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className="flex-row items-center p-3"
-                    onPress={() => hideMediaOptionsAndPick(pickDocument)}
-                  >
-                    <View className="w-8 h-8 rounded-full bg-green-500 items-center justify-center mr-3">
-                      <FontAwesomeIcon icon={faFilePen} size={16} color="#fff" />
-                    </View>
-                    <Text>Chọn tài liệu</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className="absolute top-1 right-1 p-1"
-                    onPress={() => setShowMediaOptions(false)}
-                  >
-                    <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-            <TextInput
-              ref={inputRef}
-              className="flex-1 bg-white rounded-full px-4 py-2 mr-2"
-              placeholder={editingMessage ? "Chỉnh sửa tin nhắn..." : "Aa"}
-              value={messageText}
-              onChangeText={setMessageText}
-              multiline
-              onFocus={() => setShowMediaOptions(false)}
-            />
-            <TouchableOpacity
-              onPress={handleSendMessage}
-              disabled={(!messageText.trim() && selectedFiles.length === 0) || isUploading}
-            >
-              {isUploading ? (
-                <ActivityIndicator size="small" color="#0084ff" />
-              ) : (
-                <FontAwesomeIcon
-                  icon={faPaperPlane}
-                  size={20}
-                  color={(messageText.trim() || selectedFiles.length > 0) ? "#0084ff" : "#aaa"}
+              {selectedImage ? (
+                <Image
+                  source={{ uri: selectedImage, cache: 'reload' }}
+                  className="w-full h-3/4"
+                  resizeMode="contain"
                 />
+              ) : (
+                <Text className="text-white">Không thể hiển thị hình ảnh</Text>
               )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      ) : (
-        <>
-          {!searchResults.length && !searchLoading && !isSearchFocused && (
-            <View className="flex-1">
-              <View className="flex-row items-center border-b border-gray-300 px-4">
-                <View className="h-8">
-                  <TouchableOpacity className="mr-3 h-full border-b-2 border-blue-500">
-                    <Text className="text-[13px] font-semibold text-blue-500">Tất cả</Text>
-                  </TouchableOpacity>
-                </View>
-                <View>
-                  <TouchableOpacity>
-                    <Text className="text-[13px] font-semibold text-gray-500">Chưa đọc</Text>
-                  </TouchableOpacity>
-                </View>
-                <View className="ml-auto flex-row items-center">
-                  <TouchableOpacity className="flex-row items-center gap-x-2 pl-2 pr-1">
-                    <Text className="text-[13px]">Phân loại</Text>
-                    <FontAwesomeIcon icon={faAngleDown} size={12} />
-                  </TouchableOpacity>
-                  <TouchableOpacity className="ml-4">
-                    <FontAwesomeIcon icon={faEllipsis} size={12} />
+
+              <View className="flex-row mt-5 justify-center">
+                <TouchableOpacity
+                  className="flex-row items-center bg-blue-500 px-4 py-2 rounded-full mr-4"
+                  onPress={() => Linking.openURL(selectedImage)}
+                >
+                  <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                  <Text className="text-white font-semibold">Lưu ảnh</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-row items-center bg-green-500 px-4 py-2 rounded-full"
+                  onPress={() => {
+                    try {
+                      Share.share({
+                        url: selectedImage,
+                        message: selectedImage
+                      });
+                    } catch (error) {
+                      Alert.alert("Lỗi", "Không thể chia sẻ nội dung này.");
+                    }
+                  }}
+                >
+                  <FontAwesomeIcon icon={faShare} size={16} color="#fff" className="mr-2" />
+                  <Text className="text-white font-semibold">Chia sẻ</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        <Modal
+          visible={showVideoModal}
+          transparent={true}
+          onRequestClose={() => setShowVideoModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowVideoModal(false)}>
+            <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+              <TouchableOpacity
+                className="absolute top-24 right-5 z-10 p-3 bg-black/50 rounded-full"
+                onPress={() => setShowVideoModal(false)}
+              >
+                <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+              </TouchableOpacity>
+
+              <View className="w-full h-1/2 flex justify-center items-center">
+                <Video
+                  source={{ uri: selectedVideo }}
+                  shouldPlay={true}
+                  resizeMode="contain"
+                  useNativeControls
+                  style={{ width: '100%', height: '100%' }}
+                  isLooping={false}
+                />
+              </View>
+
+              <View className="flex-row mt-5 justify-center">
+                <TouchableOpacity
+                  className="flex-row items-center bg-blue-500 px-4 py-2 rounded-full mr-4"
+                  onPress={() => Linking.openURL(selectedVideo)}
+                >
+                  <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                  <Text className="text-white font-semibold">Lưu video</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        <Modal
+          visible={showDocumentModal}
+          transparent={true}
+          onRequestClose={() => setShowDocumentModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowDocumentModal(false)}>
+            <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+              <TouchableOpacity
+                className="absolute top-24 right-5 z-10 p-3 bg-black/50 rounded-full"
+                onPress={() => setShowDocumentModal(false)}
+              >
+                <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+              </TouchableOpacity>
+
+              <View className="bg-white p-5 w-4/5 rounded-lg">
+                <Text className="text-lg font-bold mb-4 text-center">{selectedDocument.name}</Text>
+                <Text className="text-center mb-4">Document Preview is not available</Text>
+                <View className="flex-row justify-center">
+                  <TouchableOpacity
+                    className="mt-3 bg-blue-500 px-4 py-2 rounded-full flex-row items-center"
+                    onPress={() => Linking.openURL(selectedDocument.url)}
+                  >
+                    <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Download Document</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-              {allUsers.length > 0 ? (
-                <View className="flex-1">
-                  <FlatList
-                    data={displayedConversations}
-                    renderItem={renderConversationItem}
-                    keyExtractor={(item) => item._id}
-                    contentContainerStyle={{ flexGrow: 1 }}
-                  />
-
-                  {(Array.isArray(allUsers) && allUsers.length > 10) && (
-                    <TouchableOpacity
-                      className="py-3 border-t border-gray-200 items-center bg-gray-50"
-                      onPress={toggleShowAllConversations}
-                    >
-                      <Text className="text-blue-500 font-medium">
-                        {showAllConversations ? "Hiển thị ít hơn" : `Xem tất cả (${allUsers.length})`}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : (
-                <View className="flex-1 items-center justify-center">
-                  <Text className="text-gray-500">Không có cuộc hội thoại nào</Text>
-                </View>
-              )}
             </View>
-          )}
-        </>
-      )}
+          </TouchableWithoutFeedback>
+        </Modal>
 
-      {renderCreateGroupModal()}
-      {renderGroupInfoModal()}
-      {renderConfirmationModal()}
-
-      <Modal
-        visible={showImageModal}
-        transparent={true}
-        onRequestClose={() => setShowImageModal(false)}
-        animationType="fade"
-      >
-        <View className="flex-1 bg-black bg-opacity-90 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-5 z-10"
-            onPress={() => setShowImageModal(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-          </TouchableOpacity>
-          {selectedImage ? (
-            <Image
-              source={{ uri: selectedImage, cache: 'reload' }}
-              className="w-full h-3/4"
-              resizeMode="contain"
-            />
-          ) : (
-            <Text className="text-white">Không thể hiển thị hình ảnh</Text>
-          )}
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showVideoModal}
-        transparent={true}
-        onRequestClose={() => setShowVideoModal(false)}
-      >
-        <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-5 z-10"
-            onPress={() => setShowVideoModal(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-          </TouchableOpacity>
-          <View className="w-full h-1/2 flex justify-center items-center">
-            <Video
-              source={{ uri: selectedVideo }}
-              shouldPlay={true}
-              resizeMode="contain"
-              useNativeControls
-              style={{ width: '100%', height: '100%' }}
-              isLooping={false}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showDocumentModal}
-        transparent={true}
-        onRequestClose={() => setShowDocumentModal(false)}
-      >
-        <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-5 z-10"
-            onPress={() => setShowDocumentModal(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-          </TouchableOpacity>
-          <View className="bg-white p-5 w-4/5 rounded-lg">
-            <Text className="text-lg font-bold mb-4 text-center">{selectedDocument.name}</Text>
-            <Text className="text-center mb-4">Document Preview is not available</Text>
-            <View className="flex-row justify-center">
-              <TouchableOpacity
-                className="mt-3 bg-blue-500 px-4 py-2 rounded-full flex-row items-center"
-                onPress={() => Linking.openURL(selectedDocument.url)}
-              >
-                <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
-                <Text className="text-white font-semibold">Download Document</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
+        {/* Share Message Modal */}
+        <ShareMessageModal
+          visible={!!messageToShare}
+          onClose={() => setMessageToShare(null)}
+          message={messageToShare}
+          allUsers={allUsers}
+          socketConnection={socketConnection}
+          currentUser={user}
+          onSuccess={handleShareSuccess}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
