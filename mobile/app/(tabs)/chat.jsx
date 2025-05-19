@@ -15,12 +15,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import uploadFileToCloud from "../../helpers/uploadFileToCloud";
 import { Video } from 'expo-av';
 import MessageBubble from "../../components/MessageBubble";
-import ConfirmationModal from "../../components/ConfirmationModal";
+// Remove ConfirmationModal import
 import CreateGroupChat from "../../components/CreateGroupChat";
 import GroupChatItem from "../../components/GroupChatItem";
 import GroupInfoModal from "../../components/GroupInfoModal";
 import DirectChatDetailsModal from "../../components/DirectChatDetailsModal";
+import GroupChatInfoModal from "../../components/GroupChatInfoModal";
 import ShareMessageModal from "../../components/ShareMessageModal";
+import AddGroupMembersModal from "../../components/AddGroupMembersModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
 
@@ -76,13 +78,6 @@ export default function Chat() {
 
   const [showAllConversations, setShowAllConversations] = useState(false);
   const [forceRender, setForceRender] = useState(false);
-
-  const [confirmModal, setConfirmModal] = useState({
-    visible: false,
-    title: "",
-    message: "",
-    action: null
-  });
 
   const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
 
@@ -838,7 +833,7 @@ export default function Chat() {
           </TouchableOpacity>
         </View>
       );
-    } else if (file.mimeType?.startsWith('image/') || file.type?.startsWith('image/')) {
+    } else if (file.mimeType?.startsWith('image') || file.type?.startsWith('image')) {
       return (
         <View className="p-2 bg-gray-200 rounded mx-2 relative">
           <Image
@@ -1122,6 +1117,89 @@ export default function Chat() {
     }
   };
 
+  // Update the handleDeleteGroup function to properly disband groups
+  const handleDeleteGroup = () => {
+    console.log("Attempting to disband group:", selectedChat?.userDetails?._id);
+
+    if (!socketConnection) {
+      console.error("Socket connection is not available");
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    if (!selectedChat || !selectedChat.userDetails?._id) {
+      console.error("Invalid group selection");
+      Alert.alert("Lỗi", "Không thể xác định nhóm chat. Vui lòng thử lại sau.");
+      return;
+    }
+
+    // Make sure we have the admin info
+    if (!chatUser?.groupAdmin) {
+      console.error("Missing group admin information");
+      Alert.alert("Lỗi", "Không thể xác định quản trị viên nhóm. Vui lòng thử lại sau.");
+      return;
+    }
+
+    setIsChatLoading(true);
+
+    // Remove any existing listeners to avoid duplicates
+    socketConnection.off("groupDeleted");
+
+    // Set up the listener for the response
+    socketConnection.on("groupDeleted", (response) => {
+      setIsChatLoading(false);
+      console.log("Group dissolution response:", response);
+
+      if (response.success) {
+        // Close modals
+        setShowGroupInfoModal(false);
+
+        // Navigate back to chat list
+        handleBackToList();
+
+        // Show success message
+        Alert.alert("Thành công", "Nhóm chat đã được giải tán thành công");
+
+        // Refresh the conversation list
+        refreshConversations();
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể giải tán nhóm chat. Vui lòng thử lại sau.");
+      }
+    });
+
+    // Check if user is admin
+    const isAdmin = chatUser?.groupAdmin?._id === user._id || chatUser?.groupAdmin === user._id;
+    if (!isAdmin) {
+      console.error("User is not admin, cannot disband group");
+      setIsChatLoading(false);
+      Alert.alert("Lỗi", "Chỉ quản trị viên mới có thể giải tán nhóm.");
+      return;
+    }
+
+    // Create the payload with the correct format that the server expects
+    const payload = {
+      groupId: selectedChat.userDetails._id,
+      userId: user._id
+    };
+
+    console.log("Emitting deleteGroup with payload:", payload);
+
+    // Try both event names that the server might be listening for
+    socketConnection.emit("deleteGroup", payload);
+
+    // Also try this alternative event name if the server might be using it
+    socketConnection.emit("disbandGroup", payload);
+
+    // Set up timeout for no response
+    setTimeout(() => {
+      if (isChatLoading) {
+        setIsChatLoading(false);
+        socketConnection.off("groupDeleted");
+        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
+      }
+    }, 10000);
+  };
+
   const handleAddReaction = (messageId, emoji) => {
     console.log("Adding reaction:", emoji, "to message:", messageId);
 
@@ -1338,6 +1416,94 @@ export default function Chat() {
     );
   };
 
+  // Add the missing renderConversationItem function
+  const renderConversationItem = ({ item }) => {
+    if (!item || !item.userDetails) {
+      console.log("Invalid conversation item:", item);
+      return null;
+    }
+
+    const isGroup = item.userDetails.isGroup;
+    const lastMessage = item.latestMessage || {};
+
+    // Format the timestamp
+    const messageTime = lastMessage.createdAt
+      ? new Date(lastMessage.createdAt)
+      : null;
+
+    const formattedTime = messageTime
+      ? messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    // Check if the message is today, if not show date
+    const today = new Date();
+    const isToday = messageTime &&
+      messageTime.getDate() === today.getDate() &&
+      messageTime.getMonth() === today.getMonth() &&
+      messageTime.getFullYear() === today.getFullYear();
+
+    const dateString = messageTime && !isToday
+      ? messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' })
+      : formattedTime;
+
+    return (
+      <TouchableOpacity
+        className="flex-row items-center px-4 py-2 border-b border-gray-100"
+        onPress={() => handleSelectChat(item)}
+      >
+        <View className="relative">
+          <Image
+            source={{
+              uri: item.userDetails.profilePic ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(item.userDetails.name)}&background=random`
+            }}
+            className="w-14 h-14 rounded-full"
+          />
+          {user.onlineUsers?.includes(item.userDetails._id) && !isGroup && (
+            <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white" />
+          )}
+        </View>
+
+        <View className="ml-3 flex-1">
+          <View className="flex-row justify-between items-center">
+            <Text className={`font-semibold ${item.unseenMessages ? "text-black" : "text-gray-800"}`} numberOfLines={1}>
+              {item.userDetails.nickname || item.userDetails.name}
+            </Text>
+            {lastMessage.createdAt && (
+              <Text className="text-xs text-gray-500">{dateString}</Text>
+            )}
+          </View>
+
+          <View className="flex-row justify-between items-center mt-1">
+            <Text
+              className={`text-sm ${item.unseenMessages ? "text-black font-medium" : "text-gray-500"}`}
+              numberOfLines={1}
+              style={{ maxWidth: '80%' }}
+            >
+              {lastMessage.text || (lastMessage.files?.length > 0
+                ? `${isGroup && lastMessage.msgByUserName ? lastMessage.msgByUserName + ": " : ""}${lastMessage.files.length > 1
+                  ? `${lastMessage.files.length} files`
+                  : lastMessage.files[0]?.type?.includes('image')
+                    ? 'Image'
+                    : lastMessage.files[0]?.type?.includes('video')
+                      ? 'Video'
+                      : 'File'}`
+                : "")}
+            </Text>
+
+            {item.unseenMessages > 0 && (
+              <View className="bg-blue-500 rounded-full w-6 h-6 items-center justify-center">
+                <Text className="text-white text-xs font-bold">
+                  {item.unseenMessages > 9 ? "9+" : item.unseenMessages}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const refreshConversations = () => {
     if (socketConnection && user?._id) {
       console.log("Refreshing conversations for user:", user._id);
@@ -1441,181 +1607,168 @@ export default function Chat() {
     });
   };
 
-  // Add the missing function
+  // Add this missing function to handle showing chat details
   const handleShowChatDetails = () => {
-    if (selectedChat?.userDetails?.isGroup) {
-      // For group chats, show the group info modal
-      handleShowGroupInfo(selectedChat);
+    // Kiểm tra chặt chẽ hơn xem đây có phải là nhóm không
+    const isGroup = selectedChat?.userDetails?.isGroup === true ||
+      (chatUser && chatUser.isGroup === true) ||
+      (chatUser && Array.isArray(chatUser.members) && chatUser.members.length > 2);
+
+    console.log("Showing chat details for:", {
+      chatName: chatUser?.name,
+      isGroup: isGroup,
+      hasMembers: !!chatUser?.members,
+      membersCount: chatUser?.members?.length || 0
+    });
+
+    if (isGroup) {
+      setShowGroupInfoModal(true);
     } else {
-      // For direct chats, show the chat details modal
       setShowDirectChatDetails(true);
     }
   };
 
-  const renderConversationItem = ({ item: chatItem }) => {
-    if (chatItem.isGroup || chatItem.userDetails?.isGroup) {
-      return (
-        <GroupChatItem
-          group={chatItem}
-          onPress={handleSelectChat}
-          currentUserId={user?._id}
-          onLongPress={handleShowGroupInfo}
-        />
-      );
+  // Add the missing handleAddMember function
+  const handleAddMember = () => {
+    console.log("Opening add member modal");
+    setShowAddMemberModal(true);
+  };
+
+  // Add these functions to handle group management
+  const handleLeaveGroup = (groupId) => {
+    console.log("Handling leave group for:", groupId);
+    if (!socketConnection || !groupId) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
     }
 
-    // Use nickname if available, otherwise use real name
-    const displayName = chatItem?.userDetails?.nickname || chatItem?.userDetails?.name;
+    Alert.alert(
+      "Rời khỏi nhóm",
+      "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Rời nhóm",
+          style: "destructive",
+          onPress: () => {
+            socketConnection.emit("leaveGroup", {
+              groupId: groupId,
+              userId: user._id
+            });
 
-    return (
-      <TouchableOpacity
-        className="flex-row items-center px-4 py-3 border-b border-gray-100"
-        onPress={() => handleSelectChat(chatItem)}
-      >
-        <View className="relative">
-          <Image
-            source={{ uri: chatItem?.userDetails?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem?.userDetails?.name || "User")}` }}
-            className="w-12 h-12 rounded-full"
-          />
-        </View>
-        <View className="ml-3 flex-1 overflow-hidden">
-          <Text className="text-[15px] font-semibold">{displayName}</Text>
-          <Text numberOfLines={1} className="text-gray-500 text-sm">
-            {chatItem?.latestMessage?.msgByUserId !== chatItem?.userDetails?._id ? <Text>Bạn: </Text> : null}
-            {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
-            {chatItem?.latestMessage?.imageUrl && (
-              <>
-                <FontAwesomeIcon icon={faImage} size={15} color="#ccc" />
-                <Text>
-                  {chatItem?.latestMessage?.fileName
-                    ? ` ${chatItem?.latestMessage?.fileName}`
-                    : " Hình ảnh"}
-                </Text>
-              </>
-            )}
-            {chatItem?.latestMessage?.fileUrl && (
-              <>
-                <FontAwesomeIcon icon={faFilePen} size={15} color="#ccc" />
-                <Text>{chatItem?.latestMessage?.fileName}</Text>
-              </>
-            )}
-          </Text>
-        </View>
-        <View className="items-end">
-          <Text className="text-xs text-gray-500">
-            {chatItem?.latestMessage?.createdAt &&
-              new Date(chatItem?.latestMessage?.createdAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-          </Text>
-          {chatItem?.unseenMessages > 0 && (
-            <View className="bg-red-700 rounded-full h-5 w-5 items-center justify-center mt-1">
-              <Text className="text-white text-xs">{chatItem?.unseenMessages}</Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
+            socketConnection.once("groupLeft", (response) => {
+              if (response.success) {
+                Alert.alert("Thành công", "Bạn đã rời khỏi nhóm");
+                handleBackToList();
+                refreshConversations();
+              } else {
+                Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm");
+              }
+            });
+          }
+        }
+      ]
     );
   };
 
-  const handleShowGroupInfo = (group) => {
-    setCurrentGroupInfo(group);
-    setShowGroupInfoModal(true);
-  };
+  const handleRemoveMember = (groupId, memberId, memberName) => {
+    console.log("Removing member:", memberId, "from group:", groupId);
+    if (!socketConnection || !groupId || !memberId) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
 
-  const handleLeaveGroup = (groupId) => {
-    if (!socketConnection || !groupId) return;
+    // Normalize IDs for consistent comparison
+    const normalizeId = (id) => {
+      if (!id) return '';
+      return typeof id === 'object' ? id.toString() : id;
+    };
 
-    setConfirmModal({
-      visible: true,
-      title: "Rời khỏi nhóm",
-      message: "Bạn có chắc muốn rời khỏi nhóm chat này?",
-      action: () => {
-        socketConnection.emit("leaveGroup", {
-          groupId: groupId,
-          userId: user._id
-        });
+    const currentUserId = normalizeId(user._id);
+    const memberIdStr = normalizeId(memberId);
+    const groupIdStr = normalizeId(groupId);
 
-        socketConnection.once("leftGroup", (response) => {
-          if (response.success) {
-            Alert.alert("Thành công", response.message);
-            handleBackToList();
-            refreshConversations();
-          } else {
-            Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm");
+    // We trust that GroupChatInfoModal has already checked permissions
+    // So we just handle the server communication
+
+    // Set loading state
+    setIsChatLoading(true);
+
+    // Remove any existing listeners to avoid duplicates
+    socketConnection.off("memberRemoved");
+    socketConnection.off("memberRemovedFromGroup");
+
+    // Set up callback for either event name
+    const handleMemberRemovedResponse = (response) => {
+      setIsChatLoading(false);
+
+      if (response.success) {
+        Alert.alert("Thành công", `${memberName || "Thành viên"} đã bị xóa khỏi nhóm`);
+
+        // Update group information
+        if (socketConnection && selectedChat?.userDetails?._id) {
+          // Refresh group data
+          socketConnection.emit("joinRoom", selectedChat.userDetails._id);
+
+          // Update local state directly for immediate UI feedback
+          if (chatUser && chatUser.members) {
+            // Filter out the removed member
+            setChatUser(prev => ({
+              ...prev,
+              members: prev.members.filter(member =>
+                normalizeId(member._id) !== memberIdStr
+              )
+            }));
           }
-        });
-      }
-    });
-  };
-
-  const handleDeleteGroup = (groupId) => {
-    if (!socketConnection || !groupId) return;
-
-    setConfirmModal({
-      visible: true,
-      title: "Xóa nhóm",
-      message: "Bạn có chắc muốn xóa nhóm chat này? Hành động này không thể hoàn tác.",
-      action: () => {
-        socketConnection.emit("deleteGroup", {
-          groupId: groupId,
-          adminId: user._id
-        });
-
-        socketConnection.once("groupDeleted", (response) => {
-          if (response.success) {
-            Alert.alert("Thành công", response.message);
-            handleBackToList();
-            refreshConversations();
-          } else {
-            Alert.alert("Lỗi", response.message || "Không thể xóa nhóm");
-          }
-        });
-      }
-    });
-  };
-
-  const renderCreateGroupModal = () => (
-    <CreateGroupChat
-      visible={showCreateGroupModal}
-      onClose={() => setShowCreateGroupModal(false)}
-      socketConnection={socketConnection}
-      userId={user?._id}
-      onGroupCreated={refreshConversations}
-    />
-  );
-
-  const renderGroupInfoModal = () => (
-    <GroupInfoModal
-      visible={showGroupInfoModal}
-      onClose={() => {
-        setShowGroupInfoModal(false);
-        setTimeout(() => refreshConversations(), 500);
-      }}
-      group={currentGroupInfo}
-      currentUserId={user?._id}
-      onLeaveGroup={() => handleLeaveGroup(currentGroupInfo?._id)}
-      onDeleteGroup={() => handleDeleteGroup(currentGroupInfo?._id)}
-      socketConnection={socketConnection}
-    />
-  );
-
-  const renderConfirmationModal = () => (
-    <ConfirmationModal
-      visible={confirmModal.visible}
-      title={confirmModal.title}
-      message={confirmModal.message}
-      onConfirm={() => {
-        if (confirmModal.action) {
-          confirmModal.action();
         }
-        setConfirmModal({ ...confirmModal, visible: false });
-      }}
-      onCancel={() => setConfirmModal({ ...confirmModal, visible: false })}
-      type="warning"
-    />
-  );
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể xóa thành viên khỏi nhóm");
+      }
+    };
+
+    // Listen for responses to both possible event names
+    socketConnection.on("memberRemoved", handleMemberRemovedResponse);
+    socketConnection.on("memberRemovedFromGroup", handleMemberRemovedResponse);
+
+    // Prepare payloads with normalized IDs
+    const payloadStandard = {
+      groupId: groupIdStr,
+      userId: currentUserId,
+      memberId: memberIdStr
+    };
+
+    const payloadAlternate = {
+      groupId: groupIdStr,
+      memberId: memberIdStr,
+      adminId: currentUserId
+    };
+
+    console.log("Emitting removeMember with payload:", payloadStandard);
+    socketConnection.emit("removeMember", payloadStandard);
+
+    // Try alternative event name
+    console.log("Emitting removeMemberFromGroup with payload:", payloadAlternate);
+    socketConnection.emit("removeMemberFromGroup", payloadAlternate);
+
+    // Set timeout in case server doesn't respond
+    setTimeout(() => {
+      if (isChatLoading) {
+        setIsChatLoading(false);
+        socketConnection.off("memberRemoved");
+        socketConnection.off("memberRemovedFromGroup");
+        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
+      }
+    }, 10000);
+  };
+
+  const handleMembersAdded = () => {
+    console.log("Members added successfully");
+    setShowAddMemberModal(false);
+
+    if (socketConnection && selectedChat?.userDetails?._id) {
+      socketConnection.emit("joinRoom", selectedChat.userDetails._id);
+    }
+  };
 
   const displayedConversations = useMemo(() => {
     if (!Array.isArray(allUsers)) return [];
@@ -2004,6 +2157,7 @@ export default function Chat() {
                   <ActivityIndicator size="small" color="#0084ff" />
                 ) : (
                   <FontAwesomeIcon
+
                     icon={faPaperPlane}
                     size={20}
                     color={(messageText.trim() || selectedFiles.length > 0) ? "#0084ff" : "#aaa"}
@@ -2067,21 +2221,41 @@ export default function Chat() {
           </>
         )}
 
-        {/* Add the DirectChatDetailsModal for 1-on-1 chats */}
+        {/* Direct chat details modal for 1-on-1 chats */}
         <DirectChatDetailsModal
           visible={showDirectChatDetails}
           onClose={() => setShowDirectChatDetails(false)}
           user={chatUser}
           currentUser={user}
           messages={messages}
-          onDeleteConversation={handleDeleteDirectConversation} // Ensure this prop is passed correctly
-
+          onDeleteConversation={handleDeleteDirectConversation}
           onUpdateNickname={handleUpdateNickname}
         />
 
-        {renderCreateGroupModal()}
-        {renderGroupInfoModal()}
-        {renderConfirmationModal()}
+        {/* Group chat info modal for group chats */}
+        <GroupChatInfoModal
+          visible={showGroupInfoModal}
+          onClose={() => setShowGroupInfoModal(false)}
+          group={chatUser}
+          currentUser={user}
+          onLeaveGroup={handleLeaveGroup}
+          messages={messages}
+          onAddMember={handleAddMember}
+          onRemoveMember={handleRemoveMember}
+          socketConnection={socketConnection}
+          onDeleteGroup={handleDeleteGroup} // Add this line
+        />
+
+        {/* Add Member Modal */}
+        <AddGroupMembersModal
+          visible={showAddMemberModal}
+          onClose={() => setShowAddMemberModal(false)}
+          groupId={selectedChat?.userDetails?._id}
+          currentUserId={user?._id}
+          existingMembers={chatUser?.members || []}
+          socketConnection={socketConnection}
+          onMembersAdded={handleMembersAdded}
+        />
 
         <Modal
           visible={showImageModal}
@@ -2216,6 +2390,47 @@ export default function Chat() {
           currentUser={user}
           onSuccess={handleShareSuccess}
         />
+
+        {/* ADD THIS: Create Group Modal and Add Member Modal */}
+        <CreateGroupChat
+          visible={showCreateGroupModal}
+          onClose={() => setShowCreateGroupModal(false)}
+          socketConnection={socketConnection}
+          userId={user?._id}
+          onGroupCreated={() => {
+            refreshConversations();
+            setShowCreateGroupModal(false);
+          }}
+        />
+
+        <Modal
+          visible={showAddMemberModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowAddMemberModal(false)}
+        >
+          <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
+            <View className="bg-white w-[90%] rounded-lg p-4 max-h-[80%]">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="font-bold text-lg">Thêm thành viên</Text>
+                <TouchableOpacity onPress={() => setShowAddMemberModal(false)}>
+                  <FontAwesomeIcon icon={faTimes} size={18} />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-center my-8 text-gray-500">
+                Chức năng đang được phát triển...
+              </Text>
+
+              <TouchableOpacity
+                className="bg-blue-500 py-3 rounded-lg items-center"
+                onPress={() => setShowAddMemberModal(false)}
+              >
+                <Text className="text-white font-medium">Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );

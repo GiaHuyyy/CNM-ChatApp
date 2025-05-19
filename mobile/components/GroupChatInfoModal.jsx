@@ -1,0 +1,773 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import {
+    faTimes, faPen, faInfoCircle, faImage, faUsers,
+    faUserPlus, faSignOutAlt, faTrash, faCheck,
+    faSearch, faUserShield, faUserMinus, faExclamationTriangle
+} from '@fortawesome/free-solid-svg-icons';
+import PropTypes from 'prop-types';
+import AddGroupMembersModal from './AddGroupMembersModal';
+import ConfirmationModal from './ConfirmationModal';
+
+const GroupChatInfoModal = ({
+    visible,
+    onClose,
+    group,
+    currentUser,
+    onLeaveGroup,
+    messages,
+    onAddMember,
+    onRemoveMember,
+    socketConnection,
+    onDeleteGroup
+}) => {
+    const [activeTab, setActiveTab] = useState('members'); // members, media, settings
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [editMode, setEditMode] = useState(false);
+    const [groupName, setGroupName] = useState('');
+
+    // Add states for add members modal and member removal
+    const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+    const [removingMember, setRemovingMember] = useState(false);
+
+    // Add confirmation modal state
+    const [confirmModal, setConfirmModal] = useState({
+        visible: false,
+        title: "",
+        message: "",
+        action: null,
+        type: "warning"
+    });
+
+    // Normalize IDs for comparison to handle both string and object IDs
+    const normalizeId = (id) => {
+        if (!id) return '';
+        return typeof id === 'object' ? id.toString() : id;
+    };
+
+    // Calculate if the current user is admin
+    const calculateIsAdmin = () => {
+        if (!group || !currentUser) return false;
+
+        const groupAdminId = normalizeId(group.groupAdmin?._id || group.groupAdmin);
+        const userId = normalizeId(currentUser._id);
+
+        return groupAdminId === userId;
+    };
+
+    const isAdmin = calculateIsAdmin();
+
+    useEffect(() => {
+        if (group) {
+            setGroupName(group.name || '');
+            console.log("Group loaded:", {
+                name: group.name,
+                members: group.members?.length,
+                isAdmin: isAdmin,
+                adminId: normalizeId(group.groupAdmin),
+                currentUserId: normalizeId(currentUser._id)
+            });
+        }
+    }, [group, currentUser]);
+
+    const filteredMembers = searchQuery.trim()
+        ? group?.members?.filter(m =>
+            m.name?.toLowerCase().includes(searchQuery.toLowerCase())
+        ) || []
+        : group?.members || [];
+
+    const handleSaveGroupName = () => {
+        if (!isAdmin) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Chỉ quản trị viên mới có thể đổi tên nhóm",
+                type: "error"
+            });
+            setEditMode(false);
+            return;
+        }
+
+        if (!groupName.trim()) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Tên nhóm không được để trống",
+                type: "error"
+            });
+            return;
+        }
+
+        setIsLoading(true);
+
+        // Remove existing listeners to avoid duplicates
+        socketConnection.off("groupRenamed");
+
+        // Updated group info
+        const groupData = {
+            groupId: normalizeId(group?._id),
+            userId: normalizeId(currentUser._id),
+            name: groupName.trim()
+        };
+
+        console.log("Emitting renameGroup with payload:", groupData);
+
+        // Listen for the response before emitting
+        socketConnection.on("groupRenamed", (response) => {
+            setIsLoading(false);
+
+            if (response.success) {
+                setConfirmModal({
+                    visible: true,
+                    title: "Thành công",
+                    message: "Đã cập nhật tên nhóm",
+                    type: "success"
+                });
+                setEditMode(false);
+            } else {
+                setConfirmModal({
+                    visible: true,
+                    title: "Lỗi",
+                    message: response.message || "Không thể cập nhật tên nhóm",
+                    type: "error"
+                });
+            }
+        });
+
+        socketConnection.emit("renameGroup", groupData);
+
+        // Set timeout in case of no response
+        setTimeout(() => {
+            if (isLoading) {
+                socketConnection.off("groupRenamed");
+                setIsLoading(false);
+                setConfirmModal({
+                    visible: true,
+                    title: "Lỗi",
+                    message: "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.",
+                    type: "error"
+                });
+            }
+        }, 8000);
+    };
+
+    // Enhanced member removal function using techniques from GroupInfoModal
+    const handleRemoveMemberWithConfirmation = (memberId, memberName) => {
+        if (!socketConnection) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không thể kết nối đến máy chủ",
+                type: "error"
+            });
+            return;
+        }
+
+        if (!group || !memberId) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Thông tin thành viên không hợp lệ",
+                type: "error"
+            });
+            return;
+        }
+
+        const groupIdStr = normalizeId(group._id);
+        const memberIdStr = normalizeId(memberId);
+        const adminIdStr = normalizeId(currentUser._id);
+        const groupAdminIdStr = normalizeId(group.groupAdmin?._id || group.groupAdmin);
+
+        console.log("Attempt to remove member:", {
+            groupId: groupIdStr,
+            memberId: memberIdStr,
+            adminId: adminIdStr,
+            groupAdminId: groupAdminIdStr,
+            isRealAdmin: adminIdStr === groupAdminIdStr
+        });
+
+        if (adminIdStr !== groupAdminIdStr) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Bạn không có quyền xóa thành viên",
+                type: "error"
+            });
+            return;
+        }
+
+        if (memberIdStr === adminIdStr) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Bạn không thể xóa chính mình. Hãy sử dụng chức năng rời nhóm.",
+                type: "error"
+            });
+            return;
+        }
+
+        setConfirmModal({
+            visible: true,
+            title: "Xác nhận xóa thành viên",
+            message: `Bạn có chắc muốn xóa ${memberName} khỏi nhóm?`,
+            type: "warning",
+            action: () => {
+                setRemovingMember(true);
+
+                // Clean up previous listeners
+                socketConnection.off("memberRemoved");
+                socketConnection.off("memberRemovedFromGroup");
+
+                // Set up listener for both potential event names
+                const handleMemberRemovalResponse = (response) => {
+                    console.log("Response from member removal:", response);
+                    setRemovingMember(false);
+
+                    if (response.success) {
+                        setConfirmModal({
+                            visible: true,
+                            title: "Thành công",
+                            message: "Đã xóa thành viên khỏi nhóm",
+                            type: "success"
+                        });
+
+                        // Call the original handler which updates UI
+                        if (onRemoveMember) {
+                            onRemoveMember(groupIdStr, memberIdStr, memberName);
+                        }
+                    } else {
+                        setConfirmModal({
+                            visible: true,
+                            title: "Lỗi",
+                            message: response.message || "Không thể xóa thành viên",
+                            type: "error"
+                        });
+                    }
+                };
+
+                socketConnection.on("memberRemoved", handleMemberRemovalResponse);
+                socketConnection.on("memberRemovedFromGroup", handleMemberRemovalResponse);
+
+                // Try both payload formats to ensure compatibility
+                const payloadStandard = {
+                    groupId: groupIdStr,
+                    userId: adminIdStr,
+                    memberId: memberIdStr
+                };
+
+                const payloadAlternate = {
+                    groupId: groupIdStr,
+                    memberId: memberIdStr,
+                    adminId: adminIdStr
+                };
+
+                console.log("Emitting removeMember with payload:", payloadStandard);
+                socketConnection.emit("removeMember", payloadStandard);
+
+                // Try alternative event name if the server might be listening for it
+                console.log("Emitting removeMemberFromGroup with payload:", payloadAlternate);
+                socketConnection.emit("removeMemberFromGroup", payloadAlternate);
+
+                // Set timeout for no response
+                setTimeout(() => {
+                    if (removingMember) {
+                        console.log("No response received for member removal");
+                        setRemovingMember(false);
+                        socketConnection.off("memberRemoved");
+                        socketConnection.off("memberRemovedFromGroup");
+                        setConfirmModal({
+                            visible: true,
+                            title: "Lỗi",
+                            message: "Không nhận được phản hồi từ máy chủ",
+                            type: "error"
+                        });
+                    }
+                }, 10000);
+            }
+        });
+    };
+
+    const handleDeleteGroupWithAlert = () => {
+        console.log("Group disbanding attempt", {
+            groupId: group?._id,
+            isAdmin,
+            socketConnected: !!socketConnection?.connected
+        });
+
+        if (!isAdmin) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Chỉ quản trị viên mới có thể giải tán nhóm",
+                type: "error"
+            });
+            return;
+        }
+
+        if (!socketConnection) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không thể kết nối đến máy chủ",
+                type: "error"
+            });
+            return;
+        }
+
+        // Clean group ID
+        const groupIdStr = normalizeId(group?._id);
+        const userIdStr = normalizeId(currentUser?._id);
+
+        if (!groupIdStr) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không thể xác định nhóm chat",
+                type: "error"
+            });
+            return;
+        }
+
+        // Test the socket connection explicitly
+        socketConnection.emit("ping", "Testing connection before group deletion");
+        socketConnection.once("pong", (response) => {
+            console.log("Socket connection confirmed working:", response);
+        });
+
+        setConfirmModal({
+            visible: true,
+            title: "Giải tán nhóm",
+            message: "Bạn có chắc chắn muốn giải tán nhóm này? Nhóm sẽ bị xóa hoàn toàn và tất cả thành viên sẽ bị xóa khỏi nhóm. Hành động này không thể hoàn tác.",
+            type: "danger",
+            action: () => {
+                console.log("User confirmed group disbanding, executing action now");
+
+                // Remove any existing listeners to avoid duplicates 
+                socketConnection.off("groupDeleted");
+                socketConnection.off("groupRemoved");
+                socketConnection.off("groupDisbanded");
+
+                // Enable debug mode to catch any events for debugging
+                const debugListener = (eventName) => (data) => {
+                    console.log(`DEBUG - Received ${eventName} event:`, data);
+                };
+                socketConnection.onAny(debugListener("any"));
+
+                // Add handler for ALL possible response event names
+                const setupDeleteHandler = (eventName) => {
+                    console.log(`Setting up listener for ${eventName}`);
+                    socketConnection.on(eventName, (response) => {
+                        console.log(`Received ${eventName} response:`, response);
+
+                        // Clean up all listeners
+                        socketConnection.off("groupDeleted");
+                        socketConnection.off("groupRemoved");
+                        socketConnection.off("groupDisbanded");
+                        socketConnection.offAny(debugListener("any"));
+
+                        if (response?.success) {
+                            console.log("Group deleted successfully");
+                            onClose(); // Close modal first for better UX
+
+                            if (onDeleteGroup) {
+                                console.log("Calling onDeleteGroup handler");
+                                onDeleteGroup(); // Call parent handler for cleanup
+                            }
+                        } else {
+                            console.log("Group deletion failed:", response?.message);
+                            setConfirmModal({
+                                visible: true,
+                                title: "Lỗi",
+                                message: response?.message || "Không thể giải tán nhóm chat",
+                                type: "error"
+                            });
+                        }
+                    });
+                };
+
+                // Set up listeners for all possible response event names
+                setupDeleteHandler("groupDeleted");
+                setupDeleteHandler("groupRemoved");
+                setupDeleteHandler("groupDisbanded");
+
+                // Prepare multiple payload formats for compatibility
+                const payload1 = {
+                    groupId: groupIdStr,
+                    userId: userIdStr
+                };
+
+                const payload2 = {
+                    groupId: groupIdStr,
+                    adminId: userIdStr
+                };
+
+                const payload3 = {
+                    _id: groupIdStr,
+                    userId: userIdStr
+                };
+
+                // Log all attempts
+                console.log("Emitting deleteGroup with payload:", payload1);
+                console.log("Emitting disbandGroup with payload:", payload2);
+
+                // Try all event names and payload combinations that the server might expect
+                socketConnection.emit("deleteGroup", payload1);
+                socketConnection.emit("disbandGroup", payload1);
+                socketConnection.emit("deleteGroup", payload2);
+                socketConnection.emit("disbandGroup", payload2);
+                socketConnection.emit("removeGroup", payload1);
+                socketConnection.emit("deleteGroup", payload3);
+
+                // Set timeout for no response
+                setTimeout(() => {
+                    console.log("No response received for group deletion");
+                    socketConnection.off("groupDeleted");
+                    socketConnection.off("groupRemoved");
+                    socketConnection.off("groupDisbanded");
+                    socketConnection.offAny(debugListener("any"));
+
+                    setConfirmModal({
+                        visible: true,
+                        title: "Lỗi",
+                        message: "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.",
+                        type: "error"
+                    });
+                }, 10000);
+            }
+        });
+    };
+
+    const handleLeaveGroupWithConfirmation = () => {
+        if (!group || !onLeaveGroup) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không thể rời khỏi nhóm. Vui lòng thử lại sau.",
+                type: "error"
+            });
+            return;
+        }
+
+        // Check if user is the admin
+        const groupAdminId = normalizeId(group.groupAdmin?._id || group.groupAdmin);
+        const userId = normalizeId(currentUser._id);
+        const isCurrentUserAdmin = groupAdminId === userId;
+
+        let warningMessage = "Bạn có chắc chắn muốn rời khỏi nhóm này?";
+        if (isCurrentUserAdmin) {
+            warningMessage = "Bạn là quản trị viên của nhóm này. Nếu bạn rời đi, quản trị viên sẽ được giao cho người khác hoặc nhóm có thể bị giải tán. Bạn có chắc chắn muốn rời khỏi nhóm?";
+        }
+
+        setConfirmModal({
+            visible: true,
+            title: "Rời nhóm",
+            message: warningMessage,
+            type: "warning",
+            action: () => {
+                onClose(); // Close modal first for better UX
+                setTimeout(() => {
+                    onLeaveGroup(group._id); // Call the parent component's handler
+                }, 300);
+            }
+        });
+    };
+
+    // Enhanced member item display with better admin indicator
+    const renderMemberItem = ({ item }) => {
+        const memberId = normalizeId(item._id);
+        const currentUserId = normalizeId(currentUser._id);
+        const adminId = normalizeId(group?.groupAdmin?._id || group?.groupAdmin);
+
+        const isCurrentUser = memberId === currentUserId;
+        const isMemberAdmin = memberId === adminId;
+
+        return (
+            <View className="flex-row items-center py-3 px-2 border-b border-gray-100 justify-between">
+                <View className="flex-row items-center flex-1">
+                    <Image
+                        source={{
+                            uri: item.profilePic ||
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}`
+                        }}
+                        className="w-10 h-10 rounded-full"
+                    />
+                    <View className="ml-3 flex-1">
+                        <View className="flex-row items-center">
+                            <Text className="font-medium">{item.name}</Text>
+                            {isCurrentUser && (
+                                <Text className="ml-2 text-gray-500 text-xs">(Bạn)</Text>
+                            )}
+                        </View>
+                        {isMemberAdmin && (
+                            <View className="flex-row items-center mt-1">
+                                <FontAwesomeIcon icon={faUserShield} size={12} color="#3b82f6" />
+                                <Text className="text-blue-600 text-xs ml-1">Quản trị viên</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+
+                {/* Only show remove button if current user is admin and the member is not themselves or admin */}
+                {isAdmin && !isCurrentUser && !isMemberAdmin && (
+                    <TouchableOpacity
+                        className="bg-red-50 py-1 px-3 rounded-full"
+                        onPress={() => handleRemoveMemberWithConfirmation(item._id, item.name)}
+                        disabled={removingMember}
+                    >
+                        {removingMember ? (
+                            <ActivityIndicator size="small" color="#ef4444" />
+                        ) : (
+                            <View className="flex-row items-center">
+                                <FontAwesomeIcon icon={faUserMinus} size={12} color="#ef4444" className="mr-1" />
+                                <Text className="text-red-500 text-sm">Xóa</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
+
+    const handleAddMemberClick = () => {
+        if (onAddMember) {
+            onAddMember(); // Use the existing handler if provided
+        } else {
+            setShowAddMembersModal(true); // Open the modal directly if not
+        }
+    };
+
+    // Add handler for when members are added
+    const handleMembersAdded = () => {
+        console.log("Members added successfully");
+        setShowAddMembersModal(false);
+
+        // Refresh group data
+        if (socketConnection && group?._id) {
+            socketConnection.emit("joinRoom", group._id);
+        }
+
+        // Consider closing the modal with a delay for a better UX
+        setTimeout(() => {
+            onClose();
+        }, 500);
+    };
+
+    const renderMembersTab = () => (
+        <View className="flex-1">
+            <View className="flex-row items-center bg-gray-100 rounded-full px-3 py-1 mb-3 mx-2">
+                <FontAwesomeIcon icon={faSearch} size={14} color="#888" />
+                <TextInput
+                    placeholder="Tìm thành viên"
+                    className="ml-2 text-sm flex-1"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <FontAwesomeIcon icon={faTimes} size={14} color="#888" />
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {/* Add member count and admin info */}
+            <View className="mx-2 mb-2 bg-blue-50 p-2 rounded-lg">
+                <View className="flex-row items-center">
+                    <FontAwesomeIcon icon={faUsers} size={14} color="#3b82f6" />
+                    <Text className="ml-2 text-sm">
+                        <Text className="font-bold">{group?.members?.length || 0}</Text> thành viên
+                    </Text>
+                </View>
+                <View className="flex-row items-center mt-1">
+                    <FontAwesomeIcon icon={faUserShield} size={14} color="#3b82f6" />
+                    <Text className="ml-2 text-sm">
+                        Quản trị viên: <Text className="font-bold">
+                            {normalizeId(group?.groupAdmin) === normalizeId(currentUser._id)
+                                ? 'Bạn'
+                                : (group?.members?.find(m =>
+                                    normalizeId(m._id) === normalizeId(group?.groupAdmin) ||
+                                    normalizeId(m._id) === normalizeId(group?.groupAdmin?._id)
+                                )?.name || 'Không xác định')}
+                        </Text>
+                    </Text>
+                </View>
+            </View>
+
+            <FlatList
+                data={filteredMembers}
+                keyExtractor={item => item._id?.toString() || Math.random().toString()}
+                renderItem={renderMemberItem}
+                ListEmptyComponent={
+                    <View className="p-4 items-center justify-center">
+                        <Text className="text-gray-500">
+                            {searchQuery.trim() ? "Không tìm thấy thành viên" : "Không có thành viên"}
+                        </Text>
+                    </View>
+                }
+            />
+
+            {/* Changed: Now all members can add new members, not just admins */}
+            <TouchableOpacity
+                className="flex-row items-center justify-center py-3 bg-blue-50 mt-2"
+                onPress={handleAddMemberClick}
+            >
+                <FontAwesomeIcon icon={faUserPlus} size={16} color="#3b82f6" className="mr-2" />
+                <Text className="text-blue-500 font-medium">Thêm thành viên</Text>
+            </TouchableOpacity>
+        </View>
+    );
+
+    // Fix the Media tab rendering to prevent infinite loops
+    const renderMediaTab = () => (
+        <View className="flex-1 p-4 items-center justify-center">
+            <Text className="text-gray-500">Chức năng đang phát triển...</Text>
+        </View>
+    );
+
+    // Add a memoized MediaTab component to prevent unnecessary re-renders
+    const MediaTabContent = React.memo(() => (
+        <View className="flex-1 p-4 items-center justify-center">
+            <Text className="text-gray-500">Chức năng đang phát triển...</Text>
+        </View>
+    ));
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'members':
+                return renderMembersTab();
+            case 'media':
+                // Use the memoized component instead of the function directly
+                return <MediaTabContent />;
+            case 'settings':
+                return renderSettingsTab();
+            default:
+                return renderMembersTab();
+        }
+    };
+
+    return (
+        <Modal
+            visible={visible}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={onClose}
+        >
+            <View className="flex-1 bg-black/40">
+                <View className="bg-white rounded-t-xl flex-1 mt-20">
+                    {/* Header */}
+                    <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
+                        <Text className="text-xl font-bold">Thông tin nhóm</Text>
+                        <TouchableOpacity onPress={onClose}>
+                            <FontAwesomeIcon icon={faTimes} size={20} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Group Info Header */}
+                    <View className="items-center p-4">
+                        <Image
+                            source={{
+                                uri: group?.profilePic ||
+                                    `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || "Group")}&background=random&size=200`
+                            }}
+                            className="w-24 h-24 rounded-full mb-2"
+                        />
+                        <Text className="text-xl font-bold">{group?.name || "Group Chat"}</Text>
+                        <Text className="text-gray-500 mt-1">{group?.members?.length || 0} thành viên</Text>
+                    </View>
+
+                    {/* Tabs */}
+                    <View className="flex-row border-b border-gray-200">
+                        <TouchableOpacity
+                            className={`flex-1 p-3 items-center ${activeTab === 'members' ? "border-b-2 border-blue-500" : ""}`}
+                            onPress={() => setActiveTab('members')}
+                        >
+                            <FontAwesomeIcon
+                                icon={faUsers}
+                                size={18}
+                                color={activeTab === 'members' ? "#0068FF" : "#666"}
+                            />
+                            <Text className={activeTab === 'members' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                Thành viên
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            className={`flex-1 p-3 items-center ${activeTab === 'media' ? "border-b-2 border-blue-500" : ""}`}
+                            onPress={() => setActiveTab('media')}
+                        >
+                            <FontAwesomeIcon
+                                icon={faImage}
+                                size={18}
+                                color={activeTab === 'media' ? "#0068FF" : "#666"}
+                            />
+                            <Text className={activeTab === 'media' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                Ảnh/video
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            className={`flex-1 p-3 items-center ${activeTab === 'settings' ? "border-b-2 border-blue-500" : ""}`}
+                            onPress={() => setActiveTab('settings')}
+                        >
+                            <FontAwesomeIcon
+                                icon={faInfoCircle}
+                                size={18}
+                                color={activeTab === 'settings' ? "#0068FF" : "#666"}
+                            />
+                            <Text className={activeTab === 'settings' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                Tùy chọn
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Tab Content */}
+                    <View className="flex-1 p-2">
+                        {renderContent()}
+                    </View>
+                </View>
+            </View>
+
+            {/* Add Member Modal */}
+            <AddGroupMembersModal
+                visible={showAddMembersModal}
+                onClose={() => setShowAddMembersModal(false)}
+                groupId={group?._id}
+                currentUserId={currentUser?._id}
+                existingMembers={group?.members || []}
+                socketConnection={socketConnection}
+                onMembersAdded={handleMembersAdded}
+            />
+
+            {/* Confirmation Modal */}
+            <ConfirmationModal
+                visible={confirmModal.visible}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                onConfirm={() => {
+                    if (confirmModal.action) {
+                        confirmModal.action();
+                    }
+                    setConfirmModal({ ...confirmModal, visible: false });
+                }}
+                onCancel={() => setConfirmModal({ ...confirmModal, visible: false })}
+                type={confirmModal.type}
+            />
+        </Modal>
+    );
+};
+
+GroupChatInfoModal.propTypes = {
+    visible: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired,
+    group: PropTypes.object,
+    currentUser: PropTypes.object.isRequired,
+    onLeaveGroup: PropTypes.func,
+    messages: PropTypes.array,
+    onAddMember: PropTypes.func,
+    onRemoveMember: PropTypes.func,
+    socketConnection: PropTypes.object,
+    onDeleteGroup: PropTypes.func
+};
+
+export default GroupChatInfoModal;
