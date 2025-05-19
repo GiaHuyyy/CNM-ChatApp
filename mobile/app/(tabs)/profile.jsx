@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform, ScrollView } from "react-native";
+import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform, ScrollView, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as MediaLibrary from "expo-media-library";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import {
@@ -306,148 +307,151 @@ export default function Profile() {
   // }
 
   return (
-    <View className="flex-1 bg-gray-100">
-      {/* Header */}
-      <View className="bg-[#0068FF] px-4 pt-12 pb-4">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1">
-            <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
-              <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
-              <Text className="ml-2 text-white/80">Tìm kiếm</Text>
-            </View>
-          </View>
-          <TouchableOpacity className="ml-3">
-            <FontAwesomeIcon icon={faGear} size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView>
-        {/* Profile Section */}
-        <TouchableOpacity
-          className="flex-row items-center px-4 py-4 bg-white mb-2"
-          onPress={() => setModalVisible(true)}
-        >
-          <Image
-            source={{ uri: user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` }}
-            className="w-16 h-16 rounded-full"
-          />
-          <View className="ml-4 flex-1">
-            <Text className="text-xl font-bold">{user.name}</Text>
-            <Text className="text-gray-500 mt-1">Xem trang cá nhân</Text>
-          </View>
-          <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
-        </TouchableOpacity>
-
-        {/* New Feature Banner */}
-        <TouchableOpacity className="bg-white px-4 py-3 mb-2 flex-row items-center">
-          <Image
-            source={{ uri: 'https://via.placeholder.com/50' }}
-            className="w-12 h-12 rounded-lg"
-          />
-          <View className="flex-1 ml-3">
-            <View className="flex-row items-center">
-              <Text className="text-base font-semibold">Trang trí ảnh đại diện</Text>
-              <View className="bg-green-500 rounded px-2 py-0.5 ml-2">
-                <Text className="text-white text-xs">Mới</Text>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
+      <View className="flex-1 bg-gray-100">
+        {/* Header */}
+        <View className="bg-[#0068FF] px-4 pb-4">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1">
+              <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
+                <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
+                <Text className="ml-2 text-white/80">Tìm kiếm</Text>
               </View>
             </View>
-            <Text className="text-blue-500">Kho khung ảnh zStyle đa dạng</Text>
-          </View>
-          <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
-        </TouchableOpacity>
-
-        {/* Menu Items */}
-        <View className="mb-2">
-          {menuItems.map(renderMenuItem)}
-        </View>
-
-        {/* Version Info */}
-        <View className="items-center py-4">
-          <Text className="text-gray-500 text-sm">Phiên bản 23.12.01</Text>
-        </View>
-      </ScrollView>
-
-      {/* Edit Profile Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View className="flex-1 bg-black/50 justify-center items-center">
-          <View className="bg-white w-[90%] p-4 rounded-xl">
-            <Text className="text-lg font-semibold text-center mb-4">
-              Chỉnh sửa thông tin
-            </Text>
-
-            <TouchableOpacity className="items-center mb-4" onPress={pickNewAvatar}>
-              <Image
-                source={{
-                  uri: newAvatarUri ? newAvatarUri.uri : (user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`)
-                }}
-                className="w-24 h-24 rounded-full"
-              />
-              <Text className="text-blue-500 text-sm mt-2">Chọn ảnh mới</Text>
+            <TouchableOpacity className="ml-3">
+              <FontAwesomeIcon icon={faGear} size={22} color="#fff" />
             </TouchableOpacity>
+          </View>
+        </View>
 
-            <TextInput
-              placeholder="Tên người dùng"
-              className="border border-gray-300 rounded px-3 py-2 mb-4"
-              value={editName}
-              onChangeText={setEditName}
-              style={{ outline: "none" }}
+        <ScrollView>
+          {/* Profile Section */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-4 bg-white mb-2"
+            onPress={() => setModalVisible(true)}
+          >
+            <Image
+              source={{ uri: user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` }}
+              className="w-16 h-16 rounded-full"
             />
+            <View className="ml-4 flex-1">
+              <Text className="text-xl font-bold">{user.name}</Text>
+              <Text className="text-gray-500 mt-1">Xem trang cá nhân</Text>
+            </View>
+            <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+          </TouchableOpacity>
 
-            <View className="flex-row justify-end">
-              <Pressable
-                onPress={() => {
-                  setModalVisible(false);
-                  setNewAvatarUri(null);
-                }}
-                className="px-4 py-2 rounded bg-gray-300 mr-2"
-              >
-                <Text>Hủy</Text>
-              </Pressable>
+          {/* New Feature Banner */}
+          <TouchableOpacity className="bg-white px-4 py-3 mb-2 flex-row items-center">
+            <Image
+              source={{ uri: 'https://via.placeholder.com/50' }}
+              className="w-12 h-12 rounded-lg"
+            />
+            <View className="flex-1 ml-3">
+              <View className="flex-row items-center">
+                <Text className="text-base font-semibold">Trang trí ảnh đại diện</Text>
+                <View className="bg-green-500 rounded px-2 py-0.5 ml-2">
+                  <Text className="text-white text-xs">Mới</Text>
+                </View>
+              </View>
+              <Text className="text-blue-500">Kho khung ảnh zStyle đa dạng</Text>
+            </View>
+            <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
+          </TouchableOpacity>
 
-              <Pressable
-                onPress={handleUpdateUser}
-                className="px-4 py-2 rounded bg-blue-500"
-                disabled={updating}
-              >
-                <Text className="text-white font-semibold">
-                  {updating ? "Đang lưu..." : "Lưu"}
-                </Text>
-              </Pressable>
+          {/* Menu Items */}
+          <View className="mb-2">
+            {menuItems.map(renderMenuItem)}
+          </View>
+
+          {/* Version Info */}
+          <View className="items-center py-4">
+            <Text className="text-gray-500 text-sm">Phiên bản 23.12.01</Text>
+          </View>
+        </ScrollView>
+
+        {/* Edit Profile Modal */}
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <View className="flex-1 bg-black/50 justify-center items-center">
+            <View className="bg-white w-[90%] p-4 rounded-xl">
+              <Text className="text-lg font-semibold text-center mb-4">
+                Chỉnh sửa thông tin
+              </Text>
+
+              <TouchableOpacity className="items-center mb-4" onPress={pickNewAvatar}>
+                <Image
+                  source={{
+                    uri: newAvatarUri ? newAvatarUri.uri : (user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`)
+                  }}
+                  className="w-24 h-24 rounded-full"
+                />
+                <Text className="text-blue-500 text-sm mt-2">Chọn ảnh mới</Text>
+              </TouchableOpacity>
+
+              <TextInput
+                placeholder="Tên người dùng"
+                className="border border-gray-300 rounded px-3 py-2 mb-4"
+                value={editName}
+                onChangeText={setEditName}
+                style={{ outline: "none" }}
+              />
+
+              <View className="flex-row justify-end">
+                <Pressable
+                  onPress={() => {
+                    setModalVisible(false);
+                    setNewAvatarUri(null);
+                  }}
+                  className="px-4 py-2 rounded bg-gray-300 mr-2"
+                >
+                  <Text>Hủy</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={handleUpdateUser}
+                  className="px-4 py-2 rounded bg-blue-500"
+                  disabled={updating}
+                >
+                  <Text className="text-white font-semibold">
+                    {updating ? "Đang lưu..." : "Lưu"}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      {/* Loading indicator for logout */}
-      {loggingOut && (
-        <View className="absolute inset-0 flex-1 bg-black/30 justify-center items-center">
-          <View className="bg-white p-4 rounded-xl items-center">
-            <ActivityIndicator size="large" color="#0068FF" />
-            <Text className="mt-2 font-medium">Đang đăng xuất...</Text>
+        {/* Loading indicator for logout */}
+        {loggingOut && (
+          <View className="absolute inset-0 flex-1 bg-black/30 justify-center items-center">
+            <View className="bg-white p-4 rounded-xl items-center">
+              <ActivityIndicator size="large" color="#0068FF" />
+              <Text className="mt-2 font-medium">Đang đăng xuất...</Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Add the ConfirmationModal for logout */}
-      <ConfirmationModal
-        visible={logoutModalVisible}
-        title="Đăng xuất"
-        message="Bạn có chắc muốn đăng xuất khỏi tài khoản?"
-        onConfirm={performLogout}
-        onCancel={() => setLogoutModalVisible(false)}
-        type="warning"
-      />
+        {/* Add the ConfirmationModal for logout */}
+        <ConfirmationModal
+          visible={logoutModalVisible}
+          title="Đăng xuất"
+          message="Bạn có chắc muốn đăng xuất khỏi tài khoản?"
+          onConfirm={performLogout}
+          onCancel={() => setLogoutModalVisible(false)}
+          type="warning"
+        />
 
-      {/* Add Error Modal */}
-      <ConfirmationModal
-        visible={errorModalVisible}
-        title="Lỗi đăng xuất"
-        message={errorMessage}
-        onConfirm={() => setErrorModalVisible(false)}
-        onCancel={() => setErrorModalVisible(false)}
-        type="danger"
-      />
-    </View>
+        {/* Add Error Modal */}
+        <ConfirmationModal
+          visible={errorModalVisible}
+          title="Lỗi đăng xuất"
+          message={errorMessage}
+          onConfirm={() => setErrorModalVisible(false)}
+          onCancel={() => setErrorModalVisible(false)}
+          type="danger"
+        />
+      </View>
+    </SafeAreaView>
   );
 }

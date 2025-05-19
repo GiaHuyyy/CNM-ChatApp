@@ -4,6 +4,7 @@ import {
     Text,
     Modal,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     Image,
     ScrollView,
     FlatList,
@@ -11,8 +12,13 @@ import {
     Dimensions,
     Alert,
     Linking,
-    TextInput, // Add TextInput for nickname editing
+    TextInput,
+    StatusBar,
+    Platform,
+    PanResponder,
+    Animated,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
     faArrowLeft,
@@ -31,6 +37,7 @@ import {
     faUserCircle,
     faEdit,
     faCheck,
+    faArrowRight
 } from '@fortawesome/free-solid-svg-icons';
 import { Video } from 'expo-av';
 
@@ -66,7 +73,12 @@ const DirectChatDetailsModal = ({
     const [activeTab, setActiveTab] = useState('media');
     const [activeSection, setActiveSection] = useState('main');
     const [selectedMedia, setSelectedMedia] = useState(null);
+    const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
     const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+
+    // Add animation values for swipe transition
+    const translateX = useState(new Animated.Value(0))[0];
+    const mediaOpacity = useState(new Animated.Value(1))[0];
 
     // Add state for nickname editing
     const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -170,43 +182,159 @@ const DirectChatDetailsModal = ({
     const fileItems = extractMediaItems(messages, 'file');
     const linkItems = extractMediaItems(messages, 'link');
 
-    const handleMediaPress = (item) => {
+    const handleMediaPress = (item, index) => {
         setSelectedMedia(item);
+        setSelectedMediaIndex(index);
         setMediaViewerVisible(true);
+
+        // Reset animation values when opening viewer
+        translateX.setValue(0);
+        mediaOpacity.setValue(1);
     };
 
-    const confirmDeleteConversation = () => {
-        Alert.alert(
-            "Xóa đoạn chat",
-            "Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện?",
-            [
-                { text: "Hủy", style: "cancel" },
-                { text: "Xóa", style: "destructive", onPress: onDeleteConversation }
-            ]
-        );
+    const navigateMedia = (direction) => {
+        const newIndex = selectedMediaIndex + direction;
+
+        // Check if the new index is valid
+        if (newIndex >= 0 && newIndex < mediaItems.length) {
+            // Animate the transition
+            Animated.parallel([
+                Animated.timing(translateX, {
+                    toValue: direction * -300, // Move in the direction of navigation
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(mediaOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                })
+            ]).start(() => {
+                // Update the selected media
+                setSelectedMedia(mediaItems[newIndex]);
+                setSelectedMediaIndex(newIndex);
+
+                // Reset animation values
+                translateX.setValue(0);
+                mediaOpacity.setValue(0);
+
+                // Fade in the new media
+                Animated.timing(mediaOpacity, {
+                    toValue: 1,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            });
+        }
     };
+
+    // Create pan responder for swipe gestures
+    const panResponder = useState(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onPanResponderMove: (evt, gestureState) => {
+                // If we're at the first item and trying to swipe right (previous), or
+                // at the last item and trying to swipe left (next), reduce the movement
+                if ((selectedMediaIndex === 0 && gestureState.dx > 0) ||
+                    (selectedMediaIndex === mediaItems.length - 1 && gestureState.dx < 0)) {
+                    translateX.setValue(gestureState.dx / 3); // Reduced movement
+                } else {
+                    translateX.setValue(gestureState.dx);
+                }
+            },
+            onPanResponderRelease: (evt, gestureState) => {
+                // Determine if swipe was significant
+                if (Math.abs(gestureState.dx) > 120) {
+                    // Significant swipe
+                    if (gestureState.dx > 0 && selectedMediaIndex > 0) {
+                        // Swipe right - show previous
+                        navigateMedia(-1);
+                    } else if (gestureState.dx < 0 && selectedMediaIndex < mediaItems.length - 1) {
+                        // Swipe left - show next
+                        navigateMedia(1);
+                    } else {
+                        // Edge case - animate back to center
+                        Animated.spring(translateX, {
+                            toValue: 0,
+                            tension: 40,
+                            useNativeDriver: true,
+                        }).start();
+                    }
+                } else {
+                    // Not a significant swipe - animate back to center
+                    Animated.spring(translateX, {
+                        toValue: 0,
+                        tension: 40,
+                        useNativeDriver: true,
+                    }).start();
+                }
+            },
+        })
+    )[0];
+
+    const handleDeleteConversation = () => {
+        console.log("Delete conversation button pressed");
+        if (typeof onDeleteConversation === 'function') {
+            console.log("Calling onDeleteConversation function");
+            Alert.alert(
+                "Xóa đoạn chat",
+                "Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện?",
+                [
+                    { text: "Hủy", style: "cancel" },
+                    {
+                        text: "Xóa",
+                        style: "destructive",
+                        onPress: () => {
+                            console.log("Delete confirmed by user");
+                            // Close the modal first to improve user experience
+                            onClose();
+                            // Small delay before executing delete to ensure modal closes smoothly
+                            setTimeout(() => {
+                                onDeleteConversation();
+                            }, 300);
+                        }
+                    }
+                ]
+            );
+        } else {
+            console.error("onDeleteConversation is not a function", onDeleteConversation);
+            Alert.alert("Lỗi", "Không thể xóa hội thoại. Vui lòng thử lại sau.");
+        }
+    };
+
+    // Get safe area insets to handle notches and status bars
+    const insets = useSafeAreaInsets();
 
     const renderHeader = () => (
-        <View style={styles.header}>
-            <TouchableOpacity onPress={() => {
-                if (activeSection !== 'main') {
-                    setActiveSection('main');
-                } else {
-                    onClose();
-                }
-            }} style={styles.backButton}>
-                <FontAwesomeIcon icon={faArrowLeft} size={20} color="#333" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-                {activeSection === 'main' ? 'Thông tin' :
-                    activeSection === 'media' ? 'Ảnh/Video' :
-                        activeSection === 'files' ? 'Tệp' : 'Liên kết'}
-            </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <FontAwesomeIcon icon={faTimes} size={20} color="#333" />
-            </TouchableOpacity>
+        <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            <View style={styles.header}>
+                <TouchableOpacity
+                    onPress={() => {
+                        if (activeSection !== 'main') {
+                            setActiveSection('main');
+                        } else {
+                            onClose();
+                        }
+                    }}
+                    style={styles.backButton}
+                >
+                    <FontAwesomeIcon icon={faArrowLeft} size={20} color="#333" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>
+                    {activeSection === 'main' ? 'Thông tin' :
+                        activeSection === 'media' ? 'Ảnh/Video' :
+                            activeSection === 'files' ? 'Tệp' : 'Liên kết'}
+                </Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                    <FontAwesomeIcon icon={faTimes} size={20} color="#333" />
+                </TouchableOpacity>
+            </View>
         </View>
     );
+
+    // Replace confirmDeleteConversation with our improved version
+    const confirmDeleteConversation = handleDeleteConversation;
 
     const renderMainSection = () => (
         <ScrollView style={styles.container}>
@@ -312,13 +440,13 @@ const DirectChatDetailsModal = ({
                         horizontal
                         data={mediaItems.slice(0, 6)}
                         keyExtractor={(item, index) => `media-${item._id || index}`}
-                        renderItem={({ item }) => {
+                        renderItem={({ item, index }) => {
                             const isVideo = item.mediaType === 'video';
 
                             return (
                                 <TouchableOpacity
                                     style={styles.mediaItem}
-                                    onPress={() => handleMediaPress(item)}
+                                    onPress={() => handleMediaPress(item, index)}
                                 >
                                     {isVideo ? (
                                         <View style={styles.videoContainer}>
@@ -459,13 +587,13 @@ const DirectChatDetailsModal = ({
                         data={mediaItems}
                         keyExtractor={(item, index) => `all-media-${item._id || index}`}
                         numColumns={3}
-                        renderItem={({ item }) => {
+                        renderItem={({ item, index }) => {
                             const isVideo = item.mediaType === 'video';
 
                             return (
                                 <TouchableOpacity
                                     style={styles.gridMediaItem}
-                                    onPress={() => handleMediaPress(item)}
+                                    onPress={() => handleMediaPress(item, index)}
                                 >
                                     {isVideo ? (
                                         <View style={styles.videoContainer}>
@@ -560,31 +688,77 @@ const DirectChatDetailsModal = ({
             animationType="fade"
             onRequestClose={() => setMediaViewerVisible(false)}
         >
-            <View style={styles.mediaViewerContainer}>
-                <TouchableOpacity
-                    style={styles.closeMediaButton}
-                    onPress={() => setMediaViewerVisible(false)}
-                >
-                    <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-                </TouchableOpacity>
+            <TouchableWithoutFeedback onPress={() => setMediaViewerVisible(false)}>
+                <View style={styles.mediaViewerContainer}>
+                    <TouchableOpacity
+                        style={styles.closeMediaButton}
+                        onPress={() => setMediaViewerVisible(false)}
+                    >
+                        <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+                    </TouchableOpacity>
 
-                {selectedMedia?.mediaType === 'video' ? (
-                    <Video
-                        source={{ uri: selectedMedia.mediaUrl }}
-                        style={styles.fullSizeMedia}
-                        resizeMode="contain"
-                        useNativeControls
-                        shouldPlay
-                        isLooping
-                    />
-                ) : (
-                    <Image
-                        source={{ uri: selectedMedia?.mediaUrl }}
-                        style={styles.fullSizeMedia}
-                        resizeMode="contain"
-                    />
-                )}
-            </View>
+                    {/* Navigation Indicator */}
+                    <View style={styles.mediaCountIndicator}>
+                        <Text style={styles.mediaCountText}>
+                            {selectedMediaIndex + 1} / {mediaItems.length}
+                        </Text>
+                    </View>
+
+                    <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                        <Animated.View
+                            style={[
+                                styles.mediaViewerContent,
+                                {
+                                    transform: [{ translateX: translateX }],
+                                    opacity: mediaOpacity
+                                }
+                            ]}
+                            {...panResponder.panHandlers}
+                        >
+                            {selectedMedia?.mediaType === 'video' ? (
+                                <Video
+                                    source={{ uri: selectedMedia.mediaUrl }}
+                                    style={styles.fullSizeMedia}
+                                    resizeMode="contain"
+                                    useNativeControls
+                                    shouldPlay
+                                    isLooping
+                                />
+                            ) : (
+                                <Image
+                                    source={{ uri: selectedMedia?.mediaUrl }}
+                                    style={styles.fullSizeMedia}
+                                    resizeMode="contain"
+                                />
+                            )}
+                        </Animated.View>
+                    </TouchableWithoutFeedback>
+
+                    {/* Navigation Buttons */}
+                    {selectedMediaIndex > 0 && (
+                        <TouchableOpacity
+                            style={[styles.navButton, styles.prevButton]}
+                            onPress={() => navigateMedia(-1)}
+                        >
+                            <FontAwesomeIcon icon={faArrowLeft} size={24} color="#fff" />
+                        </TouchableOpacity>
+                    )}
+
+                    {selectedMediaIndex < mediaItems.length - 1 && (
+                        <TouchableOpacity
+                            style={[styles.navButton, styles.nextButton]}
+                            onPress={() => navigateMedia(1)}
+                        >
+                            <FontAwesomeIcon icon={faArrowRight} size={24} color="#fff" />
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Swipe Instructions - shown briefly when first opened */}
+                    <Animated.View style={[styles.swipeInstructions, { opacity: mediaOpacity }]}>
+                        <Text style={styles.swipeText}>Lướt sang trái/phải để chuyển ảnh</Text>
+                    </Animated.View>
+                </View>
+            </TouchableWithoutFeedback>
         </Modal>
     );
 
@@ -610,7 +784,9 @@ const DirectChatDetailsModal = ({
         >
             <View style={styles.modalContainer}>
                 {renderHeader()}
-                {renderContent()}
+                <View style={styles.contentContainer}>
+                    {renderContent()}
+                </View>
                 {renderMediaViewer()}
             </View>
         </Modal>
@@ -618,19 +794,31 @@ const DirectChatDetailsModal = ({
 };
 
 const styles = StyleSheet.create({
+    headerContainer: {
+        backgroundColor: '#ffffff',
+        width: '100%',
+        zIndex: 10,
+    },
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#ffffff',
+    },
     modalContainer: {
         flex: 1,
         backgroundColor: '#f5f5f5',
+    },
+    contentContainer: {
+        flex: 1,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        height: 60,
-        paddingTop: 10,
+        height: 50,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e0e0e0',
+        paddingHorizontal: 15,
     },
     headerTitle: {
         fontSize: 18,
@@ -901,17 +1089,66 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.9)',
         justifyContent: 'center',
         alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    },
+    mediaViewerContent: {
+        width: '100%',
+        height: '80%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     closeMediaButton: {
         position: 'absolute',
-        top: 40,
+        top: Platform.OS === 'ios' ? 60 : 40,
         right: 20,
-        zIndex: 1,
+        zIndex: 10,
         padding: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 20,
     },
     fullSizeMedia: {
         width: '100%',
         height: '80%',
+    },
+    navButton: {
+        position: 'absolute',
+        top: '50%',
+        zIndex: 5,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: 15,
+        borderRadius: 30,
+        transform: [{ translateY: -25 }],
+    },
+    prevButton: {
+        left: 15,
+    },
+    nextButton: {
+        right: 15,
+    },
+    mediaCountIndicator: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 60 : 40,
+        alignSelf: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingVertical: 5,
+        paddingHorizontal: 10,
+        borderRadius: 15,
+    },
+    mediaCountText: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    swipeInstructions: {
+        position: 'absolute',
+        bottom: 50,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        borderRadius: 20,
+    },
+    swipeText: {
+        color: 'white',
+        fontWeight: '500',
     },
 });
 

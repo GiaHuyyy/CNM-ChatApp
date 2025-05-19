@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
   faUserPlus,
@@ -175,7 +177,7 @@ const ContactScreen = () => {
 
       <ScrollView className="flex-1">
         {renderQuickFeatures()}
-        
+
         {Object.keys(groupedContacts).sort().map(letter => (
           <View key={letter}>
             <Text className="px-4 py-2 bg-gray-50 text-gray-500">{letter}</Text>
@@ -226,32 +228,35 @@ const ContactScreen = () => {
   }
 
   return (
-    <View className="flex-1 bg-gray-100">
-      {/* Header */}
-      <View className="bg-[#0068FF] px-4 pt-12 pb-4">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1">
-            <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
-              <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
-              <TextInput
-                className="flex-1 ml-2 text-white"
-                placeholder="Tìm kiếm"
-                placeholderTextColor="rgba(255,255,255,0.8)"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
+      <View className="flex-1 bg-gray-100">
+        {/* Header */}
+        <View className="bg-[#0068FF] px-4 pb-4">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1">
+              <View className="flex-row items-center bg-[#1976F0] rounded-full px-3 py-2">
+                <FontAwesomeIcon icon={faSearch} size={16} color="#fff" />
+                <TextInput
+                  className="flex-1 ml-2 text-white"
+                  placeholder="Tìm kiếm"
+                  placeholderTextColor="rgba(255,255,255,0.8)"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
             </View>
+            <TouchableOpacity className="ml-3">
+              <FontAwesomeIcon icon={faUserPlus} size={22} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity className="ml-3">
-            <FontAwesomeIcon icon={faUserPlus} size={22} color="#fff" />
-          </TouchableOpacity>
         </View>
-      </View>
 
-      {renderTabs()}
-      
-      {activeTab === 'friends' && renderContactList()}
-    </View>
+        {renderTabs()}
+
+        {activeTab === 'friends' && renderContactList()}
+      </View>
+    </SafeAreaView>
   );
 };
 

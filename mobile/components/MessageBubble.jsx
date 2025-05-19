@@ -1,5 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Pressable, Image, Modal, SafeAreaView, Dimensions, Platform, Linking, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Pressable,
+  Image,
+  Modal,
+  SafeAreaView,
+  Dimensions,
+  Platform,
+  Linking,
+  Alert,
+  Share
+} from 'react-native';
 import PropTypes from 'prop-types';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faThumbsUp } from '@fortawesome/free-regular-svg-icons';
@@ -782,88 +796,108 @@ const MessageBubble = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* Image modal */}
+      {/* Image modal - Updated with lower X button position */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={showImageModal}
         onRequestClose={() => setShowImageModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-black bg-opacity-95 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-5 z-10 p-2"
-            onPress={() => setShowImageModal(false)}
-          >
-            <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
-          </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setShowImageModal(false)}>
+          <View className="flex-1 bg-black bg-opacity-95 justify-center items-center">
+            <TouchableOpacity
+              className="absolute top-24 right-5 z-10 p-3 bg-black/50 rounded-full"
+              onPress={() => setShowImageModal(false)}
+            >
+              <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+            </TouchableOpacity>
 
-          <Image
-            source={{ uri: imageUrl }}
-            className="w-full h-3/4"
-            resizeMode="contain"
-          />
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View className="items-center justify-center">
+                <Image
+                  source={{ uri: imageUrl }}
+                  className="w-full h-3/4"
+                  resizeMode="contain"
+                />
 
-          <TouchableOpacity
-            className="mt-5 flex-row items-center bg-blue-500 px-4 py-2 rounded-full"
-            onPress={() => Linking.openURL(imageUrl)}
-          >
-            <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
-            <Text className="text-white font-semibold">Tải xuống</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
+                <View className="flex-row mt-5 justify-center">
+                  <TouchableOpacity
+                    className="flex-row items-center bg-blue-500 px-4 py-2 rounded-full mr-4"
+                    onPress={() => handleDownloadMedia(imageUrl, 'image')}
+                  >
+                    <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Lưu ảnh</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="flex-row items-center bg-green-500 px-4 py-2 rounded-full"
+                    onPress={() => handleShareMedia(imageUrl)}
+                  >
+                    <FontAwesomeIcon icon={faShare} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Chia sẻ</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Document modal */}
+      {/* Document modal - Updated with lower X button position */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={showDocumentModal}
         onRequestClose={() => setShowDocumentModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-black bg-opacity-90 justify-center items-center">
-          <View className="bg-white w-4/5 rounded-xl p-6">
-            <TouchableOpacity
-              className="absolute top-2 right-2"
-              onPress={() => setShowDocumentModal(false)}
-            >
-              <FontAwesomeIcon icon={faTimes} size={18} color="#555" />
-            </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setShowDocumentModal(false)}>
+          <View className="flex-1 bg-black bg-opacity-90 justify-center items-center">
+            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+              <View className="bg-white w-4/5 rounded-xl p-6">
+                <TouchableOpacity
+                  className="absolute top-4 right-4 bg-gray-200 p-2 rounded-full"
+                  onPress={() => setShowDocumentModal(false)}
+                >
+                  <FontAwesomeIcon icon={faTimes} size={18} color="#555" />
+                </TouchableOpacity>
 
-            <View className="items-center p-4">
-              <FontAwesomeIcon
-                icon={getFileIcon(fileDetails?.name || message.fileName)}
-                size={60}
-                color="#2563eb"
-              />
-              <Text className="text-lg font-bold mt-4 text-center">
-                {fileDetails?.name || message.fileName || "Document"}
-              </Text>
-              <Text className="text-sm text-gray-500 mb-6">
-                Không thể hiển thị trực tiếp tài liệu này
-              </Text>
+                <View className="items-center p-4">
+                  <FontAwesomeIcon
+                    icon={getFileIcon(fileDetails?.name || message.fileName)}
+                    size={60}
+                    color="#2563eb"
+                  />
+                  <Text className="text-lg font-bold mt-4 text-center">
+                    {fileDetails?.name || message.fileName || "Document"}
+                  </Text>
+                  <Text className="text-sm text-gray-500 mb-6">
+                    Không thể hiển thị trực tiếp tài liệu này
+                  </Text>
 
-              <TouchableOpacity
-                className="flex-row items-center bg-blue-500 px-6 py-3 rounded-full mb-2"
-                onPress={() => {
-                  const fileUrl = fileDetails?.url || message.fileUrl;
-                  if (!fileUrl) {
-                    Alert.alert("Lỗi", "Không tìm thấy đường dẫn tập tin");
-                    return;
-                  }
+                  <TouchableOpacity
+                    className="flex-row items-center bg-blue-500 px-6 py-3 rounded-full mb-2"
+                    onPress={() => {
+                      const fileUrl = fileDetails?.url || message.fileUrl;
+                      if (!fileUrl) {
+                        Alert.alert("Lỗi", "Không tìm thấy đường dẫn tập tin");
+                        return;
+                      }
 
-                  Linking.openURL(fileUrl)
-                    .catch(err => {
-                      console.error("Error opening URL:", err);
-                      Alert.alert("Lỗi", "Không thể mở tài liệu này");
-                    });
-                }}
-              >
-                <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
-                <Text className="text-white font-semibold">Tải xuống</Text>
-              </TouchableOpacity>
-            </View>
+                      Linking.openURL(fileUrl)
+                        .catch(err => {
+                          console.error("Error opening URL:", err);
+                          Alert.alert("Lỗi", "Không thể mở tài liệu này");
+                        });
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faDownload} size={16} color="#fff" className="mr-2" />
+                    <Text className="text-white font-semibold">Tải xuống</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </SafeAreaView>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
