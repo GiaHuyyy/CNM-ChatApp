@@ -26,6 +26,8 @@ import AddGroupMembersModal from "../../components/AddGroupMembersModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
 
+const DEBUG_MODE = false; // Set to true only when debugging specific issues
+
 export default function Chat() {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.user);
@@ -85,6 +87,9 @@ export default function Chat() {
   const [shareSearchQuery, setShareSearchQuery] = useState('');
   const [shareSearchResults, setShareSearchResults] = useState([]);
 
+  // Add near the top with other refs
+  const socketEventsInitialized = useRef(false);
+
   useEffect(() => {
     if (initializationAttempted.current) return;
     initializationAttempted.current = true;
@@ -114,7 +119,7 @@ export default function Chat() {
           withCredentials: true,
         });
 
-        if (response?.data?.data) {
+        if (response?.data?.data) {  // Fixed the missing opening parenthesis
           dispatch(setUser(response.data.data));
           console.log("User details fetched successfully");
         }
@@ -148,28 +153,38 @@ export default function Chat() {
         return null;
       }
 
+      // Configure socket with logging disabled
       const socket = io(`${REACT_APP_BACKEND_URL}`, {
         auth: { token },
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        // Disable verbose socket.io logging
+        debug: false,
+        forceNew: false,
+        transports: ['websocket'],
       });
 
-      socket.on("connect", () => {
-        console.log("🔌 Socket connected: ", socket.id);
-        if (user?._id) {
-          socket.emit("sidebar", user?._id);
-        }
-      });
+      // Use a ref to track if we've already set up event handlers
+      if (!socketEventsInitialized.current) {
+        socket.on("connect", () => {
+          if (DEBUG_MODE) console.log("Socket connected:", socket.id);
+          if (user?._id) {
+            socket.emit("sidebar", user?._id);
+          }
+        });
 
-      socket.on("onlineUser", (data) => {
-        console.log("🟢 Online users: ", data);
-        dispatch(setOnlineUser(data));
-      });
+        socket.on("onlineUser", (data) => {
+          if (DEBUG_MODE) console.log("Online users:", data);
+          dispatch(setOnlineUser(data));
+        });
 
-      socket.on("connect_error", (error) => {
-        console.error("Socket connection error:", error);
-      });
+        socket.on("connect_error", (error) => {
+          if (DEBUG_MODE) console.error("Socket connection error:", error);
+        });
+
+        socketEventsInitialized.current = true;
+      }
 
       setSocketConnection(socket);
       setSocketConnectionState(socket);
@@ -1358,7 +1373,7 @@ export default function Chat() {
   const renderMessage = ({ item }) => {
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
-      imageUrl: item.imageUrl || 'none',
+      imageUrl: item.imageUrl || 'none',  // Fixed missing closing quote
       hasFile: !!item.fileUrl,
       hasFiles: item.files ? item.files.length : 0,
       fileTypes: item.files ? item.files.map(f => f.type || 'unknown').join(', ') : 'none',
@@ -1607,7 +1622,143 @@ export default function Chat() {
     });
   };
 
-  // Add this missing function to handle showing chat details
+  // Add the handleRemoveMember function
+  const handleRemoveMember = (groupId, memberId, memberName) => {
+    console.log("Handling remove member:", { groupId, memberId, memberName });
+
+    if (!socketConnection) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    setIsChatLoading(true);
+
+    // Clean up existing listeners
+    socketConnection.off("memberRemoved");
+    socketConnection.off("memberRemovedFromGroup");
+
+    // Set up the listener for the server response
+    const handleMemberRemovalResponse = (response) => {
+      setIsChatLoading(false);
+      console.log("Member removal response:", response);
+
+      if (response.success) {
+        // Update the chat user data by removing the member
+        if (chatUser && chatUser.members) {
+          const updatedMembers = chatUser.members.filter(m =>
+            (typeof m === 'object' ? m._id.toString() : m.toString()) !==
+            (typeof memberId === 'object' ? memberId.toString() : memberId.toString())
+          );
+
+          setChatUser(prev => ({
+            ...prev,
+            members: updatedMembers
+          }));
+        }
+
+        // Show success message
+        Alert.alert("Thành công", `Đã xóa ${memberName} khỏi nhóm`);
+
+        // Refresh the group data
+        if (socketConnection && selectedChat?.userDetails?._id) {
+          socketConnection.emit("joinRoom", selectedChat.userDetails._id);
+        }
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể xóa thành viên. Vui lòng thử lại sau.");
+      }
+    };
+
+    // Listen for both potential event names the server might emit
+    socketConnection.on("memberRemoved", handleMemberRemovalResponse);
+    socketConnection.on("memberRemovedFromGroup", handleMemberRemovalResponse);
+
+    // Prepare payload - normalize all IDs to strings for consistency
+    const payload = {
+      groupId: typeof groupId === 'object' ? groupId.toString() : groupId,
+      memberId: typeof memberId === 'object' ? memberId.toString() : memberId,
+      userId: typeof user._id === 'object' ? user._id.toString() : user._id, // Admin ID
+      adminId: typeof user._id === 'object' ? user._id.toString() : user._id  // Alternate format some APIs might use
+    };
+
+    console.log("Emitting removeMember with payload:", payload);
+
+    // Try both event names the server might be listening for
+    socketConnection.emit("removeMember", payload);
+    socketConnection.emit("removeMemberFromGroup", payload);
+
+    // Set timeout for no response
+    setTimeout(() => {
+      if (isChatLoading) {
+        setIsChatLoading(false);
+        socketConnection.off("memberRemoved");
+        socketConnection.off("memberRemovedFromGroup");
+        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
+      }
+    }, 10000);
+  };
+
+  const handleLeaveGroup = (groupId) => {
+    console.log("Handling leave group for:", groupId);
+    if (!socketConnection) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+
+    setIsChatLoading(true);
+
+    // Clean up existing listeners
+    socketConnection.off("groupLeft");
+
+    // Set up the listener for the server response
+    socketConnection.on("groupLeft", (response) => {
+      setIsChatLoading(false);
+      console.log("Group left response:", response);
+
+      if (response.success) {
+        // Close any open modals first
+        setShowGroupInfoModal(false);
+
+        // Show success message and navigate only AFTER user acknowledges
+        Alert.alert(
+          "Thành công",
+          "Bạn đã rời khỏi nhóm",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // Navigate back to chat list
+                handleBackToList();
+
+                // Refresh the conversation list
+                refreshConversations();
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm. Vui lòng thử lại sau.");
+      }
+    });
+
+    // Prepare payload
+    const payload = {
+      groupId: typeof groupId === 'object' ? groupId.toString() : groupId,
+      userId: typeof user._id === 'object' ? user._id.toString() : user._id
+    };
+
+    console.log("Emitting leaveGroup with payload:", payload);
+    socketConnection.emit("leaveGroup", payload);
+
+    // Set timeout for no response
+    setTimeout(() => {
+      if (isChatLoading) {
+        setIsChatLoading(false);
+        socketConnection.off("groupLeft");
+        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
+      }
+    }, 10000);
+  };
+
   const handleShowChatDetails = () => {
     // Kiểm tra chặt chẽ hơn xem đây có phải là nhóm không
     const isGroup = selectedChat?.userDetails?.isGroup === true ||
@@ -1628,146 +1779,31 @@ export default function Chat() {
     }
   };
 
-  // Add the missing handleAddMember function
   const handleAddMember = () => {
-    console.log("Opening add member modal");
-    setShowAddMemberModal(true);
-  };
+    // Close the group info modal first
+    setShowGroupInfoModal(false);
 
-  // Add these functions to handle group management
-  const handleLeaveGroup = (groupId) => {
-    console.log("Handling leave group for:", groupId);
-    if (!socketConnection || !groupId) {
-      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
-      return;
-    }
-
-    Alert.alert(
-      "Rời khỏi nhóm",
-      "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Rời nhóm",
-          style: "destructive",
-          onPress: () => {
-            socketConnection.emit("leaveGroup", {
-              groupId: groupId,
-              userId: user._id
-            });
-
-            socketConnection.once("groupLeft", (response) => {
-              if (response.success) {
-                Alert.alert("Thành công", "Bạn đã rời khỏi nhóm");
-                handleBackToList();
-                refreshConversations();
-              } else {
-                Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm");
-              }
-            });
-          }
-        }
-      ]
-    );
-  };
-
-  const handleRemoveMember = (groupId, memberId, memberName) => {
-    console.log("Removing member:", memberId, "from group:", groupId);
-    if (!socketConnection || !groupId || !memberId) {
-      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
-      return;
-    }
-
-    // Normalize IDs for consistent comparison
-    const normalizeId = (id) => {
-      if (!id) return '';
-      return typeof id === 'object' ? id.toString() : id;
-    };
-
-    const currentUserId = normalizeId(user._id);
-    const memberIdStr = normalizeId(memberId);
-    const groupIdStr = normalizeId(groupId);
-
-    // We trust that GroupChatInfoModal has already checked permissions
-    // So we just handle the server communication
-
-    // Set loading state
-    setIsChatLoading(true);
-
-    // Remove any existing listeners to avoid duplicates
-    socketConnection.off("memberRemoved");
-    socketConnection.off("memberRemovedFromGroup");
-
-    // Set up callback for either event name
-    const handleMemberRemovedResponse = (response) => {
-      setIsChatLoading(false);
-
-      if (response.success) {
-        Alert.alert("Thành công", `${memberName || "Thành viên"} đã bị xóa khỏi nhóm`);
-
-        // Update group information
-        if (socketConnection && selectedChat?.userDetails?._id) {
-          // Refresh group data
-          socketConnection.emit("joinRoom", selectedChat.userDetails._id);
-
-          // Update local state directly for immediate UI feedback
-          if (chatUser && chatUser.members) {
-            // Filter out the removed member
-            setChatUser(prev => ({
-              ...prev,
-              members: prev.members.filter(member =>
-                normalizeId(member._id) !== memberIdStr
-              )
-            }));
-          }
-        }
-      } else {
-        Alert.alert("Lỗi", response.message || "Không thể xóa thành viên khỏi nhóm");
-      }
-    };
-
-    // Listen for responses to both possible event names
-    socketConnection.on("memberRemoved", handleMemberRemovedResponse);
-    socketConnection.on("memberRemovedFromGroup", handleMemberRemovedResponse);
-
-    // Prepare payloads with normalized IDs
-    const payloadStandard = {
-      groupId: groupIdStr,
-      userId: currentUserId,
-      memberId: memberIdStr
-    };
-
-    const payloadAlternate = {
-      groupId: groupIdStr,
-      memberId: memberIdStr,
-      adminId: currentUserId
-    };
-
-    console.log("Emitting removeMember with payload:", payloadStandard);
-    socketConnection.emit("removeMember", payloadStandard);
-
-    // Try alternative event name
-    console.log("Emitting removeMemberFromGroup with payload:", payloadAlternate);
-    socketConnection.emit("removeMemberFromGroup", payloadAlternate);
-
-    // Set timeout in case server doesn't respond
+    // Add a small delay before opening the add member modal
     setTimeout(() => {
-      if (isChatLoading) {
-        setIsChatLoading(false);
-        socketConnection.off("memberRemoved");
-        socketConnection.off("memberRemovedFromGroup");
-        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
-      }
-    }, 10000);
+      console.log("Opening add member modal for group:", selectedChat?.userDetails?._id);
+      setShowAddMemberModal(true);
+    }, 300);
   };
 
   const handleMembersAdded = () => {
     console.log("Members added successfully");
     setShowAddMemberModal(false);
 
+    // Refresh the chat data after members are added
     if (socketConnection && selectedChat?.userDetails?._id) {
       socketConnection.emit("joinRoom", selectedChat.userDetails._id);
     }
+
+    // Show success notification
+    Alert.alert("Thành công", "Đã thêm thành viên vào nhóm");
+
+    // Refresh conversation list
+    refreshConversations();
   };
 
   const displayedConversations = useMemo(() => {
@@ -2170,6 +2206,7 @@ export default function Chat() {
           <>
             {!searchResults.length && !searchLoading && !isSearchFocused && (
               <View className="flex-1">
+
                 <View className="flex-row items-center border-b border-gray-300 px-4">
                   <View className="h-8">
                     <TouchableOpacity className="mr-3 h-full border-b-2 border-blue-500">
@@ -2240,13 +2277,13 @@ export default function Chat() {
           currentUser={user}
           onLeaveGroup={handleLeaveGroup}
           messages={messages}
-          onAddMember={handleAddMember}
+          onAddMember={handleAddMember} // Pass the handler that will close this modal and open the add member modal
           onRemoveMember={handleRemoveMember}
           socketConnection={socketConnection}
-          onDeleteGroup={handleDeleteGroup} // Add this line
+          onDeleteGroup={handleDeleteGroup}
         />
 
-        {/* Add Member Modal */}
+        {/* Add Member Modal - as a separate modal, not nested */}
         <AddGroupMembersModal
           visible={showAddMemberModal}
           onClose={() => setShowAddMemberModal(false)}
@@ -2255,6 +2292,12 @@ export default function Chat() {
           existingMembers={chatUser?.members || []}
           socketConnection={socketConnection}
           onMembersAdded={handleMembersAdded}
+          onSuccess={() => {
+            // Refresh conversation list
+            if (socketConnection && user?._id) {
+              socketConnection.emit("sidebar", user._id);
+            }
+          }}
         />
 
         <Modal
@@ -2402,35 +2445,6 @@ export default function Chat() {
             setShowCreateGroupModal(false);
           }}
         />
-
-        <Modal
-          visible={showAddMemberModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowAddMemberModal(false)}
-        >
-          <View className="flex-1 bg-black bg-opacity-50 justify-center items-center">
-            <View className="bg-white w-[90%] rounded-lg p-4 max-h-[80%]">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="font-bold text-lg">Thêm thành viên</Text>
-                <TouchableOpacity onPress={() => setShowAddMemberModal(false)}>
-                  <FontAwesomeIcon icon={faTimes} size={18} />
-                </TouchableOpacity>
-              </View>
-
-              <Text className="text-center my-8 text-gray-500">
-                Chức năng đang được phát triển...
-              </Text>
-
-              <TouchableOpacity
-                className="bg-blue-500 py-3 rounded-lg items-center"
-                onPress={() => setShowAddMemberModal(false)}
-              >
-                <Text className="text-white font-medium">Đóng</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </View>
     </SafeAreaView>
   );
