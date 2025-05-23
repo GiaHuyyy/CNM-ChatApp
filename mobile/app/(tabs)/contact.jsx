@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
-  StatusBar
+  StatusBar,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -21,6 +22,7 @@ import {
   faBirthdayCake,
   faUserFriends,
   faAngleRight,
+  faTimes
 } from '@fortawesome/free-solid-svg-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -219,6 +221,62 @@ const ContactScreen = () => {
     </View>
   );
 
+  // Render search results component
+  const renderSearchResults = () => {
+    if (searchLoading) {
+      return (
+        <View className="flex-1 bg-white items-center justify-center p-4">
+          <ActivityIndicator size="large" color="#0068FF" />
+          <Text className="mt-2 text-gray-500">Đang tìm kiếm...</Text>
+        </View>
+      );
+    }
+
+    if (searchResults && searchResults.length > 0) {
+      return (
+        <View className="flex-1 bg-white">
+          <Text className="px-4 py-2 bg-gray-50 text-gray-500">
+            Kết quả tìm kiếm ({searchResults.length})
+          </Text>
+          <FlatList
+            data={searchResults}
+            keyExtractor={(item) => item._id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                className="flex-row items-center px-4 py-3 border-b border-gray-100"
+              >
+                <Image
+                  source={{ uri: item.avatar || item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}` }}
+                  className="w-12 h-12 rounded-full"
+                />
+                <View className="ml-3 flex-1">
+                  <Text className="text-base font-semibold">{item.name}</Text>
+                  {item.email && <Text className="text-sm text-gray-500">{item.email}</Text>}
+                </View>
+                <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded-full">
+                  <Text className="text-white">Kết bạn</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View className="flex-1 items-center justify-center py-8">
+                <Text className="text-gray-500">Không có kết quả phù hợp</Text>
+              </View>
+            }
+          />
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  // Add a function to clear the search
+  const clearSearch = () => {
+    setSearchQuery('');
+    dispatch(clearSearchResults());
+  };
+  
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
@@ -244,6 +302,11 @@ const ContactScreen = () => {
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                 />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={clearSearch}>
+                    <FontAwesomeIcon icon={faTimes} size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
             <TouchableOpacity className="ml-3">
@@ -254,7 +317,8 @@ const ContactScreen = () => {
 
         {renderTabs()}
 
-        {activeTab === 'friends' && renderContactList()}
+        {/* Show search results if there's a query, otherwise show contacts */}
+        {searchQuery.length > 0 ? renderSearchResults() : activeTab === 'friends' && renderContactList()}
       </View>
     </SafeAreaView>
   );
