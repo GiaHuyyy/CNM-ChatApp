@@ -3,8 +3,86 @@ import { faBars, faMagnifyingGlass, faPhone, faPlus, faUsers, faVideo } from "@f
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import Button from "./Button";
 import commingSoon from "../../helpers/commingSoon";
+import { useEffect, useState, useCallback } from "react";
+import { useGlobalContext } from "../../context/GlobalProvider";
 
-export default function Header({ dataUser, isLoading, handleAudioCall, handleVideoCall, setShowRightSideBar, showRightSideBar }) {
+export default function Header({
+  dataUser,
+  isLoading,
+  handleAudioCall,
+  handleVideoCall,
+  setShowRightSideBar,
+  showRightSideBar,
+}) {
+  const { socketConnection } = useGlobalContext();
+  const [onlineMembers, setOnlineMembers] = useState(0);
+  const [onlineUserList, setOnlineUserList] = useState([]);
+
+  // Calculate online members using memoized function to avoid unnecessary recalculations
+  const calculateOnlineMembers = useCallback(() => {
+    if (!dataUser?.isGroup || !dataUser?.members || !onlineUserList.length) {
+      return 0;
+    }
+
+    try {
+      // Count online members in this group
+      return dataUser.members.filter((member) => {
+        // Handle different member formats safely
+        if (!member) return false;
+
+        let memberId;
+        if (typeof member === "object") {
+          memberId = member._id ? member._id.toString() : member.toString();
+        } else {
+          memberId = member.toString();
+        }
+
+        return onlineUserList.includes(memberId);
+      }).length;
+    } catch (error) {
+      console.error("Error calculating online members:", error);
+      return 0;
+    }
+  }, [dataUser?.members, onlineUserList, dataUser?.isGroup]);
+
+  // Track online users globally with a robust handler
+  useEffect(() => {
+    if (!socketConnection) return;
+
+    const handleOnlineUsers = (onlineUserIds) => {
+      // Debug: log any significant changes to online users
+      const oldCount = onlineUserList.length;
+      const newCount = onlineUserIds.length;
+
+      if (Math.abs(oldCount - newCount) > 0) {
+        console.log(`Online users changed from ${oldCount} to ${newCount}`);
+      }
+
+      setOnlineUserList(onlineUserIds);
+    };
+
+    socketConnection.on("onlineUser", handleOnlineUsers);
+
+    // Request online users list when component mounts
+    socketConnection.emit("getOnlineUsers");
+
+    return () => {
+      socketConnection.off("onlineUser", handleOnlineUsers);
+    };
+  }, [socketConnection, onlineUserList]);
+
+  // Update online members count whenever relevant data changes
+  useEffect(() => {
+    const count = calculateOnlineMembers();
+    setOnlineMembers(count);
+  }, [calculateOnlineMembers]);
+
+  // Request online users when conversation changes
+  useEffect(() => {
+    if (!socketConnection || !dataUser?._id) return;
+    socketConnection.emit("getOnlineUsers");
+  }, [socketConnection, dataUser._id]);
+
   return (
     <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
       {isLoading ? (
@@ -38,7 +116,10 @@ export default function Header({ dataUser, isLoading, handleAudioCall, handleVid
             <span className="text-base font-semibold">{dataUser?.name}</span>
             <div className="flex items-center space-x-2">
               {dataUser.isGroup && (
-                <span className="text-xs text-gray-500">{dataUser.members?.length || 0} thành viên</span>
+                <span className="text-xs text-gray-500">
+                  {dataUser.members?.length || 0} thành viên
+                  {onlineMembers > 0 && <span className="text-green-500"> • {onlineMembers} online</span>}
+                </span>
               )}
               <button className="flex">
                 <FontAwesomeIcon
