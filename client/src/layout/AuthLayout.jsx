@@ -2,7 +2,7 @@ import { useGlobalContext } from "../context/GlobalProvider";
 import LoginPage from "../pages/LoginPage";
 import LoginWithQR from "../pages/LoginWithQR"; // Updated import
 import RegisterPage from "../pages/RegisterPage";
-import logo from "/vite.svg";
+import logo from "/chat.png";
 
 export default function AuthLayout() {
   const { isLoginWithEmail, setIsLoginWithEmail } = useGlobalContext();
