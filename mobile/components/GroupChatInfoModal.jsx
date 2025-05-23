@@ -1,14 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Image, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert, Dimensions, Animated, PanResponder } from 'react-native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
     faTimes, faPen, faInfoCircle, faImage, faUsers,
     faUserPlus, faSignOutAlt, faTrash, faCheck,
-    faSearch, faUserShield, faUserMinus, faExclamationTriangle
+    faSearch, faUserShield, faUserMinus, faExclamationTriangle,
+    faArrowLeft, faArrowRight, faVideoCamera
 } from '@fortawesome/free-solid-svg-icons';
 import PropTypes from 'prop-types';
 import AddGroupMembersModal from './AddGroupMembersModal';
 import ConfirmationModal from './ConfirmationModal';
+import { Video } from 'expo-av';
+
+// Get screen dimensions for responsive sizing
+const { width } = Dimensions.get('window');
+const THUMBNAIL_SIZE = (width - 60) / 3; // 3 columns with some margin
+
+// Helper functions to identify file types
+const isImageFile = (url) => {
+    if (!url) return false;
+    const extensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
+    return extensions.some(ext => url.toLowerCase().endsWith(ext));
+};
+
+const isVideoFile = (url) => {
+    if (!url) return false;
+    const extensions = [".mp4", ".webm", ".ogg", ".mov", ".avi", ".mkv"];
+    return extensions.some(ext => url.toLowerCase().endsWith(ext));
+};
 
 const GroupChatInfoModal = ({
     visible,
@@ -27,6 +46,15 @@ const GroupChatInfoModal = ({
     const [isLoading, setIsLoading] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [groupName, setGroupName] = useState('');
+
+    // Add states for media viewing
+    const [selectedMedia, setSelectedMedia] = useState(null);
+    const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+    const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+    
+    // Add animation values for swipe transition
+    const translateX = useState(new Animated.Value(0))[0];
+    const mediaOpacity = useState(new Animated.Value(1))[0];
 
     // Add states for add members modal and member removal
     const [showAddMembersModal, setShowAddMembersModal] = useState(false);
@@ -555,6 +583,144 @@ const GroupChatInfoModal = ({
         }
     };
 
+    // Extract media items from messages
+    const extractMediaItems = () => {
+        if (!messages || !Array.isArray(messages)) return [];
+        
+        const items = [];
+        
+        messages.forEach(message => {
+            // Check for files array first (modern format)
+            if (message.files && Array.isArray(message.files) && message.files.length > 0) {
+                // Extract media files (images and videos)
+                const mediaFiles = message.files.filter(file =>
+                    file.type?.startsWith('image/') || file.type?.startsWith('video/')
+                );
+
+                mediaFiles.forEach(file => {
+                    items.push({
+                        ...message,
+                        _id: `${message._id}-${file.url}`,
+                        mediaUrl: file.url,
+                        mediaType: file.type?.startsWith('video/') ? 'video' : 'image',
+                        createdAt: message.createdAt,
+                        sender: message.sender
+                    });
+                });
+            } else {
+                // Legacy format (direct properties)
+                if (message.imageUrl && isImageFile(message.imageUrl)) {
+                    items.push({
+                        ...message,
+                        mediaUrl: message.imageUrl,
+                        mediaType: 'image',
+                    });
+                } else if (message.fileUrl && isVideoFile(message.fileUrl)) {
+                    items.push({
+                        ...message,
+                        mediaUrl: message.fileUrl,
+                        mediaType: 'video',
+                    });
+                }
+            }
+        });
+        
+        // Sort by date, newest first
+        return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    };
+    
+    const mediaItems = extractMediaItems();
+    
+    const handleMediaPress = (item, index) => {
+        setSelectedMedia(item);
+        setSelectedMediaIndex(index);
+        setMediaViewerVisible(true);
+
+        // Reset animation values when opening viewer
+        translateX.setValue(0);
+        mediaOpacity.setValue(1);
+    };
+
+    const navigateMedia = (direction) => {
+        const newIndex = selectedMediaIndex + direction;
+
+        // Check if the new index is valid
+        if (newIndex >= 0 && newIndex < mediaItems.length) {
+            // Animate the transition
+            Animated.parallel([
+                Animated.timing(translateX, {
+                    toValue: direction * -300, // Move in the direction of navigation
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(mediaOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                })
+            ]).start(() => {
+                // Update the selected media
+                setSelectedMedia(mediaItems[newIndex]);
+                setSelectedMediaIndex(newIndex);
+
+                // Reset animation values
+                translateX.setValue(0);
+                mediaOpacity.setValue(0);
+
+                // Fade in the new media
+                Animated.timing(mediaOpacity, {
+                    toValue: 1,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            });
+        }
+    };
+
+    // Create pan responder for swipe gestures in media viewer
+    const panResponder = useState(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onPanResponderMove: (evt, gestureState) => {
+                // If we're at the first item and trying to swipe right (previous), or
+                // at the last item and trying to swipe left (next), reduce the movement
+                if ((selectedMediaIndex === 0 && gestureState.dx > 0) ||
+                    (selectedMediaIndex === mediaItems.length - 1 && gestureState.dx < 0)) {
+                    translateX.setValue(gestureState.dx / 3); // Reduced movement
+                } else {
+                    translateX.setValue(gestureState.dx);
+                }
+            },
+            onPanResponderRelease: (evt, gestureState) => {
+                // Determine if swipe was significant
+                if (Math.abs(gestureState.dx) > 120) {
+                    // Significant swipe
+                    if (gestureState.dx > 0 && selectedMediaIndex > 0) {
+                        // Swipe right - show previous
+                        navigateMedia(-1);
+                    } else if (gestureState.dx < 0 && selectedMediaIndex < mediaItems.length - 1) {
+                        // Swipe left - show next
+                        navigateMedia(1);
+                    } else {
+                        // Edge case - animate back to center
+                        Animated.spring(translateX, {
+                            toValue: 0,
+                            tension: 40,
+                            useNativeDriver: true,
+                        }).start();
+                    }
+                } else {
+                    // Not a significant swipe - animate back to center
+                    Animated.spring(translateX, {
+                        toValue: 0,
+                        tension: 40,
+                        useNativeDriver: true,
+                    }).start();
+                }
+            },
+        })
+    )[0];
+    
     const renderMembersTab = () => (
         <View className="flex-1">
             <View className="flex-row items-center bg-gray-100 rounded-full px-3 py-1 mb-3 mx-2">
@@ -621,18 +787,58 @@ const GroupChatInfoModal = ({
 
     // Fix the Media tab rendering to prevent infinite loops
     const renderMediaTab = () => (
-        <View className="flex-1 p-4 items-center justify-center">
-            <Text className="text-gray-500">Chức năng đang phát triển...</Text>
+        <View className="flex-1">
+            {mediaItems.length > 0 ? (
+                <FlatList
+                    data={mediaItems}
+                    keyExtractor={(item, index) => `media-${item._id || index}`}
+                    numColumns={3}
+                    renderItem={({ item, index }) => {
+                        const isVideo = item.mediaType === 'video';
+
+                        return (
+                            <TouchableOpacity
+                                style={{
+                                    width: THUMBNAIL_SIZE,
+                                    height: THUMBNAIL_SIZE,
+                                    margin: 5,
+                                }}
+                                onPress={() => handleMediaPress(item, index)}
+                                activeOpacity={0.8}
+                            >
+                                {isVideo ? (
+                                    <View className="relative overflow-hidden rounded-md" style={{ width: '100%', height: '100%' }}>
+                                        <Video
+                                            source={{ uri: item.mediaUrl }}
+                                            style={{ width: '100%', height: '100%' }}
+                                            resizeMode="cover"
+                                            shouldPlay={false}
+                                        />
+                                        <View className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                            <FontAwesomeIcon icon={faVideoCamera} size={20} color="#fff" />
+                                        </View>
+                                    </View>
+                                ) : (
+                                    <Image 
+                                        source={{ uri: item.mediaUrl }}
+                                        style={{ width: '100%', height: '100%', borderRadius: 4 }}
+                                    />
+                                )}
+                            </TouchableOpacity>
+                        );
+                    }}
+                />
+            ) : (
+                <View className="flex-1 items-center justify-center">
+                    <Text className="text-gray-500">Không có ảnh hoặc video trong cuộc trò chuyện</Text>
+                </View>
+            )}
         </View>
     );
 
     // Add a memoized MediaTab component to prevent unnecessary re-renders
-    const MediaTabContent = React.memo(() => (
-        <View className="flex-1 p-4 items-center justify-center">
-            <Text className="text-gray-500">Chức năng đang phát triển...</Text>
-        </View>
-    ));
-
+    const MediaTabContent = React.memo(() => renderMediaTab());
+    
     // Keep the existing renderContent function
     const renderContent = () => {
         switch (activeTab) {
@@ -733,6 +939,82 @@ const GroupChatInfoModal = ({
         </View>
     );
 
+    // Add media viewer modal
+    const renderMediaViewer = () => (
+        <Modal
+            visible={mediaViewerVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setMediaViewerVisible(false)}
+        >
+            <View className="flex-1 bg-black/90 items-center justify-center">
+                <TouchableOpacity
+                    className="absolute top-10 right-5 z-10 p-2 bg-black/50 rounded-full"
+                    onPress={() => setMediaViewerVisible(false)}
+                >
+                    <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
+                </TouchableOpacity>
+                
+                {/* Navigation Indicator */}
+                <View className="absolute top-10 self-center bg-black/50 py-1 px-3 rounded-full">
+                    <Text className="text-white font-semibold">
+                        {selectedMediaIndex + 1} / {mediaItems.length}
+                    </Text>
+                </View>
+                
+                <Animated.View
+                    className="w-full h-4/5 items-center justify-center"
+                    style={{
+                        transform: [{ translateX: translateX }],
+                        opacity: mediaOpacity
+                    }}
+                    {...panResponder.panHandlers}
+                >
+                    {selectedMedia?.mediaType === 'video' ? (
+                        <Video
+                            source={{ uri: selectedMedia.mediaUrl }}
+                            style={{ width: '100%', height: '80%' }}
+                            resizeMode="contain"
+                            useNativeControls
+                            shouldPlay
+                            isLooping
+                        />
+                    ) : (
+                        <Image
+                            source={{ uri: selectedMedia?.mediaUrl }}
+                            style={{ width: '100%', height: '80%' }}
+                            resizeMode="contain"
+                        />
+                    )}
+                </Animated.View>
+                
+                {/* Navigation Buttons */}
+                {selectedMediaIndex > 0 && (
+                    <TouchableOpacity
+                        className="absolute left-5 top-1/2 -translate-y-1/2 bg-black/50 p-3 rounded-full"
+                        onPress={() => navigateMedia(-1)}
+                    >
+                        <FontAwesomeIcon icon={faArrowLeft} size={24} color="#fff" />
+                    </TouchableOpacity>
+                )}
+                
+                {selectedMediaIndex < mediaItems.length - 1 && (
+                    <TouchableOpacity
+                        className="absolute right-5 top-1/2 -translate-y-1/2 bg-black/50 p-3 rounded-full"
+                        onPress={() => navigateMedia(1)}
+                    >
+                        <FontAwesomeIcon icon={faArrowRight} size={24} color="#fff" />
+                    </TouchableOpacity>
+                )}
+                
+                {/* Swipe Instructions */}
+                <Animated.View className="absolute bottom-12 bg-black/50 py-2 px-4 rounded-full" style={{ opacity: mediaOpacity }}>
+                    <Text className="text-white font-medium">Lướt sang trái/phải để chuyển ảnh</Text>
+                </Animated.View>
+            </View>
+        </Modal>
+    );
+    
     return (
         <>
             <Modal
@@ -816,6 +1098,9 @@ const GroupChatInfoModal = ({
                     </View>
                 </View>
             </Modal>
+
+            {/* Add the media viewer */
+            renderMediaViewer()}
 
             {/* Only show this if we're handling add members directly within this component */}
             {!onAddMember && (
