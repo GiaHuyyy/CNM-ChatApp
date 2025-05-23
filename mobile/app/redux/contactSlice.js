@@ -26,7 +26,7 @@ export const fetchFriendRequests = createAsyncThunk(
   async (_, { getState }) => {
     const { user } = getState();
     try {
-      const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/friend-requests`, {
+      const response = await axios.get(`${REACT_APP_BACKEND_URL}/api/pending-friend-requests`, {
         headers: {
           Authorization: `Bearer ${user.token}`,
         },
@@ -45,8 +45,11 @@ export const acceptFriendRequest = createAsyncThunk(
     const { user } = getState();
     try {
       const response = await axios.post(
-        `${REACT_APP_BACKEND_URL}/api/friend-requests/${requestId}/accept`,
-        {},
+        `${REACT_APP_BACKEND_URL}/api/respond-friend-request`,
+        { 
+          requestId: requestId,
+          status: 'accepted'
+        },
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -67,8 +70,11 @@ export const rejectFriendRequest = createAsyncThunk(
     const { user } = getState();
     try {
       const response = await axios.post(
-        `${REACT_APP_BACKEND_URL}/api/friend-requests/${requestId}/reject`,
-        {},
+        `${REACT_APP_BACKEND_URL}/api/respond-friend-request`,
+        {
+          requestId: requestId,
+          status: 'rejected' 
+        },
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -88,11 +94,13 @@ export const searchUsers = createAsyncThunk(
   async (query, { getState }) => {
     const { user } = getState();
     try {
-      const response = await axios.get(
-        `${REACT_APP_BACKEND_URL}/api/users/search?q=${query}`,
+      const response = await axios.post(
+        `${REACT_APP_BACKEND_URL}/api/search-friend-user`,
+        { search: query },
         {
           headers: {
             Authorization: `Bearer ${user.token}`,
+            'Content-Type': 'application/json'
           },
         }
       );
