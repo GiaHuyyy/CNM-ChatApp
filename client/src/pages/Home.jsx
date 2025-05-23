@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import Sidebar from "../components/Sidebar";
 import io from "socket.io-client";
 import { useGlobalContext } from "../context/GlobalProvider";
+import logo from "/chat.png";
 
 export default function Home() {
   const dispatch = useDispatch();
@@ -120,8 +121,8 @@ export default function Home() {
         </section>
       ) : isBaseChatPath ? (
         <div className="flex flex-1 flex-col items-center">
-          <h1 className="mt-20 text-center text-xl">
-            Chào mừng đến với <b>Z PC!</b>
+          <h1 className="mt-20 text-center text-xl flex items-center gap-x-1">
+            Chào mừng đến với <img src={logo} alt="logo" className="w-[30px] object-cover" /> <b>Z PC!</b>
           </h1>
           <p className="mt-5 w-1/2 text-center text-sm">
             Khám phá những tiện ích hỗ trợ làm việc và trò chuyện cùng người thân, bạn bè được tối ưu hóa cho máy tính
