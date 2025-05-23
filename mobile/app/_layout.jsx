@@ -3,6 +3,7 @@ import { NativeWindStyleSheet } from "nativewind";
 import { Provider } from "react-redux";
 import { store } from "./redux/store"; // đúng đường dẫn tới store.js của bạn
 import GlobalProvider from "./context/GlobalProvider"; // đúng đường dẫn tới file GlobalProvider
+import '../utils/logConfig';
 
 NativeWindStyleSheet.setOutput({
   default: "native",

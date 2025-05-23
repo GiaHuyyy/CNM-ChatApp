@@ -531,11 +531,17 @@ const GroupChatInfoModal = ({
     };
 
     const handleAddMemberClick = () => {
-        if (onAddMember) {
-            onAddMember(); // Use the existing handler if provided
-        } else {
-            setShowAddMembersModal(true); // Open the modal directly if not
-        }
+        // First close this modal, then open the add members modal
+        onClose(); // Close the group info modal first
+
+        // Add a small delay before opening the new modal for better UX
+        setTimeout(() => {
+            if (onAddMember) {
+                onAddMember(); // Use the existing handler if provided
+            } else {
+                setShowAddMembersModal(true); // Open the modal directly if not
+            }
+        }, 300);
     };
 
     // Add handler for when members are added
@@ -547,11 +553,6 @@ const GroupChatInfoModal = ({
         if (socketConnection && group?._id) {
             socketConnection.emit("joinRoom", group._id);
         }
-
-        // Consider closing the modal with a delay for a better UX
-        setTimeout(() => {
-            onClose();
-        }, 500);
     };
 
     const renderMembersTab = () => (
@@ -632,6 +633,7 @@ const GroupChatInfoModal = ({
         </View>
     ));
 
+    // Keep the existing renderContent function
     const renderContent = () => {
         switch (activeTab) {
             case 'members':
@@ -646,100 +648,193 @@ const GroupChatInfoModal = ({
         }
     };
 
-    return (
-        <Modal
-            visible={visible}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={onClose}
-        >
-            <View className="flex-1 bg-black/40">
-                <View className="bg-white rounded-t-xl flex-1 mt-20">
-                    {/* Header */}
-                    <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
-                        <Text className="text-xl font-bold">Thông tin nhóm</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <FontAwesomeIcon icon={faTimes} size={20} />
+    // Add the missing renderSettingsTab function that was referenced but not defined
+    const renderSettingsTab = () => (
+        <View className="flex-1">
+            <View className="bg-white p-4 rounded-lg mb-4">
+                <View className="flex-row justify-between items-center">
+                    <Text className="text-lg font-medium">Tên nhóm</Text>
+                    {isAdmin && !editMode && (
+                        <TouchableOpacity onPress={() => setEditMode(true)}>
+                            <FontAwesomeIcon icon={faPen} size={16} color="#0068FF" />
                         </TouchableOpacity>
-                    </View>
-
-                    {/* Group Info Header */}
-                    <View className="items-center p-4">
-                        <Image
-                            source={{
-                                uri: group?.profilePic ||
-                                    `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || "Group")}&background=random&size=200`
-                            }}
-                            className="w-24 h-24 rounded-full mb-2"
-                        />
-                        <Text className="text-xl font-bold">{group?.name || "Group Chat"}</Text>
-                        <Text className="text-gray-500 mt-1">{group?.members?.length || 0} thành viên</Text>
-                    </View>
-
-                    {/* Tabs */}
-                    <View className="flex-row border-b border-gray-200">
-                        <TouchableOpacity
-                            className={`flex-1 p-3 items-center ${activeTab === 'members' ? "border-b-2 border-blue-500" : ""}`}
-                            onPress={() => setActiveTab('members')}
-                        >
-                            <FontAwesomeIcon
-                                icon={faUsers}
-                                size={18}
-                                color={activeTab === 'members' ? "#0068FF" : "#666"}
-                            />
-                            <Text className={activeTab === 'members' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
-                                Thành viên
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            className={`flex-1 p-3 items-center ${activeTab === 'media' ? "border-b-2 border-blue-500" : ""}`}
-                            onPress={() => setActiveTab('media')}
-                        >
-                            <FontAwesomeIcon
-                                icon={faImage}
-                                size={18}
-                                color={activeTab === 'media' ? "#0068FF" : "#666"}
-                            />
-                            <Text className={activeTab === 'media' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
-                                Ảnh/video
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            className={`flex-1 p-3 items-center ${activeTab === 'settings' ? "border-b-2 border-blue-500" : ""}`}
-                            onPress={() => setActiveTab('settings')}
-                        >
-                            <FontAwesomeIcon
-                                icon={faInfoCircle}
-                                size={18}
-                                color={activeTab === 'settings' ? "#0068FF" : "#666"}
-                            />
-                            <Text className={activeTab === 'settings' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
-                                Tùy chọn
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Tab Content */}
-                    <View className="flex-1 p-2">
-                        {renderContent()}
-                    </View>
+                    )}
                 </View>
+
+                {editMode ? (
+                    <View className="mt-2">
+                        <TextInput
+                            value={groupName}
+                            onChangeText={setGroupName}
+                            className="border border-gray-300 rounded p-2 mb-2"
+                            maxLength={50}
+                            autoFocus
+                        />
+                        <View className="flex-row justify-end">
+                            <TouchableOpacity
+                                className="bg-gray-200 px-3 py-1 rounded-lg mr-2"
+                                onPress={() => {
+                                    setEditMode(false);
+                                    setGroupName(group?.name || '');
+                                }}
+                            >
+                                <Text>Hủy</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                className="bg-blue-500 px-3 py-1 rounded-lg"
+                                onPress={handleSaveGroupName}
+                                disabled={isLoading}
+                            >
+                                {isLoading ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <Text className="text-white">Lưu</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : (
+                    <Text className="text-gray-600 mt-1">{group?.name || "Không có tên"}</Text>
+                )}
             </View>
 
-            {/* Add Member Modal */}
-            <AddGroupMembersModal
-                visible={showAddMembersModal}
-                onClose={() => setShowAddMembersModal(false)}
-                groupId={group?._id}
-                currentUserId={currentUser?._id}
-                existingMembers={group?.members || []}
-                socketConnection={socketConnection}
-                onMembersAdded={handleMembersAdded}
-            />
+            {/* Group Leave Option */}
+            <View className="mt-4">
+                <Text className="px-4 text-gray-500 font-semibold mb-2">Rời nhóm</Text>
+                <TouchableOpacity
+                    className="flex-row items-center p-4 bg-yellow-50"
+                    onPress={handleLeaveGroupWithConfirmation}
+                >
+                    <FontAwesomeIcon icon={faSignOutAlt} size={18} color="#F59E0B" />
+                    <Text className="ml-3 text-yellow-600 font-medium">Rời nhóm chat</Text>
+                </TouchableOpacity>
+            </View>
 
-            {/* Confirmation Modal */}
+            {/* Group Danger Zone */}
+            <View className="mt-8">
+                <Text className="px-4 text-red-500 font-semibold mb-2">Nguy hiểm</Text>
+
+                {isAdmin ? (
+                    <TouchableOpacity
+                        className="flex-row items-center p-4 bg-red-50"
+                        onPress={handleDeleteGroupWithAlert}
+                        activeOpacity={0.6}
+                    >
+                        <FontAwesomeIcon icon={faTrash} size={18} color="#ef4444" />
+                        <Text className="ml-3 text-red-600 font-medium">Giải tán nhóm</Text>
+                    </TouchableOpacity>
+                ) : (
+                    <View className="p-4 bg-gray-50 flex-row items-center">
+                        <FontAwesomeIcon icon={faExclamationTriangle} size={16} color="#888" className="mr-2" />
+                        <Text className="text-gray-500">Chỉ quản trị viên mới có thể giải tán nhóm</Text>
+                    </View>
+                )}
+            </View>
+        </View>
+    );
+
+    return (
+        <>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={onClose}
+            >
+                <View className="flex-1 bg-black/40">
+                    <View className="bg-white rounded-t-xl flex-1 mt-20">
+                        {/* Header */}
+                        <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
+                            <Text className="text-xl font-bold">Thông tin nhóm</Text>
+                            <TouchableOpacity onPress={onClose}>
+                                <FontAwesomeIcon icon={faTimes} size={20} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Group Info Header */}
+                        <View className="items-center p-4">
+                            <Image
+                                source={{
+                                    uri: group?.profilePic ||
+                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || "Group")}&background=random&size=200`
+                                }}
+                                className="w-24 h-24 rounded-full mb-2"
+                            />
+                            <Text className="text-xl font-bold">{group?.name || "Group Chat"}</Text>
+                            <Text className="text-gray-500 mt-1">{group?.members?.length || 0} thành viên</Text>
+                        </View>
+
+                        {/* Tabs */}
+                        <View className="flex-row border-b border-gray-200">
+                            <TouchableOpacity
+                                className={`flex-1 p-3 items-center ${activeTab === 'members' ? "border-b-2 border-blue-500" : ""}`}
+                                onPress={() => setActiveTab('members')}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faUsers}
+                                    size={18}
+                                    color={activeTab === 'members' ? "#0068FF" : "#666"}
+                                />
+                                <Text className={activeTab === 'members' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                    Thành viên
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className={`flex-1 p-3 items-center ${activeTab === 'media' ? "border-b-2 border-blue-500" : ""}`}
+                                onPress={() => setActiveTab('media')}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faImage}
+                                    size={18}
+                                    color={activeTab === 'media' ? "#0068FF" : "#666"}
+                                />
+                                <Text className={activeTab === 'media' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                    Ảnh/video
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className={`flex-1 p-3 items-center ${activeTab === 'settings' ? "border-b-2 border-blue-500" : ""}`}
+                                onPress={() => setActiveTab('settings')}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faInfoCircle}
+                                    size={18}
+                                    color={activeTab === 'settings' ? "#0068FF" : "#666"}
+                                />
+                                <Text className={activeTab === 'settings' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
+                                    Tùy chọn
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Tab Content */}
+                        <View className="flex-1 p-2">
+                            {renderContent()}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Only show this if we're handling add members directly within this component */}
+            {!onAddMember && (
+                <AddGroupMembersModal
+                    visible={showAddMembersModal}
+                    onClose={() => setShowAddMembersModal(false)}
+                    groupId={group?._id}
+                    currentUserId={currentUser?._id}
+                    existingMembers={group?.members || []}
+                    socketConnection={socketConnection}
+                    onMembersAdded={handleMembersAdded}
+                    onSuccess={() => {
+                        setShowAddMembersModal(false);
+                        // Don't automatically reopen the group info modal
+                    }}
+                />
+            )}
+
+            {/* Fix the confirmation modal props */}
             <ConfirmationModal
                 visible={confirmModal.visible}
                 title={confirmModal.title}
@@ -753,7 +848,7 @@ const GroupChatInfoModal = ({
                 onCancel={() => setConfirmModal({ ...confirmModal, visible: false })}
                 type={confirmModal.type}
             />
-        </Modal>
+        </>
     );
 };
 
