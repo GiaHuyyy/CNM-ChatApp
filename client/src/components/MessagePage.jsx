@@ -1,6 +1,6 @@
 import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 import { useGlobalContext } from "../context/GlobalProvider";
@@ -79,6 +79,15 @@ export default function MessagePage() {
   const [selectedImage, setSelectedImage] = useState("");
   const [replyingTo, setReplyingTo] = useState(null);
   const [shareMessage, setShareMessage] = useState(null);
+
+  const [visibleMessages, setVisibleMessages] = useState(10); // Number of messages to display
+  const loadMoreRef = useRef(null); // Reference for detecting when to load more
+  const messagesContainerRef = useRef(null); // Reference to the messages container
+  const previousMessagesCountRef = useRef(0); // Track previous message count
+
+  // Add a ref to track scroll position
+  const scrollPositionRef = useRef(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false); // New state to track loading status
 
   useEffect(() => {
     if (!socketConnection) {
@@ -209,10 +218,19 @@ export default function MessagePage() {
   }, [socketConnection, params.userId, setSeenMessage]);
 
   useEffect(() => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
-  }, [allMessages]);
+    // Only scroll to bottom when new messages arrive, not when loading older ones
+    const currentMessageCount = allMessages.length;
+    const previousMessageCount = previousMessagesCountRef.current || 0;
+
+    // If new messages were added (not just loading older ones)
+    if (currentMessageCount > previousMessageCount && visibleMessages === Math.min(10, currentMessageCount)) {
+      // Scroll to bottom immediately with no animation
+      messagesEndRef.current?.scrollIntoView();
+    }
+
+    // Store the current message count for next comparison
+    previousMessagesCountRef.current = currentMessageCount;
+  }, [allMessages, visibleMessages]);
 
   useEffect(() => {
     if (seenMessage) {
@@ -252,6 +270,89 @@ export default function MessagePage() {
       };
     }
   }, [socketConnection, params.userId]);
+
+  useEffect(() => {
+    // Reset visible messages count when conversation changes
+    setVisibleMessages(10);
+  }, [params.userId]);
+
+  // Setup intersection observer for infinite scrolling with scroll position preservation
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && allMessages.length > visibleMessages && !isLoadingMore) {
+          // Store current scroll height before loading more messages
+          if (messagesContainerRef.current) {
+            scrollPositionRef.current = {
+              scrollHeight: messagesContainerRef.current.scrollHeight,
+              scrollTop: messagesContainerRef.current.scrollTop,
+            };
+          }
+
+          // Set loading state to true
+          setIsLoadingMore(true);
+
+          // Add 2-second delay before loading more messages
+          setTimeout(() => {
+            // Load 10 more messages after delay
+            setVisibleMessages((prev) => Math.min(prev + 10, allMessages.length));
+            // Reset loading state
+            setIsLoadingMore(false);
+          }, 1000);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (loadMoreRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        observer.unobserve(loadMoreRef.current);
+      }
+    };
+  }, [allMessages, visibleMessages, isLoadingMore]);
+
+  // Restore scroll position after loading more messages
+  useEffect(() => {
+    if (scrollPositionRef.current && messagesContainerRef.current) {
+      // Calculate how much the content height has changed
+      const heightDifference = messagesContainerRef.current.scrollHeight - scrollPositionRef.current.scrollHeight;
+
+      // Adjust scroll position to maintain the relative view
+      messagesContainerRef.current.scrollTop = scrollPositionRef.current.scrollTop + heightDifference;
+
+      // Clear the stored position
+      scrollPositionRef.current = null;
+    }
+  }, [visibleMessages]);
+
+  // Calculate which messages to display - modified to handle incremental loading correctly
+  const messagesToDisplay = useMemo(() => {
+    // Start showing the most recent messages, then load older ones when scrolling
+    return allMessages.slice(-visibleMessages);
+  }, [allMessages, visibleMessages]);
+
+  // Only scroll to newest messages when a new message is received
+  useEffect(() => {
+    // Only scroll to bottom automatically for newly received messages
+    const currentMessageCount = allMessages.length;
+    const previousMessageCount = previousMessagesCountRef.current || 0;
+
+    if (currentMessageCount > previousMessageCount) {
+      // Scroll to bottom immediately without animation
+      messagesContainerRef.current?.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "auto",
+      });
+    }
+
+    // Store the current message count for next comparison
+    previousMessagesCountRef.current = currentMessageCount;
+  }, [allMessages]);
 
   const handleUploadFile = (e) => {
     const files = Array.from(e.target.files);
@@ -659,7 +760,10 @@ export default function MessagePage() {
         )}
 
         <div className="flex flex-1 overflow-hidden">
-          <section className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}>
+          <section
+            className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+            ref={messagesContainerRef}
+          >
             {/* Loading chat */}
             {isLoading ? (
               <div className="flex h-full items-center justify-center">
@@ -688,9 +792,24 @@ export default function MessagePage() {
                 </div>
               </div>
             ) : (
-              // Render all messages
+              // Render messages
               <div className="absolute inset-0 mt-2 flex flex-col gap-y-5 px-4">
-                {allMessages.map((message) => {
+                {/* Load more messages trigger - show only if there are more messages to load */}
+                {allMessages.length > visibleMessages && (
+                  <div ref={loadMoreRef} className="flex justify-center py-2">
+                    <div className="flex items-center space-x-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-500">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500"></div>
+                      <span>
+                        {isLoadingMore
+                          ? "Đang tải tin nhắn..."
+                          : `Tải thêm tin nhắn (${visibleMessages}/${allMessages.length})`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Display limited number of messages */}
+                {messagesToDisplay.map((message) => {
                   // If the message is a system notification center it
                   if (isSystemNotification(message.text)) {
                     return (
@@ -703,7 +822,6 @@ export default function MessagePage() {
                         </div>
                       </div>
                     );
-                    // If the message is (cuộc gọi thoại) or (cuộc gọi video) align left or right
                   } else if (isCallMessage(message)) {
                     const isCurrentUser = message.msgByUserId === user._id;
                     let sender = null;
@@ -711,24 +829,22 @@ export default function MessagePage() {
                       sender = getSenderInfo(message.msgByUserId);
                     }
                     return (
-                      <>
-                        <MessageIsCall
-                          message={message}
-                          isCurrentUser={isCurrentUser}
-                          sender={sender}
-                          dataUser={dataUser}
-                          user={user}
-                          setHoveredMessage={setHoveredMessage}
-                          hoveredLikeMessage={hoveredLikeMessage}
-                          setHoveredLikeMessage={setHoveredLikeMessage}
-                          getCallIcon={getCallIcon}
-                          getCallStatusText={getCallStatusText}
-                          handleQuickLike={handleQuickLike}
-                          handleAddReaction={handleAddReaction}
-                        />
-                      </>
+                      <MessageIsCall
+                        key={message._id}
+                        message={message}
+                        isCurrentUser={isCurrentUser}
+                        sender={sender}
+                        dataUser={dataUser}
+                        user={user}
+                        setHoveredMessage={setHoveredMessage}
+                        hoveredLikeMessage={hoveredLikeMessage}
+                        setHoveredLikeMessage={setHoveredLikeMessage}
+                        getCallIcon={getCallIcon}
+                        getCallStatusText={getCallStatusText}
+                        handleQuickLike={handleQuickLike}
+                        handleAddReaction={handleAddReaction}
+                      />
                     );
-                    // If the message is a text, image, video, file align left or right
                   } else {
                     const isCurrentUser = message.msgByUserId === user._id;
                     let sender = null;
@@ -736,29 +852,28 @@ export default function MessagePage() {
                       sender = getSenderInfo(message.msgByUserId);
                     }
                     return (
-                      <>
-                        <MessageIsNormal
-                          message={message}
-                          isCurrentUser={isCurrentUser}
-                          sender={sender}
-                          dataUser={dataUser}
-                          user={user}
-                          hoveredMessage={hoveredMessage}
-                          setHoveredMessage={setHoveredMessage}
-                          setHoveredLikeMessage={setHoveredLikeMessage}
-                          handleQuickLike={handleQuickLike}
-                          hoveredLikeMessage={hoveredLikeMessage}
-                          handleAddReaction={handleAddReaction}
-                          getSenderInfo={getSenderInfo}
-                          handleImageClick={handleImageClick}
-                          handleShareMessage={handleShareMessage}
-                          handleReplyMessage={handleReplyMessage}
-                          openActionMessage={openActionMessage}
-                          setOpenActionMessage={setOpenActionMessage}
-                          handleEditMessage={handleEditMessage}
-                          handleDeleteMessage={handleDeleteMessage}
-                        />
-                      </>
+                      <MessageIsNormal
+                        key={message._id}
+                        message={message}
+                        isCurrentUser={isCurrentUser}
+                        sender={sender}
+                        dataUser={dataUser}
+                        user={user}
+                        hoveredMessage={hoveredMessage}
+                        setHoveredMessage={setHoveredMessage}
+                        setHoveredLikeMessage={setHoveredLikeMessage}
+                        handleQuickLike={handleQuickLike}
+                        hoveredLikeMessage={hoveredLikeMessage}
+                        handleAddReaction={handleAddReaction}
+                        getSenderInfo={getSenderInfo}
+                        handleImageClick={handleImageClick}
+                        handleShareMessage={handleShareMessage}
+                        handleReplyMessage={handleReplyMessage}
+                        openActionMessage={openActionMessage}
+                        setOpenActionMessage={setOpenActionMessage}
+                        handleEditMessage={handleEditMessage}
+                        handleDeleteMessage={handleDeleteMessage}
+                      />
                     );
                   }
                 })}
