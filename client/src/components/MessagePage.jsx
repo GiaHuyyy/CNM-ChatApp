@@ -121,10 +121,10 @@ export default function MessagePage() {
       const timeoutId = setTimeout(() => {
         if (!conversationInitialized.current) {
           console.error("Timeout fetching conversation data");
-          setLoadError("Could not load conversation data. Please try again.");
+          setLoadError("Vui lòng thử lại.");
           setIsLoading(false);
         }
-      }, 10000);
+      }, 3000);
 
       socketConnection.on("messageUser", (payload) => {
         console.log("Received messageUser event:", payload);
