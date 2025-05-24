@@ -310,10 +310,26 @@ export default function Chat() {
 
         setTimeout(async () => {
           try {
+            // Get the token for authentication
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+              console.error("No auth token available for search");
+              setSearchResults([]);
+              setSearchLoading(false);
+              setIsSearching(false);
+              return;
+            }
+
+            // Use the environment variable instead of hardcoded URL
             const response = await axios.post(
-              "http://192.168.1.204:5000/api/search-friend-user",
+              `${REACT_APP_BACKEND_URL}/api/search-friend-user`,
               { search: searchQuery },
-              { withCredentials: true }
+              { 
+                headers: {
+                  Authorization: `Bearer ${token}`
+                },
+                withCredentials: true 
+              }
             );
 
             console.log("Search results:", {
@@ -331,6 +347,13 @@ export default function Chat() {
           } catch (error) {
             console.error("Search error:", error.response?.data || error);
             setSearchResults([]);
+            
+            // Show error alert for search failures
+            if (error.response?.status === 401) {
+              Alert.alert("Authentication Error", "Please login again to continue.");
+            } else {
+              Alert.alert("Search Error", "Failed to search. Please try again.");
+            }
           } finally {
             setSearchLoading(false);
             setIsSearching(false);
