@@ -334,11 +334,11 @@ const GroupChatInfoModal = ({
             return;
         }
 
-        if (!socketConnection) {
+        if (!socketConnection?.connected) {
             setConfirmModal({
                 visible: true,
-                title: "Lỗi",
-                message: "Không thể kết nối đến máy chủ",
+                title: "Lỗi kết nối",
+                message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối và thử lại.",
                 type: "error"
             });
             return;
@@ -358,111 +358,89 @@ const GroupChatInfoModal = ({
             return;
         }
 
-        // Test the socket connection explicitly
-        socketConnection.emit("ping", "Testing connection before group deletion");
-        socketConnection.once("pong", (response) => {
-            console.log("Socket connection confirmed working:", response);
-        });
-
         setConfirmModal({
             visible: true,
             title: "Giải tán nhóm",
             message: "Bạn có chắc chắn muốn giải tán nhóm này? Nhóm sẽ bị xóa hoàn toàn và tất cả thành viên sẽ bị xóa khỏi nhóm. Hành động này không thể hoàn tác.",
             type: "danger",
             action: () => {
-                console.log("User confirmed group disbanding, executing action now");
+                // Show loading state
+                setConfirmModal({
+                    visible: true,
+                    title: "Đang xử lý",
+                    message: "Đang giải tán nhóm...",
+                    type: "loading"
+                });
 
-                // Remove any existing listeners to avoid duplicates 
+                // Remove any existing listeners
                 socketConnection.off("groupDeleted");
-                socketConnection.off("groupRemoved");
-                socketConnection.off("groupDisbanded");
-
-                // Enable debug mode to catch any events for debugging
-                const debugListener = (eventName) => (data) => {
-                    console.log(`DEBUG - Received ${eventName} event:`, data);
-                };
-                socketConnection.onAny(debugListener("any"));
-
-                // Add handler for ALL possible response event names
-                const setupDeleteHandler = (eventName) => {
-                    console.log(`Setting up listener for ${eventName}`);
-                    socketConnection.on(eventName, (response) => {
-                        console.log(`Received ${eventName} response:`, response);
-
-                        // Clean up all listeners
-                        socketConnection.off("groupDeleted");
-                        socketConnection.off("groupRemoved");
-                        socketConnection.off("groupDisbanded");
-                        socketConnection.offAny(debugListener("any"));
-
-                        if (response?.success) {
-                            console.log("Group deleted successfully");
-                            onClose(); // Close modal first for better UX
-
-                            if (onDeleteGroup) {
-                                console.log("Calling onDeleteGroup handler");
-                                onDeleteGroup(); // Call parent handler for cleanup
-                            }
-                        } else {
-                            console.log("Group deletion failed:", response?.message);
-                            setConfirmModal({
-                                visible: true,
-                                title: "Lỗi",
-                                message: response?.message || "Không thể giải tán nhóm chat",
-                                type: "error"
-                            });
-                        }
-                    });
-                };
-
-                // Set up listeners for all possible response event names
-                setupDeleteHandler("groupDeleted");
-                setupDeleteHandler("groupRemoved");
-                setupDeleteHandler("groupDisbanded");
-
-                // Prepare multiple payload formats for compatibility
-                const payload1 = {
-                    groupId: groupIdStr,
-                    userId: userIdStr
-                };
-
-                const payload2 = {
-                    groupId: groupIdStr,
-                    adminId: userIdStr
-                };
-
-                const payload3 = {
-                    _id: groupIdStr,
-                    userId: userIdStr
-                };
-
-                // Log all attempts
-                console.log("Emitting deleteGroup with payload:", payload1);
-                console.log("Emitting disbandGroup with payload:", payload2);
-
-                // Try all event names and payload combinations that the server might expect
-                socketConnection.emit("deleteGroup", payload1);
-                socketConnection.emit("disbandGroup", payload1);
-                socketConnection.emit("deleteGroup", payload2);
-                socketConnection.emit("disbandGroup", payload2);
-                socketConnection.emit("removeGroup", payload1);
-                socketConnection.emit("deleteGroup", payload3);
-
-                // Set timeout for no response
-                setTimeout(() => {
+                
+                // Set a timeout to handle no response
+                const timeoutId = setTimeout(() => {
                     console.log("No response received for group deletion");
                     socketConnection.off("groupDeleted");
-                    socketConnection.off("groupRemoved");
-                    socketConnection.off("groupDisbanded");
-                    socketConnection.offAny(debugListener("any"));
-
+                    
                     setConfirmModal({
                         visible: true,
-                        title: "Lỗi",
-                        message: "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.",
+                        title: "Lỗi kết nối",
+                        message: "Máy chủ không phản hồi. Vui lòng thử lại sau hoặc kiểm tra kết nối của bạn.",
                         type: "error"
                     });
                 }, 10000);
+
+                // Set up the response handler
+                socketConnection.on("groupDeleted", (response) => {
+                    // Clear timeout since we got a response
+                    clearTimeout(timeoutId);
+                    
+                    console.log("Group deletion response:", response);
+                    
+                    if (response.success) {
+                        // Close all modals
+                        setConfirmModal({
+                            visible: false,
+                            title: "",
+                            message: "",
+                            type: ""
+                        });
+                        
+                        // First close the current modal
+                        onClose();
+                        
+                        // Show success message
+                        Alert.alert(
+                            "Thành công",
+                            "Đã giải tán nhóm thành công",
+                            [{ 
+                                text: "OK", 
+                                onPress: () => {
+                                    // Call parent handler for cleanup and navigation
+                                    if (onDeleteGroup) {
+                                        // Pass true to indicate navigation back to main chat should happen
+                                        onDeleteGroup(groupIdStr, true);
+                                    }
+                                }
+                            }]
+                        );
+                    } else {
+                        // Show error message
+                        setConfirmModal({
+                            visible: true,
+                            title: "Lỗi",
+                            message: response.message || "Không thể giải tán nhóm chat",
+                            type: "error"
+                        });
+                    }
+                });
+
+                // Create a standardized payload
+                const payload = {
+                    groupId: groupIdStr,
+                    userId: userIdStr
+                };
+                
+                console.log("Emitting deleteGroup with payload:", payload);
+                socketConnection.emit("deleteGroup", payload);
             }
         });
     };
