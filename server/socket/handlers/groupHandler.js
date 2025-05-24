@@ -263,6 +263,94 @@ const groupHandler = (io, socket, userId) => {
       });
     }
   });
+
+  // Delete group
+  socket.on("deleteGroup", async (data) => {
+    try {
+      const { groupId, userId } = data;
+
+      // Clean and validate IDs
+      const userIdStr = typeof userId === "object" ? userId.toString() : userId;
+      
+      console.log("Group deletion request received:", { groupId, userId: userIdStr });
+
+      // Find the group
+      const groupConversation = await ConversationModel.findById(groupId);
+
+      if (!groupConversation || !groupConversation.isGroup) {
+        socket.emit("groupDeleted", {
+          success: false,
+          message: "Nhóm không tồn tại"
+        });
+        return;
+      }
+
+      // Check permissions - only admin can delete
+      const groupAdminId = groupConversation.groupAdmin.toString();
+      
+      if (groupAdminId !== userIdStr) {
+        socket.emit("groupDeleted", {
+          success: false,
+          message: "Chỉ quản trị viên mới có thể giải tán nhóm"
+        });
+        return;
+      }
+
+      // Get all members for notification
+      const memberIds = groupConversation.members.map(id => id.toString());
+      
+      // Delete all messages in the group
+      if (groupConversation.messages && groupConversation.messages.length > 0) {
+        await MessageModel.deleteMany({ _id: { $in: groupConversation.messages } });
+      }
+
+      // Delete the group conversation
+      await ConversationModel.findByIdAndDelete(groupId);
+      
+      // Send success response to requester
+      socket.emit("groupDeleted", {
+        success: true,
+        message: "Nhóm đã được giải tán thành công"
+      });
+      
+      // Update sidebar for all members
+      for (const memberId of memberIds) {
+        const memberConversations = await getConversation(memberId);
+        io.to(memberId).emit("conversation", memberConversations);
+        
+        // Notify members that group was deleted
+        if (memberId !== userIdStr) {
+          io.to(memberId).emit("groupRemoved", {
+            groupId,
+            message: "Nhóm đã bị giải tán bởi quản trị viên"
+          });
+        }
+      }
+      
+      console.log("Group deleted successfully:", groupId);
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      socket.emit("groupDeleted", {
+        success: false,
+        message: "Có lỗi xảy ra khi giải tán nhóm"
+      });
+    }
+  });
+
+  // For backwards compatibility - alias for deleteGroup
+  socket.on("disbandGroup", async (data) => {
+    try {
+      console.log("Received disbandGroup event, forwarding to deleteGroup handler");
+      // Forward the event to the main deleteGroup handler
+      socket.emit("deleteGroup", data);
+    } catch (error) {
+      console.error("Error in disbandGroup handler:", error);
+      socket.emit("groupDeleted", {
+        success: false,
+        message: "Có lỗi xảy ra khi giải tán nhóm"
+      });
+    }
+  });
 };
 
 module.exports = groupHandler;
