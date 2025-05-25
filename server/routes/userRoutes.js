@@ -199,89 +199,49 @@ export default function Profile() {
         }
       }
 
-      console.log("Sending update request to server");
-      console.log("Current user state:", user);
-      console.log("Token:", token ? token.substring(0, 15) + "..." : "Missing");
-      console.log("New name:", editName);
+      console.log("Updating user with name:", editName);
       
-      // Update user via API with explicit JSON content type
-      const updateUserResponse = await axios({
-        method: 'post',
-        url: `${REACT_APP_BACKEND_URL}/api/update-user`,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        data: JSON.stringify({
+      // Update user via API
+      const res = await axios.post(
+        `${REACT_APP_BACKEND_URL}/api/update-user`,
+        {
           name: editName,
           profilePic: avatarUrl,
-        })
-      });
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          withCredentials: true,
+        }
+      );
 
-      console.log("Server response:", updateUserResponse.data);
-
-      if (updateUserResponse.data && updateUserResponse.data.success) {
-        const serverUpdatedUser = updateUserResponse.data.data;
-        console.log("User updated on server:", serverUpdatedUser);
+      if (res.data && res.data.success) {
+        console.log("User updated successfully:", res.data.data);
         
-        // Force the new name to be included in the updated user data
+        // Make sure the name is included in the update
         const updatedUserData = {
           ...user,
-          ...serverUpdatedUser,
-          name: editName // Ensure name is explicitly set
+          ...res.data.data,
+          name: editName // Ensure name is explicitly updated
         };
         
-        console.log("Final Redux update payload:", updatedUserData);
-        
-        // Update Redux store
+        // Update Redux store with new user data
         dispatch(setUser(updatedUserData));
-        
-        // Update AsyncStorage
-        try {
-          // Get current stored user data first
-          const storedUserData = await AsyncStorage.getItem("user");
-          let userData = storedUserData ? JSON.parse(storedUserData) : {};
-          
-          // Update with new values
-          userData = {
-            ...userData,
-            ...updatedUserData
-          };
-          
-          await AsyncStorage.setItem("user", JSON.stringify(userData));
-          console.log("Updated AsyncStorage user data");
-        } catch (storageError) {
-          console.error("AsyncStorage update failed:", storageError);
-        }
 
+        // Show success message
         alert("Thông tin đã được cập nhật thành công");
         
         // Reset state and close modal
         setNewAvatarUri(null);
         setModalVisible(false);
-        
-        // Force a re-render by updating a dummy state
-        setUpdating(true);
-        setTimeout(() => setUpdating(false), 50);
       } else {
-        console.error("Update failed with response:", updateUserResponse.data);
-        alert(updateUserResponse.data?.message || "Không thể cập nhật thông tin. Vui lòng thử lại sau.");
+        console.error("Update failed with response:", res.data);
+        alert(res.data?.message || "Không thể cập nhật thông tin. Vui lòng thử lại sau.");
       }
     } catch (err) {
       console.error("Update failed:", err.response?.data || err.message);
-      
-      // Show more detailed error information
-      let errorMessage = "Không thể cập nhật thông tin. ";
-      
-      if (err.response) {
-        errorMessage += err.response.data?.message || `Error ${err.response.status}: ${err.response.statusText}`;
-      } else if (err.request) {
-        errorMessage += "Không nhận được phản hồi từ máy chủ. Vui lòng kiểm tra kết nối mạng.";
-      } else {
-        errorMessage += err.message;
-      }
-      
-      alert(errorMessage);
+      alert("Không thể cập nhật thông tin. Vui lòng thử lại sau.");
     } finally {
       setUpdating(false);
     }
@@ -516,3 +476,10 @@ export default function Profile() {
     </SafeAreaView>
   );
 }
+
+// Make sure this route is properly set up
+router.post("/update-user", authMiddleware, (req, res) => {
+  console.log("Route /update-user called");
+  const updateUser = require("../controller/updateUser");
+  updateUser(req, res);
+});
