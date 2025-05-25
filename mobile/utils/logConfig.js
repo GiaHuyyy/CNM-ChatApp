@@ -15,13 +15,31 @@ LogBox.ignoreLogs([
     'Animated: `useNativeDriver`',
     // Socket.IO related warnings
     'WebSocket connection',
-    'socket.io-client:socket',
     'socket.io-client:manager',
     'socket.io-client:url',
     'socket disconnected',
     'socket.io-parser',
     // Add more patterns here as needed
+    'Slider has been removed from react-native core'
 ]);
+
+// Keep socket.io events for debugging calls
+console.log = (function (originalLog) {
+    return function (...args) {
+        // Don't filter call-related logs
+        if (args.length > 0 &&
+            (typeof args[0] === 'string') &&
+            (args[0].includes('call') || args[0].includes('Call'))) {
+            originalLog.apply(console, args);
+        } else {
+            // Filter other logs
+            // Only log in development, or if explicitly forced
+            if (__DEV__ || (args.length > 0 && args[0] === 'FORCE_LOG')) {
+                originalLog.apply(console, args);
+            }
+        }
+    };
+})(console.log);
 
 // Completely disable LogBox in production
 if (!__DEV__) {
@@ -72,6 +90,23 @@ if (Platform.OS !== 'web') {
         }
     };
 }
+
+// Add safe window event handling
+export const addSafeWindowListener = (event, handler) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener(event, handler);
+        return true;
+    }
+    return false;
+};
+
+export const removeSafeWindowListener = (event, handler) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener(event, handler);
+        return true;
+    }
+    return false;
+};
 
 export default {
     setup: () => {
