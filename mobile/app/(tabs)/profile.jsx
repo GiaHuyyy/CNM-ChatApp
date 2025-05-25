@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Image, TouchableOpacity, Modal, TextInput, Pressable, ActivityIndicator, Platform, ScrollView, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as MediaLibrary from "expo-media-library";
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import {
   faSearch,
@@ -74,6 +76,9 @@ export default function Profile() {
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [deviceFiles, setDeviceFiles] = useState([]);
+  const [deviceFilesModal, setDeviceFilesModal] = useState(false);
+  const [deviceFilesLoading, setDeviceFilesLoading] = useState(false);
 
   useEffect(() => {
     if (modalVisible) {
@@ -299,6 +304,43 @@ export default function Profile() {
     }
   };
 
+  const openDeviceData = async () => {
+    setDeviceFilesModal(true);
+    setDeviceFilesLoading(true);
+    try {
+      const folderName = 'ChatNowData';
+      const folderPath = FileSystem.documentDirectory + folderName + '/';
+      // Kiểm tra và tạo thư mục nếu chưa tồn tại
+      const folderInfo = await FileSystem.getInfoAsync(folderPath);
+      if (!folderInfo.exists) {
+        await FileSystem.makeDirectoryAsync(folderPath, { intermediates: true });
+      }
+      // Đọc file trong thư mục ChatNowData
+      const files = await FileSystem.readDirectoryAsync(folderPath);
+      setDeviceFiles(files.length > 0 ? files : ['Không có tệp nào trong ChatNowData.']);
+    } catch (err) {
+      setDeviceFiles(['Không thể truy cập hoặc tạo thư mục ChatNowData.']);
+    } finally {
+      setDeviceFilesLoading(false);
+    }
+  };
+
+  const handleShareFile = async (fileName) => {
+    try {
+      const folderName = 'ChatNowData';
+      const folderPath = FileSystem.documentDirectory + folderName + '/';
+      const fileUri = folderPath + fileName;
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (fileInfo.exists && await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        alert('Không thể chia sẻ file này trên thiết bị của bạn.');
+      }
+    } catch (err) {
+      alert('Có lỗi khi chia sẻ file.');
+    }
+  };
+
   const renderMenuItem = (item) => (
     <TouchableOpacity
       key={item.id}
@@ -306,6 +348,8 @@ export default function Profile() {
       onPress={() => {
         if (item.id === 'logout') {
           handleLogout();
+        } else if (item.id === 'devicedata') {
+          openDeviceData();
         }
       }}
     >
@@ -427,6 +471,38 @@ export default function Profile() {
                   </Text>
                 </Pressable>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Device Files Modal */}
+        <Modal visible={deviceFilesModal} animationType="slide" transparent onRequestClose={() => setDeviceFilesModal(false)}>
+          <View className="flex-1 bg-black/50 justify-center items-center">
+            <View className="bg-white w-[90%] max-h-[70%] p-4 rounded-xl">
+              <Text className="text-lg font-semibold text-center mb-4">Dữ liệu trong ChatNowData</Text>
+              {deviceFilesLoading ? (
+                <ActivityIndicator size="large" color="#1976F0" />
+              ) : (
+                <ScrollView style={{ maxHeight: 300 }}>
+                  {deviceFiles.length === 0 ? (
+                    <Text className="text-gray-500 text-center">Không có tệp nào.</Text>
+                  ) : (
+                    deviceFiles.map((file, idx) => (
+                      file.startsWith('Không') ? (
+                        <Text key={idx} className="text-base mb-2 text-red-500">{file}</Text>
+                      ) : (
+                        <Pressable key={idx} onPress={() => handleShareFile(file)}>
+                          <Text className="text-base mb-2 text-blue-700 underline">{file}</Text>
+                        </Pressable>
+                      )
+                    ))
+                  )}
+                </ScrollView>
+              )}
+              <Pressable onPress={() => setDeviceFilesModal(false)} className="mt-4 px-4 py-2 rounded bg-blue-500 self-center">
+                <Text className="text-white font-semibold">Đóng</Text>
+              </Pressable>
+              <Text className="text-xs text-gray-400 mt-2 text-center">Chạm vào tên file để chia sẻ hoặc lưu ra ngoài (hỗ trợ cả iOS & Android)</Text>
             </View>
           </View>
         </Modal>
