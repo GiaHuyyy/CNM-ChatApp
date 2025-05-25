@@ -8,7 +8,6 @@ import {
     Image,
     ScrollView,
     FlatList,
-    StyleSheet,
     Dimensions,
     Alert,
     Linking,
@@ -392,9 +391,9 @@ const DirectChatDetailsModal = ({
     const insets = useSafeAreaInsets();
 
     const renderHeader = () => (
-        <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+        <View className="bg-white w-full z-10" style={{ paddingTop: insets.top }}>
             <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-            <View style={styles.header}>
+            <View className="flex-row items-center justify-center h-[50px] bg-white border-b border-gray-200 px-4">
                 <TouchableOpacity
                     onPress={() => {
                         if (showMembersList) {
@@ -405,17 +404,17 @@ const DirectChatDetailsModal = ({
                             onClose();
                         }
                     }}
-                    style={styles.backButton}
+                    className="absolute left-4 py-2.5 px-1.5"
                 >
                     <FontAwesomeIcon icon={faArrowLeft} size={20} color="#333" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>
+                <Text className="text-lg font-semibold">
                     {showMembersList ? "Thành viên nhóm" :
                         activeSection === 'main' ? 'Thông tin' :
                             activeSection === 'media' ? 'Ảnh/Video' :
                                 activeSection === 'files' ? 'Tệp' : 'Liên kết'}
                 </Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <TouchableOpacity onPress={onClose} className="absolute right-4 py-2.5 px-1.5">
                     <FontAwesomeIcon icon={faTimes} size={20} color="#333" />
                 </TouchableOpacity>
             </View>
@@ -426,35 +425,35 @@ const DirectChatDetailsModal = ({
         if (!isGroupChat || !group || !group.members) return null;
 
         return (
-            <ScrollView style={styles.container}>
-                <View style={styles.memberListHeader}>
-                    <Text style={styles.memberListTitle}>Thành viên ({group.members?.length || 0})</Text>
+            <ScrollView className="flex-1 bg-gray-100">
+                <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
+                    <Text className="text-lg font-semibold">Thành viên ({group.members?.length || 0})</Text>
 
                     {isAdmin && (
                         <TouchableOpacity
-                            style={styles.addMemberButton}
+                            className="flex-row items-center bg-blue-50 px-3 py-1 rounded-full"
                             onPress={onAddMember}
                         >
                             <FontAwesomeIcon icon={faUserPlus} size={18} color="#0084ff" />
-                            <Text style={styles.addMemberText}>Thêm thành viên</Text>
+                            <Text className="ml-2 text-blue-500 text-sm">Thêm thành viên</Text>
                         </TouchableOpacity>
                     )}
                 </View>
 
                 {group.members?.map(member => (
-                    <View key={member._id} style={styles.memberItem}>
-                        <View style={styles.memberInfo}>
+                    <View key={member._id} className="flex-row items-center justify-between p-3 bg-white border-b border-gray-100">
+                        <View className="flex-row items-center flex-1">
                             <Image
                                 source={{ uri: member.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}` }}
-                                style={styles.memberAvatar}
+                                className="w-10 h-10 rounded-full"
                             />
-                            <View style={styles.memberNameContainer}>
-                                <Text style={styles.memberName}>
+                            <View className="ml-3">
+                                <Text className="text-base">
                                     {member._id === currentUser._id ? "Bạn" : member.name}
                                 </Text>
                                 {(group.groupAdmin?._id === member._id || group.groupAdmin === member._id) && (
-                                    <View style={styles.adminBadge}>
-                                        <Text style={styles.adminBadgeText}>Quản trị viên</Text>
+                                    <View className="bg-blue-50 px-2 py-0.5 rounded mt-1 self-start">
+                                        <Text className="text-xs text-blue-500">Quản trị viên</Text>
                                     </View>
                                 )}
                             </View>
@@ -462,7 +461,7 @@ const DirectChatDetailsModal = ({
 
                         {isAdmin && member._id !== currentUser._id && (
                             <TouchableOpacity
-                                style={styles.removeMemberButton}
+                                className="p-2 bg-red-50 rounded-full"
                                 onPress={() => handleRemoveMember(member._id, member.name)}
                             >
                                 <FontAwesomeIcon icon={faUserMinus} size={18} color="#FF3B30" />
@@ -480,50 +479,50 @@ const DirectChatDetailsModal = ({
         }
 
         return (
-            <ScrollView style={styles.container}>
+            <ScrollView className="flex-1 bg-gray-100">
                 {/* Profile Section */}
-                <View style={styles.profileSection}>
+                <View className="flex-row items-center p-5 bg-white border-b border-gray-200">
                     <Image
                         source={{
                             uri: isGroupChat
                                 ? (group?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || 'Group')}&background=random`)
                                 : (user?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || 'User')}`)
                         }}
-                        style={styles.avatar}
+                        className="w-20 h-20 rounded-full"
                     />
-                    <View style={styles.nameContainer}>
+                    <View className="ml-4 flex-1">
                         {isGroupChat ? (
-                            <Text style={styles.name}>{group?.name}</Text>
+                            <Text className="text-lg font-semibold">{group?.name}</Text>
                         ) : isEditingNickname ? (
-                            <View style={styles.nicknameEditContainer}>
+                            <View className="flex-row items-center w-full">
                                 <TextInput
-                                    style={styles.nicknameInput}
+                                    className="flex-1 border-b border-blue-500 text-base py-1 mr-2"
                                     value={nickname}
                                     onChangeText={setNickname}
                                     placeholder={user?.name || 'Enter nickname'}
                                     autoFocus
                                 />
                                 <TouchableOpacity
-                                    style={styles.saveNicknameButton}
+                                    className="p-1"
                                     onPress={handleSaveNickname}
                                 >
                                     <FontAwesomeIcon icon={faCheck} size={16} color="#3b82f6" />
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={styles.cancelNicknameButton}
+                                    className="p-1"
                                     onPress={() => setIsEditingNickname(false)}
                                 >
                                     <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
                                 </TouchableOpacity>
                             </View>
                         ) : (
-                            <View style={styles.nameRow}>
-                                <Text style={styles.name}>
+                            <View className="flex-row items-center">
+                                <Text className="text-lg font-semibold">
                                     {user?.nickname || user?.name}
-                                    {user?.nickname && <Text style={styles.realName}> ({user?.name})</Text>}
+                                    {user?.nickname && <Text className="text-sm text-gray-500"> ({user?.name})</Text>}
                                 </Text>
                                 <TouchableOpacity
-                                    style={styles.editNicknameButton}
+                                    className="p-1 ml-2"
                                     onPress={() => setIsEditingNickname(true)}
                                 >
                                     <FontAwesomeIcon icon={faEdit} size={16} color="#888" />
@@ -531,83 +530,83 @@ const DirectChatDetailsModal = ({
                             </View>
                         )}
                         {isGroupChat ? (
-                            <Text style={styles.groupMembersCount}>
+                            <Text className="text-gray-500 text-sm mt-1">
                                 {group.members?.length || 0} thành viên
                             </Text>
                         ) : (
-                            <Text style={styles.status}>{user?.online ? "Đang hoạt động" : "Không hoạt động"}</Text>
+                            <Text className="text-green-500 text-sm mt-1">{user?.online ? "Đang hoạt động" : "Không hoạt động"}</Text>
                         )}
                     </View>
                 </View>
 
                 {/* Action Buttons - Different for group and direct chat */}
                 {isGroupChat ? (
-                    <View style={styles.actionButtons}>
+                    <View className="flex-row justify-around p-4 bg-white mt-2.5">
                         <TouchableOpacity
-                            style={styles.actionButton}
+                            className="items-center"
                             onPress={() => setShowMembersList(true)}
                         >
-                            <View style={[styles.iconContainer, { backgroundColor: '#4299E1' }]}>
+                            <View className="w-[50px] h-[50px] rounded-full bg-blue-500 justify-center items-center mb-1">
                                 <FontAwesomeIcon icon={faUsers} size={18} color="#fff" />
                             </View>
-                            <Text style={styles.actionText}>Thành viên</Text>
+                            <Text className="text-xs text-gray-600 mt-1">Thành viên</Text>
                         </TouchableOpacity>
 
                         {isAdmin ? (
                             <TouchableOpacity
-                                style={styles.actionButton}
+                                className="items-center"
                                 onPress={onAddMember}
                             >
-                                <View style={[styles.iconContainer, { backgroundColor: '#48BB78' }]}>
+                                <View className="w-[50px] h-[50px] rounded-full bg-green-500 justify-center items-center mb-1">
                                     <FontAwesomeIcon icon={faUserPlus} size={18} color="#fff" />
                                 </View>
-                                <Text style={styles.actionText}>Thêm thành viên</Text>
+                                <Text className="text-xs text-gray-600 mt-1">Thêm thành viên</Text>
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity
-                                style={styles.actionButton}
+                                className="items-center"
                                 onPress={handleLeaveGroup}
                             >
-                                <View style={[styles.iconContainer, { backgroundColor: '#ED8936' }]}>
+                                <View className="w-[50px] h-[50px] rounded-full bg-orange-500 justify-center items-center mb-1">
                                     <FontAwesomeIcon icon={faSignOutAlt} size={18} color="#fff" />
                                 </View>
-                                <Text style={styles.actionText}>Rời nhóm</Text>
+                                <Text className="text-xs text-gray-600 mt-1">Rời nhóm</Text>
                             </TouchableOpacity>
                         )}
 
                         {isAdmin && (
                             <TouchableOpacity
-                                style={styles.actionButton}
+                                className="items-center"
                                 onPress={handleDeleteGroup}
                             >
-                                <View style={[styles.iconContainer, { backgroundColor: '#F56565' }]}>
+                                <View className="w-[50px] h-[50px] rounded-full bg-red-500 justify-center items-center mb-1">
                                     <FontAwesomeIcon icon={faTrash} size={18} color="#fff" />
                                 </View>
-                                <Text style={styles.actionText}>Xóa nhóm</Text>
+                                <Text className="text-xs text-gray-600 mt-1">Xóa nhóm</Text>
                             </TouchableOpacity>
                         )}
                     </View>
                 ) : (
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity style={styles.actionButton}>
-                            <View style={[styles.iconContainer, { backgroundColor: '#4299E1' }]}>
+                    <View className="flex-row justify-around p-4 bg-white mt-2.5">
+                        <TouchableOpacity className="items-center">
+                            <View className="w-[50px] h-[50px] rounded-full bg-blue-500 justify-center items-center mb-1">
                                 <FontAwesomeIcon icon={faPhone} size={18} color="#fff" />
                             </View>
-                            <Text style={styles.actionText}>Gọi thoại</Text>
+                            <Text className="text-xs text-gray-600 mt-1">Gọi thoại</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionButton}>
-                            <View style={[styles.iconContainer, { backgroundColor: '#48BB78' }]}>
+                        <TouchableOpacity className="items-center">
+                            <View className="w-[50px] h-[50px] rounded-full bg-green-500 justify-center items-center mb-1">
                                 <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
                             </View>
-                            <Text style={styles.actionText}>Gọi video</Text>
+                            <Text className="text-xs text-gray-600 mt-1">Gọi video</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionButton}>
-                            <View style={[styles.iconContainer, { backgroundColor: '#ED8936' }]}>
+                        <TouchableOpacity className="items-center">
+                            <View className="w-[50px] h-[50px] rounded-full bg-orange-500 justify-center items-center mb-1">
                                 <FontAwesomeIcon icon={faUserCircle} size={18} color="#fff" />
                             </View>
-                            <Text style={styles.actionText}>Xem hồ sơ</Text>
+                            <Text className="text-xs text-gray-600 mt-1">Xem hồ sơ</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -615,25 +614,25 @@ const DirectChatDetailsModal = ({
                 {/* Group Members Section (Preview) */}
                 {isGroupChat && (
                     <TouchableOpacity
-                        style={styles.membersPreview}
+                        className="p-4 bg-white mt-2.5"
                         onPress={() => setShowMembersList(true)}
                     >
-                        <View style={styles.membersPreviewHeader}>
-                            <Text style={styles.membersPreviewTitle}>Thành viên nhóm</Text>
+                        <View className="flex-row justify-between items-center mb-3">
+                            <Text className="text-base font-semibold">Thành viên nhóm</Text>
                             <FontAwesomeIcon icon={faChevronRight} size={16} color="#888" />
                         </View>
 
-                        <View style={styles.memberAvatarsRow}>
+                        <View className="flex-row items-center">
                             {group.members?.slice(0, 5).map(member => (
                                 <Image
                                     key={member._id}
                                     source={{ uri: member.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}` }}
-                                    style={styles.memberAvatarSmall}
+                                    className="w-9 h-9 rounded-full -mr-2 border-2 border-white"
                                 />
                             ))}
                             {group.members?.length > 5 && (
-                                <View style={styles.moreMembersCircle}>
-                                    <Text style={styles.moreMembersText}>+{group.members.length - 5}</Text>
+                                <View className="w-9 h-9 rounded-full bg-gray-300 justify-center items-center ml-1">
+                                    <Text className="text-xs font-bold text-gray-600">+{group.members.length - 5}</Text>
                                 </View>
                             )}
                         </View>
@@ -642,30 +641,30 @@ const DirectChatDetailsModal = ({
 
                 {/* Additional info - only for direct chats */}
                 {!isGroupChat && (
-                    <View style={styles.infoSection}>
-                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                    <View className="bg-white mt-2.5 py-1">
+                        <TouchableOpacity className="flex-row items-center py-3 px-4 border-b border-gray-100">
                             <FontAwesomeIcon icon={faEnvelope} size={18} color="#666" />
-                            <Text style={styles.infoText}>{user?.email || "Email không có sẵn"}</Text>
+                            <Text className="ml-4 text-base text-gray-700">{user?.email || "Email không có sẵn"}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                        <TouchableOpacity className="flex-row items-center py-3 px-4 border-b border-gray-100">
                             <FontAwesomeIcon icon={faUserTie} size={18} color="#666" />
-                            <Text style={styles.infoText}>{user?.status || "Trạng thái chưa cập nhật"}</Text>
+                            <Text className="ml-4 text-base text-gray-700">{user?.status || "Trạng thái chưa cập nhật"}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.infoRow} onPress={() => { }}>
+                        <TouchableOpacity className="flex-row items-center py-3 px-4 border-b border-gray-100">
                             <FontAwesomeIcon icon={faBell} size={18} color="#666" />
-                            <Text style={styles.infoText}>Tắt thông báo</Text>
+                            <Text className="ml-4 text-base text-gray-700">Tắt thông báo</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
                 {/* Media Section */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Ảnh/Video</Text>
+                <View className="bg-white p-4 mt-2.5">
+                    <View className="flex-row justify-between items-center mb-2.5">
+                        <Text className="text-base font-semibold">Ảnh/Video</Text>
                         <TouchableOpacity onPress={() => setActiveSection('media')}>
-                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                            <Text className="text-blue-500 text-sm">Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -679,23 +678,26 @@ const DirectChatDetailsModal = ({
 
                                 return (
                                     <TouchableOpacity
-                                        style={styles.mediaItem}
+                                        className="mr-2"
                                         onPress={() => handleMediaPress(item, index)}
                                     >
                                         {isVideo ? (
-                                            <View style={styles.videoContainer}>
+                                            <View className="relative rounded overflow-hidden">
                                                 <Video
                                                     source={{ uri: item.mediaUrl }}
-                                                    style={styles.mediaThumbnail}
+                                                    style={{ width: 80, height: 80 }}
                                                     resizeMode="cover"
                                                     shouldPlay={false}
                                                 />
-                                                <View style={styles.playIconOverlay}>
+                                                <View className="absolute inset-0 flex justify-center items-center bg-black/30">
                                                     <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
                                                 </View>
                                             </View>
                                         ) : (
-                                            <Image source={{ uri: item.mediaUrl }} style={styles.mediaThumbnail} />
+                                            <Image
+                                                source={{ uri: item.mediaUrl }}
+                                                className="w-20 h-20 rounded"
+                                            />
                                         )}
                                     </TouchableOpacity>
                                 );
@@ -703,16 +705,16 @@ const DirectChatDetailsModal = ({
                             showsHorizontalScrollIndicator={false}
                         />
                     ) : (
-                        <Text style={styles.emptyText}>Không có ảnh hoặc video được chia sẻ</Text>
+                        <Text className="text-center text-gray-500 py-4">Không có ảnh hoặc video được chia sẻ</Text>
                     )}
                 </View>
 
                 {/* Files Section */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Tệp tin</Text>
+                <View className="bg-white p-4 mt-2.5">
+                    <View className="flex-row justify-between items-center mb-2.5">
+                        <Text className="text-base font-semibold">Tệp tin</Text>
                         <TouchableOpacity onPress={() => setActiveSection('files')}>
-                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                            <Text className="text-blue-500 text-sm">Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -721,7 +723,7 @@ const DirectChatDetailsModal = ({
                             {fileItems.slice(0, 3).map((item, index) => (
                                 <TouchableOpacity
                                     key={`file-${item._id || index}`}
-                                    style={styles.fileItem}
+                                    className="flex-row items-center py-2.5 px-1 border-b border-gray-200"
                                     onPress={() => Linking.openURL(item.fileUrl)}
                                 >
                                     <FontAwesomeIcon
@@ -729,9 +731,9 @@ const DirectChatDetailsModal = ({
                                         size={20}
                                         color="#888"
                                     />
-                                    <View style={styles.fileInfo}>
-                                        <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-                                        <Text style={styles.fileDate}>
+                                    <View className="ml-2.5 flex-1">
+                                        <Text className="text-base" numberOfLines={1}>{item.fileName}</Text>
+                                        <Text className="text-xs text-gray-500 mt-0.5">
                                             {new Date(item.createdAt).toLocaleDateString()}
                                         </Text>
                                     </View>
@@ -739,16 +741,16 @@ const DirectChatDetailsModal = ({
                             ))}
                         </View>
                     ) : (
-                        <Text style={styles.emptyText}>Không có tệp tin được chia sẻ</Text>
+                        <Text className="text-center text-gray-500 py-4">Không có tệp tin được chia sẻ</Text>
                     )}
                 </View>
 
                 {/* Links Section */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Liên kết</Text>
+                <View className="bg-white p-4 mt-2.5">
+                    <View className="flex-row justify-between items-center mb-2.5">
+                        <Text className="text-base font-semibold">Liên kết</Text>
                         <TouchableOpacity onPress={() => setActiveSection('links')}>
-                            <Text style={styles.seeAllText}>Xem tất cả</Text>
+                            <Text className="text-blue-500 text-sm">Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -757,13 +759,13 @@ const DirectChatDetailsModal = ({
                             {linkItems.slice(0, 3).map((item, index) => (
                                 <TouchableOpacity
                                     key={`link-${item._id || index}`}
-                                    style={styles.linkItem}
+                                    className="flex-row items-center py-2.5 px-1 border-b border-gray-200"
                                     onPress={() => Linking.openURL(item.text)}
                                 >
                                     <FontAwesomeIcon icon={faLink} size={20} color="#888" />
-                                    <View style={styles.linkInfo}>
-                                        <Text style={styles.linkUrl} numberOfLines={1}>{item.text}</Text>
-                                        <Text style={styles.linkDate}>
+                                    <View className="ml-2.5 flex-1">
+                                        <Text className="text-base text-blue-500" numberOfLines={1}>{item.text}</Text>
+                                        <Text className="text-xs text-gray-500 mt-0.5">
                                             {new Date(item.createdAt).toLocaleDateString()}
                                         </Text>
                                     </View>
@@ -771,7 +773,7 @@ const DirectChatDetailsModal = ({
                             ))}
                         </View>
                     ) : (
-                        <Text style={styles.emptyText}>Không có liên kết được chia sẻ</Text>
+                        <Text className="text-center text-gray-500 py-4">Không có liên kết được chia sẻ</Text>
                     )}
                 </View>
 
@@ -779,28 +781,28 @@ const DirectChatDetailsModal = ({
                 {isGroupChat ? (
                     isAdmin ? (
                         <TouchableOpacity
-                            style={styles.dangerButton}
+                            className="flex-row items-center justify-center bg-white mt-5 mb-8 py-4 mx-4 rounded"
                             onPress={handleDeleteGroup}
                         >
                             <FontAwesomeIcon icon={faTrash} size={18} color="#ff3b30" />
-                            <Text style={styles.dangerButtonText}>Xóa nhóm chat</Text>
+                            <Text className="ml-2.5 text-red-600 text-base font-semibold">Xóa nhóm chat</Text>
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity
-                            style={styles.dangerButton}
+                            className="flex-row items-center justify-center bg-white mt-5 mb-8 py-4 mx-4 rounded"
                             onPress={handleLeaveGroup}
                         >
                             <FontAwesomeIcon icon={faSignOutAlt} size={18} color="#ff3b30" />
-                            <Text style={styles.dangerButtonText}>Rời nhóm chat</Text>
+                            <Text className="ml-2.5 text-red-600 text-base font-semibold">Rời nhóm chat</Text>
                         </TouchableOpacity>
                     )
                 ) : (
                     <TouchableOpacity
-                        style={styles.dangerButton}
+                        className="flex-row items-center justify-center bg-white mt-5 mb-8 py-4 mx-4 rounded"
                         onPress={handleDeleteConversation}
                     >
                         <FontAwesomeIcon icon={faTrash} size={18} color="#ff3b30" />
-                        <Text style={styles.dangerButtonText}>Xóa lịch sử trò chuyện</Text>
+                        <Text className="ml-2.5 text-red-600 text-base font-semibold">Xóa lịch sử trò chuyện</Text>
                     </TouchableOpacity>
                 )}
             </ScrollView>
@@ -808,29 +810,29 @@ const DirectChatDetailsModal = ({
     };
 
     const renderMediaSection = () => (
-        <View style={styles.fullSection}>
-            <View style={styles.tabBar}>
+        <View className="flex-1 bg-white">
+            <View className="flex-row border-b border-gray-200">
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === 'media' && styles.activeTab]}
+                    className={`flex-1 items-center py-3 ${activeTab === 'media' ? 'border-b-2 border-blue-500' : ''}`}
                     onPress={() => setActiveTab('media')}
                 >
-                    <Text style={[styles.tabText, activeTab === 'media' && styles.activeTabText]}>
+                    <Text className={`text-sm ${activeTab === 'media' ? 'text-blue-500 font-semibold' : 'text-gray-600'}`}>
                         Ảnh/Video
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === 'files' && styles.activeTab]}
+                    className={`flex-1 items-center py-3 ${activeTab === 'files' ? 'border-b-2 border-blue-500' : ''}`}
                     onPress={() => setActiveTab('files')}
                 >
-                    <Text style={[styles.tabText, activeTab === 'files' && styles.activeTabText]}>
+                    <Text className={`text-sm ${activeTab === 'files' ? 'text-blue-500 font-semibold' : 'text-gray-600'}`}>
                         Tệp tin
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    style={[styles.tab, activeTab === 'links' && styles.activeTab]}
+                    className={`flex-1 items-center py-3 ${activeTab === 'links' ? 'border-b-2 border-blue-500' : ''}`}
                     onPress={() => setActiveTab('links')}
                 >
-                    <Text style={[styles.tabText, activeTab === 'links' && styles.activeTabText]}>
+                    <Text className={`text-sm ${activeTab === 'links' ? 'text-blue-500 font-semibold' : 'text-gray-600'}`}>
                         Liên kết
                     </Text>
                 </TouchableOpacity>
@@ -847,31 +849,34 @@ const DirectChatDetailsModal = ({
 
                             return (
                                 <TouchableOpacity
-                                    style={styles.gridMediaItem}
+                                    style={{ width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE, margin: 5 }}
                                     onPress={() => handleMediaPress(item, index)}
                                 >
                                     {isVideo ? (
-                                        <View style={styles.videoContainer}>
+                                        <View className="relative rounded overflow-hidden w-full h-full">
                                             <Video
                                                 source={{ uri: item.mediaUrl }}
-                                                style={styles.gridMediaThumbnail}
+                                                style={{ width: '100%', height: '100%' }}
                                                 resizeMode="cover"
                                                 shouldPlay={false}
                                             />
-                                            <View style={styles.playIconOverlay}>
+                                            <View className="absolute inset-0 flex justify-center items-center bg-black/30">
                                                 <FontAwesomeIcon icon={faVideoCamera} size={18} color="#fff" />
                                             </View>
                                         </View>
                                     ) : (
-                                        <Image source={{ uri: item.mediaUrl }} style={styles.gridMediaThumbnail} />
+                                        <Image
+                                            source={{ uri: item.mediaUrl }}
+                                            style={{ width: '100%', height: '100%', borderRadius: 3 }}
+                                        />
                                     )}
                                 </TouchableOpacity>
                             );
                         }}
                     />
                 ) : (
-                    <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>Không có ảnh hoặc video được chia sẻ</Text>
+                    <View className="flex-1 justify-center items-center">
+                        <Text className="text-gray-500">Không có ảnh hoặc video được chia sẻ</Text>
                     </View>
                 )
             )}
@@ -883,7 +888,7 @@ const DirectChatDetailsModal = ({
                         keyExtractor={(item, index) => `all-files-${item._id || index}`}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={styles.fileItem}
+                                className="flex-row items-center py-3 px-4 border-b border-gray-200"
                                 onPress={() => Linking.openURL(item.fileUrl)}
                             >
                                 <FontAwesomeIcon
@@ -891,9 +896,9 @@ const DirectChatDetailsModal = ({
                                     size={20}
                                     color="#888"
                                 />
-                                <View style={styles.fileInfo}>
-                                    <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-                                    <Text style={styles.fileDate}>
+                                <View className="ml-3 flex-1">
+                                    <Text className="text-base" numberOfLines={1}>{item.fileName}</Text>
+                                    <Text className="text-xs text-gray-500 mt-1">
                                         {new Date(item.createdAt).toLocaleDateString()}
                                     </Text>
                                 </View>
@@ -901,8 +906,8 @@ const DirectChatDetailsModal = ({
                         )}
                     />
                 ) : (
-                    <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>Không có tệp tin được chia sẻ</Text>
+                    <View className="flex-1 justify-center items-center">
+                        <Text className="text-gray-500">Không có tệp tin được chia sẻ</Text>
                     </View>
                 )
             )}
@@ -914,13 +919,13 @@ const DirectChatDetailsModal = ({
                         keyExtractor={(item, index) => `all-links-${item._id || index}`}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={styles.linkItem}
+                                className="flex-row items-center py-3 px-4 border-b border-gray-200"
                                 onPress={() => Linking.openURL(item.text)}
                             >
                                 <FontAwesomeIcon icon={faLink} size={20} color="#888" />
-                                <View style={styles.linkInfo}>
-                                    <Text style={styles.linkUrl} numberOfLines={1}>{item.text}</Text>
-                                    <Text style={styles.linkDate}>
+                                <View className="ml-3 flex-1">
+                                    <Text className="text-blue-500 text-base" numberOfLines={1}>{item.text}</Text>
+                                    <Text className="text-xs text-gray-500 mt-1">
                                         {new Date(item.createdAt).toLocaleDateString()}
                                     </Text>
                                 </View>
@@ -928,8 +933,8 @@ const DirectChatDetailsModal = ({
                         )}
                     />
                 ) : (
-                    <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>Không có liên kết được chia sẻ</Text>
+                    <View className="flex-1 justify-center items-center">
+                        <Text className="text-gray-500">Không có liên kết được chia sẻ</Text>
                     </View>
                 )
             )}
@@ -944,36 +949,34 @@ const DirectChatDetailsModal = ({
             onRequestClose={() => setMediaViewerVisible(false)}
         >
             <TouchableWithoutFeedback onPress={() => setMediaViewerVisible(false)}>
-                <View style={styles.mediaViewerContainer}>
+                <View className="flex-1 bg-black/90 justify-center items-center">
                     <TouchableOpacity
-                        style={styles.closeMediaButton}
+                        className="absolute top-16 right-5 z-10 p-3 bg-black/50 rounded-full"
                         onPress={() => setMediaViewerVisible(false)}
                     >
                         <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
                     </TouchableOpacity>
 
                     {/* Navigation Indicator */}
-                    <View style={styles.mediaCountIndicator}>
-                        <Text style={styles.mediaCountText}>
+                    <View className="absolute top-16 self-center bg-black/50 py-1 px-2.5 rounded-full">
+                        <Text className="text-white font-semibold">
                             {selectedMediaIndex + 1} / {mediaItems.length}
                         </Text>
                     </View>
 
                     <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
                         <Animated.View
-                            style={[
-                                styles.mediaViewerContent,
-                                {
-                                    transform: [{ translateX: translateX }],
-                                    opacity: mediaOpacity
-                                }
-                            ]}
+                            className="w-full h-4/5 justify-center items-center"
+                            style={{
+                                transform: [{ translateX: translateX }],
+                                opacity: mediaOpacity
+                            }}
                             {...panResponder.panHandlers}
                         >
                             {selectedMedia?.mediaType === 'video' ? (
                                 <Video
                                     source={{ uri: selectedMedia.mediaUrl }}
-                                    style={styles.fullSizeMedia}
+                                    className="w-full h-full"
                                     resizeMode="contain"
                                     useNativeControls
                                     shouldPlay
@@ -982,7 +985,7 @@ const DirectChatDetailsModal = ({
                             ) : (
                                 <Image
                                     source={{ uri: selectedMedia?.mediaUrl }}
-                                    style={styles.fullSizeMedia}
+                                    className="w-full h-full"
                                     resizeMode="contain"
                                 />
                             )}
@@ -992,7 +995,7 @@ const DirectChatDetailsModal = ({
                     {/* Navigation Buttons */}
                     {selectedMediaIndex > 0 && (
                         <TouchableOpacity
-                            style={[styles.navButton, styles.prevButton]}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 p-4 rounded-full"
                             onPress={() => navigateMedia(-1)}
                         >
                             <FontAwesomeIcon icon={faArrowLeft} size={24} color="#fff" />
@@ -1001,7 +1004,7 @@ const DirectChatDetailsModal = ({
 
                     {selectedMediaIndex < mediaItems.length - 1 && (
                         <TouchableOpacity
-                            style={[styles.navButton, styles.nextButton]}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 p-4 rounded-full"
                             onPress={() => navigateMedia(1)}
                         >
                             <FontAwesomeIcon icon={faArrowRight} size={24} color="#fff" />
@@ -1009,8 +1012,11 @@ const DirectChatDetailsModal = ({
                     )}
 
                     {/* Swipe Instructions - shown briefly when first opened */}
-                    <Animated.View style={[styles.swipeInstructions, { opacity: mediaOpacity }]}>
-                        <Text style={styles.swipeText}>Lướt sang trái/phải để chuyển ảnh</Text>
+                    <Animated.View
+                        className="absolute bottom-12 bg-black/50 py-2 px-4 rounded-full"
+                        style={{ opacity: mediaOpacity }}
+                    >
+                        <Text className="text-white font-medium">Lướt sang trái/phải để chuyển ảnh</Text>
                     </Animated.View>
                 </View>
             </TouchableWithoutFeedback>
@@ -1037,9 +1043,9 @@ const DirectChatDetailsModal = ({
             visible={visible}
             onRequestClose={onClose}
         >
-            <View style={styles.modalContainer}>
+            <View className="flex-1 bg-gray-100">
                 {renderHeader()}
-                <View style={styles.contentContainer}>
+                <View className="flex-1">
                     {renderContent()}
                 </View>
                 {renderMediaViewer()}
@@ -1047,481 +1053,5 @@ const DirectChatDetailsModal = ({
         </Modal>
     );
 };
-
-const styles = StyleSheet.create({
-    headerContainer: {
-        backgroundColor: '#ffffff',
-        width: '100%',
-        zIndex: 10,
-    },
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: '#f5f5f5',
-    },
-    contentContainer: {
-        flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 50,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        paddingHorizontal: 15,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    backButton: {
-        position: 'absolute',
-        left: 15,
-        paddingVertical: 10,
-        paddingHorizontal: 5,
-    },
-    closeButton: {
-        position: 'absolute',
-        right: 15,
-        paddingVertical: 10,
-        paddingHorizontal: 5,
-    },
-    container: {
-        flex: 1,
-        backgroundColor: '#f5f5f5',
-    },
-    profileSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    avatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-    },
-    nameContainer: {
-        marginLeft: 15,
-        flex: 1,
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    name: {
-        fontSize: 18,
-        fontWeight: '600',
-        marginRight: 8,
-    },
-    realName: {
-        fontSize: 14,
-        color: '#666',
-        fontWeight: 'normal',
-    },
-    editNicknameButton: {
-        padding: 4,
-    },
-    nicknameEditContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 5,
-        width: '100%',
-    },
-    nicknameInput: {
-        flex: 1,
-        borderBottomWidth: 1,
-        borderBottomColor: '#3b82f6',
-        fontSize: 16,
-        paddingVertical: 4,
-        marginRight: 8,
-    },
-    saveNicknameButton: {
-        padding: 4,
-        marginRight: 8,
-    },
-    cancelNicknameButton: {
-        padding: 4,
-    },
-    status: {
-        fontSize: 14,
-        color: '#4CAF50',
-        marginTop: 5,
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        padding: 15,
-        backgroundColor: '#fff',
-        marginTop: 10,
-    },
-    actionButton: {
-        alignItems: 'center',
-    },
-    iconContainer: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 5,
-    },
-    actionText: {
-        fontSize: 12,
-        color: '#555',
-        marginTop: 5,
-    },
-    infoSection: {
-        backgroundColor: '#fff',
-        marginTop: 10,
-        paddingVertical: 5,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    infoText: {
-        marginLeft: 15,
-        fontSize: 15,
-        color: '#333',
-    },
-    section: {
-        marginTop: 10,
-        backgroundColor: '#fff',
-        padding: 15,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    seeAllText: {
-        fontSize: 14,
-        color: '#0084ff',
-    },
-    mediaItem: {
-        marginRight: 8,
-    },
-    mediaThumbnail: {
-        width: 80,
-        height: 80,
-        borderRadius: 5,
-    },
-    videoContainer: {
-        position: 'relative',
-        borderRadius: 5,
-        overflow: 'hidden',
-    },
-    playIconOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    },
-    fileItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    fileInfo: {
-        marginLeft: 10,
-        flex: 1,
-    },
-    fileName: {
-        fontSize: 15,
-    },
-    fileDate: {
-        fontSize: 12,
-        color: '#888',
-        marginTop: 2,
-    },
-    linkItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    linkInfo: {
-        marginLeft: 10,
-        flex: 1,
-    },
-    linkUrl: {
-        fontSize: 15,
-        color: '#0084ff',
-    },
-    linkDate: {
-        fontSize: 12,
-        color: '#888',
-        marginTop: 2,
-    },
-    dangerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#fff',
-        marginTop: 20,
-        marginBottom: 30,
-        padding: 15,
-        borderRadius: 5,
-    },
-    dangerButtonText: {
-        color: '#ff3b30',
-        marginLeft: 10,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    emptyText: {
-        textAlign: 'center',
-        color: '#888',
-        padding: 15,
-    },
-    fullSection: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    tabBar: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    tab: {
-        flex: 1,
-        alignItems: 'center',
-        paddingVertical: 12,
-    },
-    activeTab: {
-        borderBottomWidth: 2,
-        borderBottomColor: '#0084ff',
-    },
-    tabText: {
-        fontSize: 15,
-        color: '#555',
-    },
-    activeTabText: {
-        color: '#0084ff',
-        fontWeight: '600',
-    },
-    gridMediaItem: {
-        width: THUMBNAIL_SIZE,
-        height: THUMBNAIL_SIZE,
-        margin: 5,
-    },
-    gridMediaThumbnail: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 3,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    mediaViewerContainer: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    },
-    mediaViewerContent: {
-        width: '100%',
-        height: '80%',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    closeMediaButton: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 60 : 40,
-        right: 20,
-        zIndex: 10,
-        padding: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 20,
-    },
-    fullSizeMedia: {
-        width: '100%',
-        height: '80%',
-    },
-    navButton: {
-        position: 'absolute',
-        top: '50%',
-        zIndex: 5,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: 15,
-        borderRadius: 30,
-        transform: [{ translateY: -25 }],
-    },
-    prevButton: {
-        left: 15,
-    },
-    nextButton: {
-        right: 15,
-    },
-    mediaCountIndicator: {
-        position: 'absolute',
-        top: Platform.OS === 'ios' ? 60 : 40,
-        alignSelf: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingVertical: 5,
-        paddingHorizontal: 10,
-        borderRadius: 15,
-    },
-    mediaCountText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    swipeInstructions: {
-        position: 'absolute',
-        bottom: 50,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 20,
-    },
-    swipeText: {
-        color: 'white',
-        fontWeight: '500',
-    },
-
-    // Add new styles for group functionality
-    groupMembersCount: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 5,
-    },
-    memberListHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        backgroundColor: '#fff',
-    },
-    memberListTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    addMemberButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#e6f7ff',
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 16,
-    },
-    addMemberText: {
-        color: '#0084ff',
-        fontSize: 14,
-        marginLeft: 6,
-    },
-    memberItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        backgroundColor: '#fff',
-    },
-    memberInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    memberAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-    },
-    memberNameContainer: {
-        marginLeft: 12,
-        flex: 1,
-    },
-    memberName: {
-        fontSize: 16,
-    },
-    adminBadge: {
-        backgroundColor: '#e6f7ff',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-        marginTop: 4,
-    },
-    adminBadgeText: {
-        color: '#0084ff',
-        fontSize: 12,
-    },
-    removeMemberButton: {
-        padding: 8,
-        backgroundColor: '#ffeeee',
-        borderRadius: 20,
-    },
-    membersPreview: {
-        backgroundColor: '#fff',
-        padding: 15,
-        marginTop: 10,
-    },
-    membersPreviewHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    membersPreviewTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    memberAvatarsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    memberAvatarSmall: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        marginRight: -8,
-        borderWidth: 2,
-        borderColor: '#fff',
-    },
-    moreMembersCircle: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#e0e0e0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 4,
-    },
-    moreMembersText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#666',
-    }
-});
 
 export default DirectChatDetailsModal;
