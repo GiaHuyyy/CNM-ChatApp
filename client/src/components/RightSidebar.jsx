@@ -121,7 +121,10 @@ const MediaItem = ({ message, type, handleImageClick }) => {
           );
         } else if (file.type?.startsWith("video/")) {
           return (
-            <button className="h-[72px] w-full overflow-hidden hover:opacity-80">
+            <button
+              className="h-[72px] w-full overflow-hidden hover:opacity-80"
+              onClick={() => handleImageClick(file.url)}
+            >
               <video className="h-full w-full rounded-[3px] object-cover">
                 <source src={file.url} type={file.type} />
                 Your browser does not support video.
@@ -441,11 +444,15 @@ export default function RightSidebar({
                 <FontAwesomeIcon icon={faEdit} width={20} />
               </button>
             </div>
-            <div className="mt-3 flex w-full items-center justify-between">
+            <div className="mt-3 flex w-full items-center justify-center space-x-2">
               <ActionGroupButton icon={faBell} title="Tăt thông báo" handleOnClick={commingSoon} />
               <ActionGroupButton icon={faThumbTack} title="Ghim hội thoại" handleOnClick={commingSoon} />
-              <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={handleAddMember} />
-              <ActionGroupButton icon={faGear} title="Quản lý nhóm" handleOnClick={commingSoon} />
+              {dataUser.isGroup && (
+                <>
+                  <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={handleAddMember} />
+                  <ActionGroupButton icon={faGear} title="Quản lý nhóm" handleOnClick={commingSoon} />
+                </>
+              )}
             </div>
           </div>
           {dataUser.isGroup && (
