@@ -25,6 +25,10 @@ import ShareMessageModal from "../../components/ShareMessageModal";
 import AddGroupMembersModal from "../../components/AddGroupMembersModal";
 import { router } from "expo-router";
 import { REACT_APP_BACKEND_URL } from "@env";
+import IncomingCallModal from '../components/calls/IncomingCallModal';
+import CallScreen from '../components/calls/CallScreen';
+import CallButton from '../components/calls/CallButton';
+import { useCallContext } from '../context/CallContext';
 
 const DEBUG_MODE = false; // Set to true only when debugging specific issues
 
@@ -324,11 +328,11 @@ export default function Chat() {
             const response = await axios.post(
               `${REACT_APP_BACKEND_URL}/api/search-friend-user`,
               { search: searchQuery },
-              { 
+              {
                 headers: {
                   Authorization: `Bearer ${token}`
                 },
-                withCredentials: true 
+                withCredentials: true
               }
             );
 
@@ -347,7 +351,7 @@ export default function Chat() {
           } catch (error) {
             console.error("Search error:", error.response?.data || error);
             setSearchResults([]);
-            
+
             // Show error alert for search failures
             if (error.response?.status === 401) {
               Alert.alert("Authentication Error", "Please login again to continue.");
@@ -1921,12 +1925,20 @@ export default function Chat() {
               <View className="flex-row items-center">
                 {!selectedChat.userDetails?.isGroup && (
                   <>
-                    <TouchableOpacity className="mr-4">
-                      <FontAwesomeIcon icon={faPhone} size={18} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity className="mr-4">
-                      <FontAwesomeIcon icon={faVideo} size={18} color="white" />
-                    </TouchableOpacity>
+                    <CallButton
+                      userId={selectedChat.userDetails?._id}
+                      userName={chatUser?.name}
+                      userImage={chatUser?.profilePic}
+                      isVideoCall={false}
+                      isOnline={chatUser?.online}
+                    />
+                    <CallButton
+                      userId={selectedChat.userDetails?._id}
+                      userName={chatUser?.name}
+                      userImage={chatUser?.profilePic}
+                      isVideoCall={true}
+                      isOnline={chatUser?.online}
+                    />
                   </>
                 )}
                 <TouchableOpacity className="mr-4">
@@ -2468,6 +2480,9 @@ export default function Chat() {
             setShowCreateGroupModal(false);
           }}
         />
+
+        <IncomingCallModal />
+        <CallScreen />
       </View>
     </SafeAreaView>
   );

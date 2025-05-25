@@ -1,5 +1,6 @@
 import PropTypes from "prop-types";
 import { createContext, useContext, useEffect, useState } from "react";
+import CallProvider from "./CallContext";
 
 const GlobalContext = createContext();
 
@@ -85,7 +86,9 @@ const GlobalProvider = ({ children }) => {
         setSeenMessage
       }}
     >
-      {children}
+      <CallProvider>
+        {children}
+      </CallProvider>
     </GlobalContext.Provider>
   );
 };
