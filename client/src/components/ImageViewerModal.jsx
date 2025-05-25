@@ -36,6 +36,6 @@ export default function ImageViewerModal({ fileUrl, onClose }) {
 }
 
 ImageViewerModal.propTypes = {
-  imageUrl: PropTypes.string.isRequired,
+  fileUrl: PropTypes.string.isRequired,
   onClose: PropTypes.func.isRequired,
 };

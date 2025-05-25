@@ -308,9 +308,8 @@ const getAllMediaItems = (messages, type) => {
 export default function RightSidebar({
   socketConnection,
   params,
-  isVisible,
-  dataUser,
   user,
+  dataUser,
   photoVideoMessages,
   fileMessages,
   linkMessages,
@@ -410,7 +409,7 @@ export default function RightSidebar({
     }
   };
 
-  if (!isVisible) return null;
+  // if (!isVisible) return null;
 
   return (
     <div className="custom-scrollbar !max-h-[100vh] w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
@@ -446,7 +445,20 @@ export default function RightSidebar({
             </div>
             <div className="mt-3 flex w-full items-center justify-center space-x-2">
               <ActionGroupButton icon={faBell} title="Tăt thông báo" handleOnClick={commingSoon} />
-              <ActionGroupButton icon={faThumbTack} title="Ghim hội thoại" handleOnClick={commingSoon} />
+              <ActionGroupButton
+                icon={faThumbTack}
+                title={
+                  Array.isArray(dataUser.pinnedBy) && dataUser.pinnedBy.includes(user._id)
+                    ? "Bỏ ghim hội thoại"
+                    : "Ghim hội thoại"
+                }
+                handleOnClick={() => {
+                  socketConnection.emit("pinConversation", {
+                    conversationId: dataUser._id,
+                    pin: !Array.isArray(dataUser.pinnedBy) || !dataUser.pinnedBy.includes(user._id),
+                  });
+                }}
+              />
               {dataUser.isGroup && (
                 <>
                   <ActionGroupButton icon={faUsers} title="Thêm thành viên" handleOnClick={handleAddMember} />
@@ -669,9 +681,6 @@ RightSidebar.propTypes = {
   photoVideoMessages: PropTypes.array.isRequired,
   fileMessages: PropTypes.array.isRequired,
   linkMessages: PropTypes.array.isRequired,
-  handleLeaveGroup: PropTypes.func.isRequired,
-  handleDeleteConversation: PropTypes.func.isRequired,
-  handleRemoveMember: PropTypes.func.isRequired,
   showContextMenu: PropTypes.string.isRequired,
   setShowContextMenu: PropTypes.func.isRequired,
 };

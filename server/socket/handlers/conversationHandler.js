@@ -293,6 +293,21 @@ const conversationHandler = (io, socket, userId, onlineUser) => {
       });
     }
   });
+
+  // Pin / Unpin conversation
+  socket.on("pinConversation", async ({ conversationId, pin }) => {
+    try {
+      if (pin) {
+        await ConversationModel.updateOne({ _id: conversationId }, { $addToSet: { pinnedBy: userId } });
+      } else {
+        await ConversationModel.updateOne({ _id: conversationId }, { $pull: { pinnedBy: userId } });
+      }
+      const updatedList = await getConversation(userId.toString());
+      socket.emit("conversation", updatedList);
+    } catch (err) {
+      socket.emit("error", { message: "Không thể ghim cuộc trò chuyện" });
+    }
+  });
 };
 
 module.exports = conversationHandler;
