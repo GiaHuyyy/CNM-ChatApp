@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBell, faEdit, faUser } from "@fortawesome/free-regular-svg-icons";
@@ -322,7 +322,26 @@ export default function RightSidebar({
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState("");
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
   const navigate = useNavigate();
+
+  // Add useEffect to get all conversations for counting pinned ones
+  useEffect(() => {
+    if (socketConnection) {
+      socketConnection.on("conversation", (data) => {
+        if (data) {
+          setAllUsers(data);
+        }
+      });
+
+      // Request conversations data on component mount
+      socketConnection.emit("sidebar", user?._id);
+
+      return () => {
+        socketConnection.off("conversation");
+      };
+    }
+  }, [socketConnection, user?._id]);
 
   const handleImageClick = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -361,6 +380,33 @@ export default function RightSidebar({
       const mutedIdStr =
         typeof mutedId === "object" ? (mutedId._id ? mutedId._id.toString() : mutedId.toString()) : mutedId.toString();
       return mutedIdStr === memberId;
+    });
+  };
+
+  // Add function to count pinned conversations
+  const countPinnedConversations = () => {
+    return allUsers ? allUsers.filter((chat) => chat.pinned).length : 0;
+  };
+
+  const handlePinConversation = () => {
+    const isPinned = Array.isArray(dataUser.pinnedBy) && dataUser.pinnedBy.includes(user._id);
+
+    // If trying to pin and already at limit
+    if (!isPinned && countPinnedConversations() >= 5) {
+      toast.error("Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!", {
+        position: "top-center",
+      });
+      return;
+    }
+
+    socketConnection.emit("pinConversation", {
+      conversationId: dataUser._id,
+      pin: !isPinned,
+    });
+
+    // Give feedback with toast
+    toast.success(!isPinned ? "Đã ghim hội thoại" : "Đã bỏ ghim hội thoại", {
+      position: "top-center",
     });
   };
 
@@ -452,12 +498,7 @@ export default function RightSidebar({
                     ? "Bỏ ghim hội thoại"
                     : "Ghim hội thoại"
                 }
-                handleOnClick={() => {
-                  socketConnection.emit("pinConversation", {
-                    conversationId: dataUser._id,
-                    pin: !Array.isArray(dataUser.pinnedBy) || !dataUser.pinnedBy.includes(user._id),
-                  });
-                }}
+                handleOnClick={handlePinConversation}
               />
               {dataUser.isGroup && (
                 <>
@@ -675,12 +716,15 @@ export default function RightSidebar({
 }
 
 RightSidebar.propTypes = {
-  isVisible: PropTypes.bool.isRequired,
-  dataUser: PropTypes.object.isRequired,
+  socketConnection: PropTypes.object,
+  params: PropTypes.object,
   user: PropTypes.object.isRequired,
+  dataUser: PropTypes.object.isRequired,
   photoVideoMessages: PropTypes.array.isRequired,
   fileMessages: PropTypes.array.isRequired,
   linkMessages: PropTypes.array.isRequired,
+  handleAddMember: PropTypes.func,
   showContextMenu: PropTypes.string.isRequired,
   setShowContextMenu: PropTypes.func.isRequired,
+  setConfirmModal: PropTypes.func,
 };

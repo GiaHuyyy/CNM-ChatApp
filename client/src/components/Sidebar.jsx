@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { faAddressBook, faImage, faMessage, faSquareCheck } from "@fortawesome/free-regular-svg-icons";
 import {
@@ -221,8 +222,18 @@ export default function Sidebar({ onGroupCreated }) {
         }
       });
 
+      // Add error event listener
+      socketConnection.on("error", (error) => {
+        if (error.type === "PIN_LIMIT_EXCEEDED") {
+          toast.error(error.message || "Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!", {
+            position: "top-center",
+          });
+        }
+      });
+
       return () => {
         socketConnection.off("conversationDeleted");
+        socketConnection.off("error"); // Clean up error listener
       };
     }
   }, [socketConnection, user?._id]);
@@ -243,7 +254,22 @@ export default function Sidebar({ onGroupCreated }) {
   }, []);
 
   const handlePin = (id, pinned) => {
+    // Check if we're trying to pin (not unpin) and count current pins
+    if (!pinned) {
+      const pinnedCount = allUsers.filter((chat) => chat.pinned).length;
+      if (pinnedCount >= 5) {
+        toast.error("Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!", {
+          position: "top-center",
+        });
+        setContextMenu(null);
+        return;
+      }
+    }
+
     socketConnection.emit("pinConversation", { conversationId: id, pin: !pinned });
+    toast.success(!pinned ? "Đã ghim hội thoại" : "Đã bỏ ghim hội thoại", {
+      position: "top-center",
+    });
     setContextMenu(null);
   };
 
@@ -450,7 +476,7 @@ export default function Sidebar({ onGroupCreated }) {
                               <FontAwesomeIcon
                                 icon={faThumbTack}
                                 width={12}
-                                className="ml-1 text-yellow-500 rotate-45"
+                                className="ml-1 rotate-45 text-yellow-500"
                                 title="Ghim cuộc trò chuyện"
                               />
                             )}
