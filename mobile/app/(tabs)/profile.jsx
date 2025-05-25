@@ -33,20 +33,13 @@ import { REACT_APP_BACKEND_URL } from "@env";
 
 // Dữ liệu mẫu cho các menu items
 const menuItems = [
-  // Bỏ các mục: zcloud, zstyle, mycloud, privacy
+  // Bỏ các mục: zcloud, zstyle, mycloud, privacy, qr
   {
     id: 'devicedata',
     icon: faDatabase,
     title: 'Dữ liệu trên máy',
     description: 'Quản lý dữ liệu Zalo của bạn',
     hasArrow: true
-  },
-  {
-    id: 'qr',
-    icon: faQrcode,
-    title: 'Ví QR',
-    description: 'Lưu trữ và xuất trình các mã QR quan trọng',
-    hasArrow: false
   },
   {
     id: 'security',
