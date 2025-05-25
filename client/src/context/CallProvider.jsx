@@ -21,7 +21,7 @@ import { useGlobalContext } from "./GlobalProvider";
 
 // Create a better WebRTC wrapper to fix audio issues
 const createPeerConnection = (config) => {
-  const { initiator, stream, onSignal, onStream, onError, onClose } = config;
+  const { initiator, stream, onSignal, onStream, onError, onClose, isVideoCall } = config;
 
   // Create RTCPeerConnection with ICE servers
   const pc = new RTCPeerConnection({
@@ -141,50 +141,219 @@ const createPeerConnection = (config) => {
         const icePwd = generateRandomString(32);  // At least 22 chars
         const fingerprint = generateFingerprint();
 
-        // Create a minimal valid SDP for WebRTC with proper ICE parameters
-        const validSdp = `v=0\r\n` +
+        // Create a minimal valid SDP for WebRTC with proper ICE parameters and MAINTAINING ORDER
+        // The critical fix: we need to ensure the order of m-lines matches exactly what was in the offer
+        // For offers and answers, audio MUST come before video
+        let validSdp = `v=0\r\n` +
           `o=- ${Date.now()} 2 IN IP4 127.0.0.1\r\n` +
           `s=-\r\n` +
           `t=0 0\r\n` +
-          `a=group:BUNDLE 0\r\n` +
-          `a=msid-semantic: WMS\r\n` +
-          `m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n` +
+          `a=group:BUNDLE audio${isVideoCall ? ' video' : ''}\r\n` +
+          `a=msid-semantic: WMS\r\n`;
+
+        // Always include audio first
+        validSdp += `m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n` +
           `c=IN IP4 0.0.0.0\r\n` +
+          `a=rtcp:9 IN IP4 0.0.0.0\r\n` +
           `a=ice-ufrag:${iceUfrag}\r\n` +
           `a=ice-pwd:${icePwd}\r\n` +
           `a=fingerprint:sha-256 ${fingerprint}\r\n` +
           `a=setup:${signal.type === 'offer' ? 'actpass' : 'active'}\r\n` +
-          `a=mid:0\r\n` +
-          `a=sctp-port:5000\r\n` +
-          `a=max-message-size:262144\r\n`;
+          `a=mid:audio\r\n` +
+          `a=rtcp-mux\r\n` + // Add rtcp-mux attribute - critical fix
+          `a=sendrecv\r\n` +
+          `a=rtpmap:111 opus/48000/2\r\n` +
+          `a=rtcp-fb:111 transport-cc\r\n` +
+          `a=fmtp:111 minptime=10;useinbandfec=1\r\n`;
+
+        // Add video section only for video calls and only after audio
+        if (isVideoCall) {
+          validSdp += `m=video 9 UDP/TLS/RTP/SAVPF 96\r\n` +
+            `c=IN IP4 0.0.0.0\r\n` +
+            `a=rtcp:9 IN IP4 0.0.0.0\r\n` +
+            `a=ice-ufrag:${iceUfrag}\r\n` +
+            `a=ice-pwd:${icePwd}\r\n` +
+            `a=fingerprint:sha-256 ${fingerprint}\r\n` +
+            `a=setup:${signal.type === 'offer' ? 'actpass' : 'active'}\r\n` +
+            `a=mid:video\r\n` +
+            `a=rtcp-mux\r\n` + // Add rtcp-mux attribute - critical fix
+            `a=sendrecv\r\n` +
+            `a=rtpmap:96 H264/90000\r\n` +
+            `a=rtcp-fb:96 nack\r\n` +
+            `a=rtcp-fb:96 nack pli\r\n`;
+        }
 
         // Replace the simulated SDP with our valid one
         signal.sdp = validSdp;
 
-        console.log("Created valid SDP replacement with ICE parameters:", {
-          ufrag: iceUfrag,
+        console.log("Created valid SDP replacement with correct m-line order:", {
+          type: signal.type,
+          hasAudio: true,
+          hasVideo: isVideoCall,
+          hasRtcpMux: true, // Log that rtcp-mux is included
+          ufrag: iceUfrag.substring(0, 4) + '...',
           pwdLength: icePwd.length
         });
+      } else if (signal.sdp) {
+        // For real SDP (not simulated), ensure rtcp-mux is present
+        if (!signal.sdp.includes('a=rtcp-mux')) {
+          console.warn("Received SDP without rtcp-mux, adding it");
+
+          // Add rtcp-mux to each media section if missing
+          let modifiedSdp = signal.sdp;
+          const mediaMatches = modifiedSdp.match(/m=[^\r\n]+\r\n/g) || [];
+
+          for (const mediaLine of mediaMatches) {
+            const mediaSection = mediaLine.trim();
+            const mediaType = mediaSection.split(' ')[0].substring(2); // Extract "audio" or "video"
+
+            // Find the end of this media section
+            const mediaStartIndex = modifiedSdp.indexOf(mediaSection);
+            if (mediaStartIndex !== -1) {
+              // Find if rtcp-mux is already present in this media section
+              const nextMediaIndex = modifiedSdp.indexOf('m=', mediaStartIndex + mediaSection.length);
+              const endIndex = nextMediaIndex !== -1 ? nextMediaIndex : modifiedSdp.length;
+              const mediaBlock = modifiedSdp.substring(mediaStartIndex, endIndex);
+
+              if (!mediaBlock.includes('a=rtcp-mux')) {
+                // Insert rtcp-mux after the mid attribute
+                const midIndex = modifiedSdp.indexOf('a=mid:', mediaStartIndex);
+                if (midIndex !== -1 && midIndex < endIndex) {
+                  const midEndIndex = modifiedSdp.indexOf('\r\n', midIndex) + 2;
+                  modifiedSdp =
+                    modifiedSdp.substring(0, midEndIndex) +
+                    'a=rtcp-mux\r\n' +
+                    modifiedSdp.substring(midEndIndex);
+                }
+              }
+            }
+          }
+
+          signal.sdp = modifiedSdp;
+          console.log("Added rtcp-mux to SDP");
+        }
       }
 
       if (signal.type === "offer") {
         console.log("Received offer, setting remote description");
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-        console.log("Creating answer");
-        const answer = await pc.createAnswer();
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          console.log("Remote description set successfully (offer)");
+          console.log("Creating answer");
 
-        // Modify SDP to ensure audio works
-        let modifiedSdp = answer.sdp;
-        modifiedSdp = modifiedSdp.replace(/(a=mid:audio\r\n)/, "$1a=setup:active\r\n");
-        answer.sdp = modifiedSdp;
+          const answer = await pc.createAnswer();
 
-        await pc.setLocalDescription(answer);
-        console.log("Local description set (answer)");
-        onSignal(pc.localDescription);
+          // Modify SDP to ensure audio works
+          let modifiedSdp = answer.sdp;
+          modifiedSdp = modifiedSdp.replace(/(a=mid:audio\r\n)/, "$1a=setup:active\r\n");
+
+          // Ensure rtcp-mux is present in our answer
+          if (!modifiedSdp.includes('a=rtcp-mux')) {
+            modifiedSdp = modifiedSdp.replace(/(a=mid:(audio|video)\r\n)/g, "$1a=rtcp-mux\r\n");
+          }
+
+          answer.sdp = modifiedSdp;
+
+          await pc.setLocalDescription(answer);
+          console.log("Local description set (answer)");
+          onSignal(pc.localDescription);
+        } catch (err) {
+          console.error("Error setting remote offer:", err);
+
+          // Special handling for rtcp-mux errors
+          if (err.message && err.message.includes('rtcp-mux must be enabled')) {
+            console.warn("rtcp-mux error detected, attempting to fix the SDP");
+
+            // Create a modified offer with rtcp-mux
+            let fixedOfferSdp = signal.sdp;
+            if (!fixedOfferSdp.includes('a=rtcp-mux')) {
+              fixedOfferSdp = fixedOfferSdp.replace(/(a=mid:(audio|video)\r\n)/g, "$1a=rtcp-mux\r\n");
+
+              try {
+                const fixedOffer = new RTCSessionDescription({
+                  type: "offer",
+                  sdp: fixedOfferSdp
+                });
+
+                await pc.setRemoteDescription(fixedOffer);
+                const answer = await pc.createAnswer();
+
+                // Ensure our answer also has rtcp-mux
+                let modifiedSdp = answer.sdp;
+                if (!modifiedSdp.includes('a=rtcp-mux')) {
+                  modifiedSdp = modifiedSdp.replace(/(a=mid:(audio|video)\r\n)/g, "$1a=rtcp-mux\r\n");
+                }
+
+                answer.sdp = modifiedSdp;
+                await pc.setLocalDescription(answer);
+                onSignal(pc.localDescription);
+                console.log("Recovery successful: fixed rtcp-mux issue");
+                return;
+              } catch (recoveryErr) {
+                console.error("Recovery attempt failed:", recoveryErr);
+              }
+            }
+          }
+
+          throw err;
+        }
       } else if (signal.type === "answer") {
         console.log("Received answer, setting remote description");
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-        console.log("Remote description set");
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          console.log("Remote description set successfully");
+        } catch (err) {
+          console.error("Failed to set remote description:", err);
+
+          // Recovery attempt for m-line order issues
+          if (err.message?.includes("order of m-lines") || err.name === "InvalidAccessError") {
+            console.warn("Detected m-line order issue, attempting recovery...");
+
+            // Create a compatible answer by cloning our local description and modifying SDP
+            const localDesc = pc.localDescription;
+            if (localDesc && localDesc.sdp) {
+              // Extract media sections from local description to ensure same order
+              const mediaPattern = /m=(?:audio|video).*?(?=m=|$)/gs;
+              const localMedia = localDesc.sdp.match(mediaPattern) || [];
+
+              if (localMedia.length > 0) {
+                console.log("Creating compatible answer based on our offer structure");
+
+                // Create basic SDP with session-level attributes
+                const sessionPattern = /(v=.*?)m=/s;
+                const sessionMatch = localDesc.sdp.match(sessionPattern);
+                const sessionPart = sessionMatch ? sessionMatch[1] : "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n";
+
+                // Reuse the local media sections but change attributes as needed
+                let fixedSdp = sessionPart;
+
+                // Add media sections in the same order as the local description
+                localMedia.forEach(section => {
+                  // Modify setup attribute for answer
+                  fixedSdp += section.replace(/a=setup:actpass/g, "a=setup:active");
+                });
+
+                // Create a fixed answer and apply it
+                const fixedAnswer = new RTCSessionDescription({
+                  type: "answer",
+                  sdp: fixedSdp
+                });
+
+                try {
+                  await pc.setRemoteDescription(fixedAnswer);
+                  console.log("Recovery successful: set compatible remote description");
+                  return; // Exit early on success
+                } catch (recoveryErr) {
+                  console.error("Recovery attempt failed:", recoveryErr);
+                  // Continue to normal error handling
+                }
+              }
+            }
+          }
+
+          // If we get here, we couldn't recover
+          throw err;
+        }
       } else if (signal.candidate) {
         // Only add candidate if remote description has been set
         if (pc.remoteDescription) {
@@ -208,7 +377,11 @@ const createPeerConnection = (config) => {
       console.error("Signal that caused error:", signal);
 
       // More descriptive error
-      if (err.message?.includes("ICE pwd")) {
+      if (err.message?.includes("rtcp-mux must be enabled")) {
+        console.error("SDP format issue: rtcp-mux is required when BUNDLE is enabled");
+      } else if (err.message?.includes("order of m-lines")) {
+        console.error("SDP format issue: The order of media lines in the SDP doesn't match between offer and answer");
+      } else if (err.message?.includes("ICE pwd")) {
         console.error("ICE password length issue detected. Needs to be 22-256 characters.");
       }
 
@@ -559,7 +732,7 @@ export default function CallProvider({ children }) {
       const peerConnection = createPeerConnection({
         initiator: true,
         stream,
-        isVideoCall,
+        isVideoCall, // Pass isVideoCall to createPeerConnection
         onSignal: (signal) => {
           console.log("Local signal generated:", signal.type || "ICE candidate");
 
@@ -671,7 +844,7 @@ export default function CallProvider({ children }) {
       const peerConnection = createPeerConnection({
         initiator: false,
         stream,
-        isVideoCall: callState.isVideoCall,
+        isVideoCall: callState.isVideoCall, // Pass isVideoCall to createPeerConnection
         onSignal: (signal) => {
           console.log("Answer signal generated:", signal.type || "ICE candidate");
 
