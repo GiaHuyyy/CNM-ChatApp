@@ -20,7 +20,7 @@ async function userDetails(request, response) {
     }
 
     return response.status(200).json({
-      message: "User details",
+      message: "Thông tin người dùng",
       data: user,
       success: true,
     });

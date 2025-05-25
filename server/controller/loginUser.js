@@ -9,13 +9,13 @@ async function loginUser(request, response) {
     const user = await UserModel.findOne({ email });
 
     if (!user) {
-      return response.status(400).json({ message: "User not exist", error: true });
+      return response.status(400).json({ message: "Tài khoản không tồn tại!", error: true });
     }
 
     const verifyPassword = await bcryptjs.compare(password, user.password);
 
     if (!verifyPassword) {
-      return response.status(400).json({ message: "Please check password", error: true });
+      return response.status(400).json({ message: "Vui lòng kiểm tra lại mật khẩu!", error: true });
     }
 
     const tokenData = {
@@ -34,7 +34,7 @@ async function loginUser(request, response) {
     return response
       .cookie("token", token, cookieOptions)
       .status(200)
-      .json({ message: "Login successfully", token: token, success: true });
+      .json({ message: "Đăng nhập thành công!", token: token, success: true });
   } catch (error) {
     response.status(500).json({ message: error.message || error, error: true });
   }

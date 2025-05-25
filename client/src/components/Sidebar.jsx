@@ -445,7 +445,8 @@ export default function Sidebar({ onGroupCreated }) {
                             )}
                             {/* The actual message content - unchanged */}
                             {chatItem?.latestMessage?.text && chatItem?.latestMessage?.text}
-                            {chatItem?.latestMessage?.imageUrl && (
+                            {/* Image */}
+                            {chatItem?.latestMessage?.files?.some((file) => file.type.startsWith("image/")) && (
                               <>
                                 <FontAwesomeIcon icon={faImage} width={15} className="text-[#ccc]" />
                                 {chatItem?.latestMessage?.fileName
@@ -453,10 +454,18 @@ export default function Sidebar({ onGroupCreated }) {
                                   : " Hình ảnh"}
                               </>
                             )}
-                            {chatItem?.latestMessage?.fileUrl && (
+                            {/* Video */}
+                            {chatItem?.latestMessage?.files?.some((file) => file.type.startsWith("video/")) && (
+                              <>
+                                <FontAwesomeIcon icon={faImage} width={15} className="text-[#ccc]" />
+                                {chatItem?.latestMessage?.fileName ? ` ${chatItem?.latestMessage?.fileName}` : " Video"}
+                              </>
+                            )}
+                            {/* File .docx, .pdf */}
+                            {chatItem?.latestMessage?.files?.some((file) => file.type.startsWith("application/")) && (
                               <>
                                 <FontAwesomeIcon icon={faFilePen} width={15} className="text-[#ccc]" />
-                                {chatItem?.latestMessage?.fileName}
+                                {chatItem?.latestMessage?.fileName ? ` ${chatItem?.latestMessage?.fileName}` : " Tài liệu"}
                               </>
                             )}
                           </p>

@@ -48,7 +48,7 @@ const handleFileUpload = (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "File uploaded successfully",
+      message: "File đã được tải lên thành công",
       url: fileUrl,
       key: req.file.key,
     });
