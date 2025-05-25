@@ -261,8 +261,7 @@ const getAllMediaItems = (messages, type) => {
           });
         });
       }
-    }
-    else {
+    } else {
       if (type === "photo") {
         const url = message.imageUrl || message.fileUrl;
         const isMediaFile = url && (isImageFile(url) || isVideoFile(url));
@@ -371,7 +370,7 @@ export default function RightSidebar({
     switch (activeTab) {
       case "Anh/Video":
         return (
-          <div className="grid grid-cols-4 gap-2 px-4 mt-4">
+          <div className="mt-4 grid grid-cols-4 gap-2 px-4">
             {processedPhotoVideoMessages.map((mediaItem, index) => (
               <MediaItem
                 key={mediaItem._id || index}
@@ -411,7 +410,7 @@ export default function RightSidebar({
   if (!isVisible) return null;
 
   return (
-    <div className="w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
+    <div className="custom-scrollbar !max-h-[100vh] w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
       {/* Header */}
       <div className="sticky top-0 z-10 flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
         {showContextMenu !== "Thông tin hội thoại" && (
@@ -663,7 +662,6 @@ RightSidebar.propTypes = {
   photoVideoMessages: PropTypes.array.isRequired,
   fileMessages: PropTypes.array.isRequired,
   linkMessages: PropTypes.array.isRequired,
-  onAddMember: PropTypes.func.isRequired,
   handleLeaveGroup: PropTypes.func.isRequired,
   handleDeleteConversation: PropTypes.func.isRequired,
   handleRemoveMember: PropTypes.func.isRequired,

@@ -761,7 +761,7 @@ export default function MessagePage() {
 
         <div className="flex flex-1 overflow-hidden">
           <section
-            className={`scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+            className={`custom-scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
             ref={messagesContainerRef}
           >
             {/* Loading chat */}

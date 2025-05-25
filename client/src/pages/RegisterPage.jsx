@@ -4,6 +4,7 @@ import axios from "axios";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
+// eslint-disable-next-line no-unused-vars
 import uploadFileToS3 from "../helpers/uploadFileToS3";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 

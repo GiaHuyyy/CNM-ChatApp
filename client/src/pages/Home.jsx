@@ -23,18 +23,21 @@ export default function Home() {
 
         dispatch(setUser(response?.data?.data));
 
-        if (response?.data?.data?.logout) {
-          toast.warning(response?.data?.data?.message);
-          dispatch(logout());
-          localStorage.removeItem("token");
-          navigate("/auth", { replace: true });
-        }
+        // if (response?.data?.data?.logout) {
+        //   toast.warning(response?.data?.data?.message);
+        //   dispatch(logout());
+        //   localStorage.removeItem("token");
+        //   navigate("/auth", { replace: true });
+        // }
       } catch (error) {
-        toast.error(error.response?.data?.message);
+        toast.warning(error.response?.data?.message);
+        dispatch(logout());
+        localStorage.removeItem("token");
+        window.location.href = "/auth";
       }
     };
     fetchUseDetails();
-  }, [dispatch, navigate]);
+  }, [dispatch, navigate, location]);
 
   /***
    * Socket connection
