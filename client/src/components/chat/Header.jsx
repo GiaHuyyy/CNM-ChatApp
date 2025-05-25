@@ -1,10 +1,12 @@
 import { faBookmark } from "@fortawesome/free-regular-svg-icons";
-import { faBars, faMagnifyingGlass, faPhone, faPlus, faUsers, faVideo } from "@fortawesome/free-solid-svg-icons";
+import { faBars, faMagnifyingGlass, faPhone, faUsers, faVideo } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import Button from "./Button";
 import commingSoon from "../../helpers/commingSoon";
 import { useEffect, useState, useCallback } from "react";
 import { useGlobalContext } from "../../context/GlobalProvider";
+import axios from "axios";
+import { useSelector } from "react-redux";
 
 export default function Header({
   dataUser,
@@ -17,6 +19,33 @@ export default function Header({
   const { socketConnection } = useGlobalContext();
   const [onlineMembers, setOnlineMembers] = useState(0);
   const [onlineUserList, setOnlineUserList] = useState([]);
+  const [isFriend, setIsFriend] = useState(true);
+  const currentUser = useSelector((state) => state.user);
+
+  // Check if users are friends
+  useEffect(() => {
+    const checkFriendStatus = async () => {
+      // Only check for non-group conversations and if we have valid user IDs
+      if (dataUser?.isGroup || !dataUser?._id || !currentUser?._id) {
+        return;
+      }
+
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_APP_BACKEND_URL}/api/check-friend/${dataUser._id}`, {
+          withCredentials: true,
+        });
+
+        // If request succeeded and status is "accepted", they are friends
+        setIsFriend(response.data.success && response.data.data.status === "accepted");
+      } catch (error) {
+        console.error("Error checking friend status:", error);
+        // Default to assuming they are friends if check fails
+        setIsFriend(false);
+      }
+    };
+
+    checkFriendStatus();
+  }, [dataUser?._id, dataUser?.isGroup, currentUser?._id]);
 
   // Calculate online members using memoized function to avoid unnecessary recalculations
   const calculateOnlineMembers = useCallback(() => {
@@ -115,11 +144,17 @@ export default function Header({
           <div className="flex flex-col gap-y-1">
             <span className="text-base font-semibold">{dataUser?.name}</span>
             <div className="flex items-center space-x-2">
-              {dataUser.isGroup && (
+              {dataUser.isGroup ? (
                 <span className="text-xs text-gray-500">
                   {dataUser.members?.length || 0} thành viên
                   {onlineMembers > 0 && <span className="text-green-500"> • {onlineMembers} online</span>}
                 </span>
+              ) : (
+                !isFriend && (
+                  <div className="flex h-5 items-center justify-center rounded bg-gray-300 px-1 pt-[1px]">
+                    <span className="text-[10px] font-bold">NGƯỜI LẠ</span>
+                  </div>
+                )
               )}
               <button className="flex">
                 <FontAwesomeIcon
@@ -133,7 +168,6 @@ export default function Header({
         </div>
       )}
       <div className="flex items-center space-x-[3px]">
-        <Button title="Thêm bạn vào nhóm" icon={faPlus} width={20} handleOnClick={commingSoon} />
         <Button
           title={dataUser.online ? "Cuộc gọi thoại" : "Người dùng không trực tuyến"}
           icon={faPhone}
