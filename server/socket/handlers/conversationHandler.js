@@ -293,6 +293,40 @@ const conversationHandler = (io, socket, userId, onlineUser) => {
       });
     }
   });
+
+  // Pin / Unpin conversation
+  socket.on("pinConversation", async ({ conversationId, pin }) => {
+    try {
+      // If pinning (not unpinning), check the limit
+      if (pin) {
+        // Count how many conversations the user has already pinned
+        const pinnedCount = await ConversationModel.countDocuments({
+          pinnedBy: userId,
+        });
+
+        // If already at or exceeding the limit, reject
+        if (pinnedCount >= 5) {
+          socket.emit("error", {
+            message: "Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!",
+            type: "PIN_LIMIT_EXCEEDED",
+          });
+          return;
+        }
+      }
+
+      // Proceed with pinning/unpinning
+      if (pin) {
+        await ConversationModel.updateOne({ _id: conversationId }, { $addToSet: { pinnedBy: userId } });
+      } else {
+        await ConversationModel.updateOne({ _id: conversationId }, { $pull: { pinnedBy: userId } });
+      }
+
+      const updatedList = await getConversation(userId.toString());
+      socket.emit("conversation", updatedList);
+    } catch (err) {
+      socket.emit("error", { message: "Không thể ghim cuộc trò chuyện" });
+    }
+  });
 };
 
 module.exports = conversationHandler;

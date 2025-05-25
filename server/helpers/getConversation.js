@@ -64,6 +64,7 @@ async function getConversation(userId, forceRefresh = false) {
               isGroup: true,
               members: conversation.members,
               groupAdmin: conversation.groupAdmin,
+              pinned: conversation.pinnedBy && conversation.pinnedBy.includes(userObjectId),
             };
           }
           // Direct conversations
@@ -101,6 +102,7 @@ async function getConversation(userId, forceRefresh = false) {
               latestMessage,
               unseenMessages,
               isGroup: false,
+              pinned: conversation.pinnedBy && conversation.pinnedBy.includes(userObjectId),
             };
           }
         } catch (error) {
@@ -113,6 +115,12 @@ async function getConversation(userId, forceRefresh = false) {
     // Filter out nulls from processing errors
     const validConversations = processedConversations.filter(Boolean);
     console.log(`Returning ${validConversations.length} valid conversations`);
+
+    // Sort conversations: pinned first, then by latest update
+    validConversations.sort((a, b) => {
+      if (a.pinned !== b.pinned) return b.pinned - a.pinned;
+      return new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
 
     return validConversations;
   } catch (error) {
