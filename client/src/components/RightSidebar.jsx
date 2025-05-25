@@ -665,7 +665,6 @@ RightSidebar.propTypes = {
   handleLeaveGroup: PropTypes.func.isRequired,
   handleDeleteConversation: PropTypes.func.isRequired,
   handleRemoveMember: PropTypes.func.isRequired,
-  onToggleMute: PropTypes.func.isRequired,
   showContextMenu: PropTypes.string.isRequired,
   setShowContextMenu: PropTypes.func.isRequired,
 };

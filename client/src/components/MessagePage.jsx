@@ -1,4 +1,4 @@
-import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faPhone, faTrash, faVideo, faXmark, faImage } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
@@ -88,6 +88,9 @@ export default function MessagePage() {
   // Add a ref to track scroll position
   const scrollPositionRef = useRef(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false); // New state to track loading status
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  // Add a counter ref to track nested drag events
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     if (!socketConnection) {
@@ -744,6 +747,72 @@ export default function MessagePage() {
     setOpenActionMessage(false);
   };
 
+  // Handle drag and drop for files - improved to prevent flickering
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (dragCounter.current === 1) {
+      setIsDraggingFile(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDraggingFile(false);
+
+    // Check if user is muted
+    if (isCurrentUserMuted()) {
+      toast.error("Bạn đã bị tắt quyền nhắn tin trong nhóm này");
+      return;
+    }
+
+    // Only process files if there are any in the drop event
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+
+      // Accept all file types instead of filtering just for media
+      setSelectedFiles((prev) => [...prev, ...files]);
+
+      // Show success toast with file count and types
+      const imageCount = files.filter((file) => file.type.startsWith("image/")).length;
+      const videoCount = files.filter((file) => file.type.startsWith("video/")).length;
+      const otherCount = files.length - imageCount - videoCount;
+
+      let message = "Đã thêm ";
+      if (imageCount > 0) message += `${imageCount} ảnh`;
+      if (videoCount > 0) message += `${imageCount > 0 ? ", " : ""}${videoCount} video`;
+      if (otherCount > 0) message += `${imageCount > 0 || videoCount > 0 ? " và " : ""}${otherCount} file`;
+
+      toast.success(message);
+    }
+  };
+
+  // Add cleanup effect for drag state
+  useEffect(() => {
+    // Reset drag state when component unmounts or conversation changes
+    return () => {
+      dragCounter.current = 0;
+      setIsDraggingFile(false);
+    };
+  }, [params.userId]);
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -761,9 +830,27 @@ export default function MessagePage() {
 
         <div className="flex flex-1 overflow-hidden">
           <section
-            className={`custom-scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+            className={`custom-scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0] ${
+              isDraggingFile ? "border-2 border-dashed border-blue-400" : ""
+            }`}
             ref={messagesContainerRef}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
+            {/* Show overlay when dragging files */}
+            {isDraggingFile && (
+              <div className="sticky inset-0 z-[9999] flex h-full items-center justify-center bg-blue-100 bg-opacity-80">
+                <div className="transform animate-pulse rounded-lg border-2 border-blue-500 bg-white p-7 shadow-2xl transition-transform">
+                  <div className="flex items-center justify-center text-7xl text-blue-500">
+                    <FontAwesomeIcon icon={faImage} width={30} />
+                  </div>
+                  <p className="text-md text-center font-medium text-blue-700">Thả để tải lên File, Ảnh hoặc Video</p>
+                </div>
+              </div>
+            )}
+
             {/* Loading chat */}
             {isLoading ? (
               <div className="flex h-full items-center justify-center">
@@ -922,6 +1009,7 @@ export default function MessagePage() {
             allMessages={allMessages}
             selectedFiles={selectedFiles}
             getSenderInfo={getSenderInfo}
+            setSelectedFiles={setSelectedFiles} // Pass the setter function
           />
         )}
       </div>

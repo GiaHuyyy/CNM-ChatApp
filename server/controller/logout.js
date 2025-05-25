@@ -9,7 +9,7 @@ async function logout(request, response) {
     return response
       .cookie("token", "", cookieOptions)
       .status(200)
-      .json({ message: "User logout successfully, Session expired", success: true });
+      .json({ message: "Đã đăng xuất thành công!", success: true });
   } catch (error) {
     return response.status(500).json({ message: error.message || error, error: true });
   }

@@ -21,7 +21,7 @@ async function updateUserDetails(request, response) {
 
     const userInformation = await UserModel.findById(user._id).select("-password");
 
-    return response.status(200).json({ message: "User details updated", data: userInformation, success: true });
+    return response.status(200).json({ message: "Cập nhật thông tin người dùng thành công!", data: userInformation, success: true });
   } catch (error) {
     response.status(500).json({ message: error.message || error, error: true });
   }

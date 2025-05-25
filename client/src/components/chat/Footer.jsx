@@ -32,6 +32,7 @@ export default function Footer({
   setSeenMessage,
   selectedFiles,
   getSenderInfo,
+  setSelectedFiles, // Add this prop for handling file uploads
 }) {
   const inputRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -53,6 +54,31 @@ export default function Footer({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [openEmoji]);
+
+  // Handle paste event to detect images
+  const handlePaste = (e) => {
+    if (isCurrentUserMuted()) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageItems = Array.from(items).filter((item) => item.type.indexOf("image") !== -1);
+
+    if (imageItems.length > 0) {
+      e.preventDefault(); // Prevent default paste behavior for images
+
+      imageItems.forEach((item) => {
+        const file = item.getAsFile();
+        if (file) {
+          // Generate a more descriptive name than "image.png"
+          const fileName = `pasted_image_${new Date().getTime()}.png`;
+          const renamedFile = new File([file], fileName, { type: file.type });
+
+          setSelectedFiles((prev) => [...prev, renamedFile]);
+        }
+      });
+    }
+  };
 
   //   Handle
   const handleInputFocus = () => {
@@ -211,6 +237,7 @@ export default function Footer({
             onBlur={() => setSeenMessage(false)}
             ref={inputRef}
             disabled={isCurrentUserMuted()}
+            onPaste={handlePaste} // Add paste handler here
           />
           <div className="flex items-center gap-x-1">
             <Button
