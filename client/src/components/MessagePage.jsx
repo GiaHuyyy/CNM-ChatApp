@@ -1,4 +1,4 @@
-import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faPhone, faTrash, faVideo, faXmark, faImage } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
@@ -88,6 +88,7 @@ export default function MessagePage() {
   // Add a ref to track scroll position
   const scrollPositionRef = useRef(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false); // New state to track loading status
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   useEffect(() => {
     if (!socketConnection) {
@@ -744,6 +745,45 @@ export default function MessagePage() {
     setOpenActionMessage(false);
   };
 
+  // Handle drag and drop for files
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+
+    // Check if user is muted
+    if (isCurrentUserMuted()) {
+      toast.error("Bạn đã bị tắt quyền nhắn tin trong nhóm này");
+      return;
+    }
+
+    const files = Array.from(e.dataTransfer.files);
+
+    // Filter for images and videos
+    const mediaFiles = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
+
+    if (mediaFiles.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...mediaFiles]);
+    }
+  };
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -761,9 +801,27 @@ export default function MessagePage() {
 
         <div className="flex flex-1 overflow-hidden">
           <section
-            className={`custom-scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0]`}
+            className={`custom-scrollbar relative flex-1 overflow-y-auto overflow-x-hidden bg-[#ebecf0] ${
+              isDraggingFile ? "border-2 border-dashed border-blue-400" : ""
+            }`}
             ref={messagesContainerRef}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
+            {/* Show overlay when dragging files */}
+            {isDraggingFile && (
+              <div className="absolute z-[999] inset-0 flex items-center justify-center bg-gray-100 bg-opacity-70">
+                <div className="rounded-lg bg-white p-6 shadow-lg">
+                  <div className="flex items-center justify-center text-6xl text-blue-500">
+                    <FontAwesomeIcon icon={faImage} />
+                  </div>
+                  <p className="mt-4 text-center text-xl font-medium">Thả để tải lên</p>
+                </div>
+              </div>
+            )}
+
             {/* Loading chat */}
             {isLoading ? (
               <div className="flex h-full items-center justify-center">
@@ -922,6 +980,7 @@ export default function MessagePage() {
             allMessages={allMessages}
             selectedFiles={selectedFiles}
             getSenderInfo={getSenderInfo}
+            setSelectedFiles={setSelectedFiles} // Pass the setter function
           />
         )}
       </div>
