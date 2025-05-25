@@ -353,7 +353,7 @@ export default function Sidebar({ onGroupCreated }) {
 
         {/* Conditional content based on active tab */}
         {openTab === "chat" ? (
-          <div className="h-[calc(100%-4rem)] overflow-auto">
+          <div className="h-[calc(100%-4rem)]">
             {!isSearchFocused ? (
               <div>
                 {/* Chat filter */}
@@ -383,7 +383,7 @@ export default function Sidebar({ onGroupCreated }) {
                 </div>
 
                 {/* Chat list */}
-                <div className="scrollbar h-full overflow-auto">
+                <div className="custom-scrollbar h-full overflow-y-auto">
                   {allUsers.length === 0 ? (
                     <div className="flex h-[calc(100%-4rem)] items-center justify-center">
                       <p className="mt-3 text-sm text-[#5a6981]">Không có tin nhắn nào</p>
