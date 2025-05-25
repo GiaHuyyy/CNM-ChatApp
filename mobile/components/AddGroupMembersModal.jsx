@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -63,16 +63,16 @@ const AddGroupMembersModal = ({
   };
 
   // Convert existingMembers to a set of IDs for faster lookups
-  const existingMemberIds = new Set(existingMembers.map(member =>
-    normalizeId(member._id || member)
-  ));
+  const existingMemberIds = useMemo(() => new Set(
+    existingMembers.map(member => normalizeId(member._id || member))
+  ), [existingMembers]);
 
   // Handle search with debounce
   useEffect(() => {
     if (!visible || !searchQuery.trim()) {
       setSearchResults([]);
       setIsSearching(false);
-      return;
+      return;           
     }
 
     const searchTimeout = setTimeout(async () => {
@@ -104,7 +104,7 @@ const AddGroupMembersModal = ({
     }, 500);
 
     return () => clearTimeout(searchTimeout);
-  }, [searchQuery, visible, existingMemberIds]);
+  }, [searchQuery, visible, existingMembers]);
 
   // Toggle user selection
   const toggleUserSelection = (user) => {
