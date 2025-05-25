@@ -50,18 +50,20 @@ const ExploreScreen = () => {
       <View className="flex-1 bg-gray-100">
         <View className="bg-[#0068FF] px-4 py-4">
           <Text className="text-2xl font-bold text-white mb-2">Tin Tức</Text>
-          <View className="flex-row mt-2">
-            {TOPICS.map(topic => (
-              <TouchableOpacity
-                key={topic.key}
-                className={`px-4 py-2 mr-2 rounded-full ${selectedTopic === topic.key ? 'bg-white' : 'bg-[#1976F0]'}`}
-                style={{ borderWidth: selectedTopic === topic.key ? 1 : 0, borderColor: '#1976F0' }}
-                onPress={() => setSelectedTopic(topic.key)}
-              >
-                <Text className={`font-semibold ${selectedTopic === topic.key ? 'text-[#1976F0]' : 'text-white'}`}>{topic.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
+            <View className="flex-row">
+              {TOPICS.map(topic => (
+                <TouchableOpacity
+                  key={topic.key}
+                  className={`px-4 py-2 mr-2 rounded-full ${selectedTopic === topic.key ? 'bg-white' : 'bg-[#1976F0]'}`}
+                  style={{ borderWidth: selectedTopic === topic.key ? 1 : 0, borderColor: '#1976F0' }}
+                  onPress={() => setSelectedTopic(topic.key)}
+                >
+                  <Text className={`font-semibold ${selectedTopic === topic.key ? 'text-[#1976F0]' : 'text-white'}`}>{topic.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
         </View>
         <ScrollView className="flex-1 px-4 py-4">
           {loading && (
