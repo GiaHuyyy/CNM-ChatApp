@@ -13,13 +13,20 @@ const callHandler = (io, socket, userId, onlineUser) => {
         return;
       }
 
+      // Log signal type for debugging
+      console.log(`Call from ${callerId} to ${receiverId}`, {
+        signalType: signal?.type || "unknown",
+        hasRealSdp: signal?.sdp?.startsWith('v=') || false,
+        hasMobileSimulatedSdp: signal?.sdp?.includes('simulated-sdp') || false
+      });
+
       // Create a call notification message
       const callNotificationMessage = await MessageModel.create({
         text: isVideoCall ? "Cuộc gọi video" : "Cuộc gọi thoại",
         msgByUserId: callerId,
         callData: {
           callType: isVideoCall ? "video" : "audio",
-          callStatus: "missed", // Initially set as missed, will be updated if answered
+          callStatus: "missed",
           callDuration: 0,
         },
       });
@@ -47,41 +54,44 @@ const callHandler = (io, socket, userId, onlineUser) => {
         });
       }
 
-      // Emit the call to the receiver
+      // Forward the call data to the receiver
       io.to(receiverId).emit("incoming-call", {
         callerId,
         callerName,
         callerImage,
         isVideoCall,
         signal,
-        messageId: callNotificationMessage._id,
+        messageId: callNotificationMessage._id
       });
-
-      // Update sidebar for both users
-      const callerConversations = await getConversation(callerId);
-      const receiverConversations = await getConversation(receiverId);
-
-      io.to(callerId).emit("conversation", callerConversations);
-      io.to(receiverId).emit("conversation", receiverConversations);
     } catch (error) {
       console.error("Error in call-user event:", error);
       socket.emit("call-failed", { message: "Có lỗi xảy ra khi gọi điện" });
     }
   });
 
+  // Add this handler for call answers
   socket.on("answer-call", async (data) => {
     try {
       const { callerId, signal, messageId } = data;
 
-      // Update the call message to "answered"
-      if (messageId) {
-        await MessageModel.findByIdAndUpdate(messageId, { "callData.callStatus": "answered" });
-      }
+      console.log(`Call answer from ${userId} to ${callerId}`, {
+        signalType: signal?.type || "unknown",
+        hasRealSdp: signal?.sdp?.startsWith('v=') || false,
+        hasMobileSimulatedSdp: signal?.sdp?.includes('simulated-sdp') || false
+      });
 
-      // Emit answer to the caller
+      // Forward the answer to the caller
       io.to(callerId).emit("call-accepted", { signal });
+
+      // Update call status if we have a message ID
+      if (messageId) {
+        await MessageModel.findByIdAndUpdate(messageId, {
+          "callData.callStatus": "in-progress"
+        });
+      }
     } catch (error) {
-      console.error("Error in answer-call event:", error);
+      console.error("Error in answer-call handler:", error);
+      socket.emit("call-failed", { message: "Không thể kết nối cuộc gọi" });
     }
   });
 
