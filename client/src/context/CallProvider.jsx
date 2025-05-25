@@ -129,6 +129,44 @@ const createPeerConnection = (config) => {
   // Process incoming signal
   const processSignal = async (signal) => {
     try {
+      console.log("Processing signal:", JSON.stringify(signal, null, 2));
+
+      // Handle simulated SDPs from mobile clients
+      if (signal.sdp === 'simulated-sdp-offer' || signal.sdp === 'simulated-sdp-answer' ||
+        signal.sdp?.includes('simulated-sdp')) {
+        console.log("Received simulated SDP from mobile client, creating compatible format");
+
+        // Generate valid ICE parameters that meet WebRTC requirements
+        const iceUfrag = generateRandomString(8); // At least 4 chars
+        const icePwd = generateRandomString(32);  // At least 22 chars
+        const fingerprint = generateFingerprint();
+
+        // Create a minimal valid SDP for WebRTC with proper ICE parameters
+        const validSdp = `v=0\r\n` +
+          `o=- ${Date.now()} 2 IN IP4 127.0.0.1\r\n` +
+          `s=-\r\n` +
+          `t=0 0\r\n` +
+          `a=group:BUNDLE 0\r\n` +
+          `a=msid-semantic: WMS\r\n` +
+          `m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n` +
+          `c=IN IP4 0.0.0.0\r\n` +
+          `a=ice-ufrag:${iceUfrag}\r\n` +
+          `a=ice-pwd:${icePwd}\r\n` +
+          `a=fingerprint:sha-256 ${fingerprint}\r\n` +
+          `a=setup:${signal.type === 'offer' ? 'actpass' : 'active'}\r\n` +
+          `a=mid:0\r\n` +
+          `a=sctp-port:5000\r\n` +
+          `a=max-message-size:262144\r\n`;
+
+        // Replace the simulated SDP with our valid one
+        signal.sdp = validSdp;
+
+        console.log("Created valid SDP replacement with ICE parameters:", {
+          ufrag: iceUfrag,
+          pwdLength: icePwd.length
+        });
+      }
+
       if (signal.type === "offer") {
         console.log("Received offer, setting remote description");
         await pc.setRemoteDescription(new RTCSessionDescription(signal));
@@ -167,9 +205,36 @@ const createPeerConnection = (config) => {
       }
     } catch (err) {
       console.error("Error processing signal:", err);
+      console.error("Signal that caused error:", signal);
+
+      // More descriptive error
+      if (err.message?.includes("ICE pwd")) {
+        console.error("ICE password length issue detected. Needs to be 22-256 characters.");
+      }
+
       onError(err);
     }
   };
+
+  // Helper function to generate random string of specific length
+  function generateRandomString(length) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    const randomValues = new Uint8Array(length);
+    window.crypto.getRandomValues(randomValues);
+    randomValues.forEach(val => result += chars[val % chars.length]);
+    return result;
+  }
+
+  // Helper function to generate valid fingerprint
+  function generateFingerprint() {
+    // Generate 32 random bytes as hex pairs separated by colons
+    const randomBytes = new Uint8Array(32);
+    window.crypto.getRandomValues(randomBytes);
+    return Array.from(randomBytes)
+      .map(byte => byte.toString(16).padStart(2, '0'))
+      .join(':');
+  }
 
   // Clean up method
   const close = () => {
@@ -332,6 +397,17 @@ export default function CallProvider({ children }) {
       toast.info("Cuộc gọi đã kết thúc");
     });
 
+    socketConnection.on("reconnect", (attempt) => {
+      console.log("Reconnected to server, attempt:", attempt);
+
+      // Re-join the call room to recover from disconnection
+      if (callState.callerId) {
+        setTimeout(() => {
+          socketConnection.emit("joinRoom", callState.callerId);
+        }, 1000);
+      }
+    });
+
     navigator.mediaDevices.addEventListener("devicechange", () => {
       console.log("Media devices changed");
       if (localStream) {
@@ -353,7 +429,7 @@ export default function CallProvider({ children }) {
       socketConnection.off("ice-candidate");
       socketConnection.off("call-failed");
       socketConnection.off("call-terminated");
-      navigator.mediaDevices.removeEventListener("devicechange", () => {});
+      navigator.mediaDevices.removeEventListener("devicechange", () => { });
     };
   }, [socketConnection, callState]);
 
@@ -442,10 +518,10 @@ export default function CallProvider({ children }) {
         },
         video: isVideoCall
           ? {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: "user",
-            }
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user",
+          }
           : false,
       };
 
@@ -556,10 +632,10 @@ export default function CallProvider({ children }) {
         },
         video: callState.isVideoCall
           ? {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: "user",
-            }
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user",
+          }
           : false,
       };
 

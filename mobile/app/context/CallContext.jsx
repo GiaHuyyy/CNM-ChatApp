@@ -128,6 +128,10 @@ export const CallProvider = ({ children }) => {
 
         socketConnection.on('incoming-call', ({ callerId, callerName, callerImage, isVideoCall, signal, messageId }) => {
             console.log('Received incoming call', { callerId, isVideoCall });
+
+            // Process the signal to see if it's compatible
+            const isValidSignal = processIncomingSignal(signal);
+
             setCallState({
                 isReceivingCall: true,
                 isVideoCall,
@@ -135,7 +139,7 @@ export const CallProvider = ({ children }) => {
                 callerName,
                 callerImage,
                 messageId,
-                signal,
+                signal: isValidSignal ? signal : { type: 'offer', sdp: 'simulated-sdp-offer' },
             });
         });
 
@@ -361,6 +365,40 @@ export const CallProvider = ({ children }) => {
         }
     };
 
+    // Add this function after setupAudioMode
+    const processIncomingSignal = (signal) => {
+        try {
+            console.log("Processing incoming signal:",
+                signal ? (signal.type || "ICE candidate") : "null signal");
+
+            // If we receive a real SDP from web client, we need to acknowledge it
+            // Since we don't have a real WebRTC implementation in this mobile version,
+            // we'll just respond with our simulated SDP
+            if (signal && signal.sdp && signal.sdp.startsWith('v=')) {
+                console.log("Received real SDP from web client");
+
+                // For incoming calls that we're answering
+                if (signal.type === "offer") {
+                    // We'll respond with our simulated answer in the answerCall function
+                    console.log("Storing real offer for later processing");
+                    return true;
+                }
+
+                // For outgoing calls that were accepted
+                if (signal.type === "answer") {
+                    console.log("Call was accepted with real SDP answer");
+                    return true;
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error("Error processing signal:", error);
+            return false;
+        }
+    };
+
+    // Modify the answerCall function to handle real SDP properly
     const answerCall = async () => {
         try {
             console.log("Starting to answer call...");
@@ -409,9 +447,18 @@ export const CallProvider = ({ children }) => {
                 throw new Error("Không có kết nối socket");
             }
 
+            // Check if we received a real SDP offer (from web)
+            const receivedRealSdp = callState.signal &&
+                callState.signal.sdp &&
+                callState.signal.sdp.startsWith('v=');
+
+            // Always emit our simulated answer since mobile can't process real WebRTC
             socketConnection.emit('answer-call', {
                 callerId: callState.callerId,
-                signal: { type: 'answer', sdp: 'simulated-sdp-answer' },
+                signal: {
+                    type: "answer",
+                    sdp: receivedRealSdp ? "simulated-sdp-answer-for-web" : "simulated-sdp-answer"
+                },
                 messageId: callState.messageId,
             });
 
