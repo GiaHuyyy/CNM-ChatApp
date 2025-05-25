@@ -33,27 +33,7 @@ import { REACT_APP_BACKEND_URL } from "@env";
 
 // Dữ liệu mẫu cho các menu items
 const menuItems = [
-  {
-    id: 'zcloud',
-    icon: faCloud,
-    title: 'zCloud',
-    description: 'Không gian lưu trữ dữ liệu trên đám mây',
-    hasArrow: true
-  },
-  {
-    id: 'zstyle',
-    icon: faWrench,
-    title: 'zStyle - Nổi bật trên Zalo',
-    description: 'Hình nền và nhạc cho cuộc gọi Zalo',
-    hasArrow: false
-  },
-  {
-    id: 'mycloud',
-    icon: faCloudArrowUp,
-    title: 'Cloud của tôi',
-    description: 'Lưu trữ các tin nhắn quan trọng',
-    hasArrow: true
-  },
+  // Bỏ các mục: zcloud, zstyle, mycloud, privacy
   {
     id: 'devicedata',
     icon: faDatabase,
@@ -75,14 +55,7 @@ const menuItems = [
     description: '',
     hasArrow: true
   },
-  {
-    id: 'privacy',
-    icon: faLock,
-    title: 'Quyền riêng tư',
-    description: '',
-    hasArrow: true
-  },
-  // Add the logout item
+  // Logout item giữ nguyên
   {
     id: 'logout',
     icon: faSignOut,
@@ -399,24 +372,6 @@ export default function Profile() {
             <View className="ml-4 flex-1">
               <Text className="text-xl font-bold">{user.name}</Text>
               <Text className="text-gray-500 mt-1">Xem trang cá nhân</Text>
-            </View>
-            <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
-          </TouchableOpacity>
-
-          {/* New Feature Banner */}
-          <TouchableOpacity className="bg-white px-4 py-3 mb-2 flex-row items-center">
-            <Image
-              source={{ uri: 'https://via.placeholder.com/50' }}
-              className="w-12 h-12 rounded-lg"
-            />
-            <View className="flex-1 ml-3">
-              <View className="flex-row items-center">
-                <Text className="text-base font-semibold">Trang trí ảnh đại diện</Text>
-                <View className="bg-green-500 rounded px-2 py-0.5 ml-2">
-                  <Text className="text-white text-xs">Mới</Text>
-                </View>
-              </View>
-              <Text className="text-blue-500">Kho khung ảnh zStyle đa dạng</Text>
             </View>
             <FontAwesomeIcon icon={faAngleRight} size={20} color="#666" />
           </TouchableOpacity>
