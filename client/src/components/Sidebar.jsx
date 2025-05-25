@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { faAddressBook, faImage, faMessage, faSquareCheck } from "@fortawesome/free-regular-svg-icons";
 import {
@@ -13,6 +14,7 @@ import {
   faMagnifyingGlass,
   faUserPlus,
   faUsers,
+  faThumbTack,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import axios from "axios";
@@ -52,6 +54,7 @@ export default function Sidebar({ onGroupCreated }) {
   const [searchLoading, setSearchLoading] = useState(false);
 
   const [openTab, setOpenTab] = useState("chat");
+  const [contextMenu, setContextMenu] = useState(null); // {x, y, id, pinned}
 
   const toggleDropdownSetting = () => {
     setDropdownSettingVisible(!dropdownSettingVisible);
@@ -219,8 +222,18 @@ export default function Sidebar({ onGroupCreated }) {
         }
       });
 
+      // Add error event listener
+      socketConnection.on("error", (error) => {
+        if (error.type === "PIN_LIMIT_EXCEEDED") {
+          toast.error(error.message || "Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!", {
+            position: "top-center",
+          });
+        }
+      });
+
       return () => {
         socketConnection.off("conversationDeleted");
+        socketConnection.off("error"); // Clean up error listener
       };
     }
   }, [socketConnection, user?._id]);
@@ -232,6 +245,32 @@ export default function Sidebar({ onGroupCreated }) {
     }
 
     navigate(`/chat/${conversationId}`);
+  };
+
+  useEffect(() => {
+    const hide = () => setContextMenu(null);
+    document.addEventListener("click", hide);
+    return () => document.removeEventListener("click", hide);
+  }, []);
+
+  const handlePin = (id, pinned) => {
+    // Check if we're trying to pin (not unpin) and count current pins
+    if (!pinned) {
+      const pinnedCount = allUsers.filter((chat) => chat.pinned).length;
+      if (pinnedCount >= 5) {
+        toast.error("Bạn chỉ có thể ghim tối đa 5 cuộc trò chuyện!", {
+          position: "top-center",
+        });
+        setContextMenu(null);
+        return;
+      }
+    }
+
+    socketConnection.emit("pinConversation", { conversationId: id, pin: !pinned });
+    toast.success(!pinned ? "Đã ghim hội thoại" : "Đã bỏ ghim hội thoại", {
+      position: "top-center",
+    });
+    setContextMenu(null);
   };
 
   return (
@@ -401,6 +440,15 @@ export default function Sidebar({ onGroupCreated }) {
                           );
                           setSeenMessage(true);
                         }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({
+                            x: e.pageX,
+                            y: e.pageY,
+                            id: chatItem._id,
+                            pinned: chatItem.pinned,
+                          });
+                        }}
                       >
                         {/* User or group avatar */}
                         <div className="relative">
@@ -421,8 +469,18 @@ export default function Sidebar({ onGroupCreated }) {
                             </div>
                           )}
                         </div>
-                        <div className="ml-3 flex-1 overflow-hidden">
-                          <p className="text-[15px] font-semibold">{chatItem?.userDetails?.name}</p>
+                        <div className="ml-3 flex-1">
+                          <p className="flex items-center text-[15px] font-semibold">
+                            {chatItem?.userDetails?.name}
+                            {chatItem?.pinned && (
+                              <FontAwesomeIcon
+                                icon={faThumbTack}
+                                width={12}
+                                className="ml-1 rotate-45 text-yellow-500"
+                                title="Ghim cuộc trò chuyện"
+                              />
+                            )}
+                          </p>
                           <p className="max-w-48 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#5a6981]">
                             {/* Group chat message with sender name */}
                             {chatItem?.isGroup ? (
@@ -465,7 +523,9 @@ export default function Sidebar({ onGroupCreated }) {
                             {chatItem?.latestMessage?.files?.some((file) => file.type.startsWith("application/")) && (
                               <>
                                 <FontAwesomeIcon icon={faFilePen} width={15} className="text-[#ccc]" />
-                                {chatItem?.latestMessage?.fileName ? ` ${chatItem?.latestMessage?.fileName}` : " Tài liệu"}
+                                {chatItem?.latestMessage?.fileName
+                                  ? ` ${chatItem?.latestMessage?.fileName}`
+                                  : " Tài liệu"}
                               </>
                             )}
                           </p>
@@ -613,6 +673,15 @@ export default function Sidebar({ onGroupCreated }) {
             </div>
           </div>
         ) : null}
+
+        {/* Context Menu for pinned conversations */}
+        {contextMenu && (
+          <div className="absolute rounded bg-white p-2 shadow" style={{ top: contextMenu.y, left: contextMenu.x }}>
+            <button className="text-sm" onClick={() => handlePin(contextMenu.id, contextMenu.pinned)}>
+              {contextMenu.pinned ? "Bỏ ghim cuộc trò chuyện" : "Ghim cuộc trò chuyện"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* EditUserDetails */}
