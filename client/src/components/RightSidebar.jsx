@@ -329,7 +329,6 @@ export default function RightSidebar({
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
   const [showSelectAdminModal, setShowSelectAdminModal] = useState(false);
-  const [newAdminCandidate, setNewAdminCandidate] = useState(null);
   const navigate = useNavigate();
 
   // Add useEffect to get all conversations for counting pinned ones
@@ -523,7 +522,34 @@ export default function RightSidebar({
     }
   };
 
-  // if (!isVisible) return null;
+  // Handle transferring admin rights and leaving the group
+  const handleTransferAdminAndLeave = (newAdmin) => {
+    if (!newAdmin || !socketConnection) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Chuyển quyền quản trị viên",
+      message: `Bạn có chắc chắn muốn chuyển quyền quản trị viên cho ${newAdmin.name} và rời nhóm?`,
+      action: () => {
+        const payload = {
+          groupId: params.userId,
+          newAdminId: newAdmin._id,
+          currentAdminId: user._id,
+        };
+        socketConnection.emit("transferAdminAndLeave", payload);
+        socketConnection.once("adminTransferred", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            // Request fresh data
+            socketConnection.emit("joinRoom", params.userId);
+            navigate("/chat");
+          } else {
+            toast.error(response.message || "Có lỗi xảy ra khi chuyển quyền quản trị");
+          }
+        });
+      },
+    });
+  };
 
   return (
     <div className="custom-scrollbar !max-h-[100vh] w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
