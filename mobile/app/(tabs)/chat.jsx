@@ -2363,6 +2363,18 @@ export default function Chat() {
                 onChangeText={setMessageText}
                 multiline
                 onFocus={() => setShowMediaOptions(false)}
+                onKeyPress={(e) => {
+                  if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                    // Prevent default behavior (new line)
+                    e.preventDefault?.();
+                    
+                    // Only send if there's a message or files selected
+                    if ((messageText.trim() || selectedFiles.length > 0) && 
+                        !isUploading && socketConnection && selectedChat) {
+                      handleSendMessage();
+                    }
+                  }
+                }}
               />
               <TouchableOpacity
                 onPress={handleSendMessage}
