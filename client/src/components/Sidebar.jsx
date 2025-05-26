@@ -54,6 +54,7 @@ export default function Sidebar({ onGroupCreated }) {
 
   const [openTab, setOpenTab] = useState("chat");
   const [contextMenu, setContextMenu] = useState(null); // {x, y, id, pinned}
+  const [chatFilter, setChatFilter] = useState("all"); // Add this - tracks current filter
 
   const [friendRequestsCount, setFriendRequestsCount] = useState(0);
 
@@ -269,6 +270,14 @@ export default function Sidebar({ onGroupCreated }) {
     setContextMenu(null);
   };
 
+  // Filter conversations based on selected filter
+  const getFilteredConversations = () => {
+    if (chatFilter === "unread") {
+      return allUsers.filter((chat) => chat.unseenMessages > 0);
+    }
+    return allUsers;
+  };
+
   return (
     <nav className="flex h-full">
       {/* Main tabs */}
@@ -395,15 +404,25 @@ export default function Sidebar({ onGroupCreated }) {
                 <div className="flex h-8 items-center border-b border-gray-300 px-4">
                   <div className="h-full">
                     <button
-                      className="mr-3 h-full border-b-[2px] border-[#005ae0] text-[13px] font-semibold text-[#005ae0]"
-                      onClick={commingSoon}
+                      className={`mr-3 h-full border-b-[2px] ${
+                        chatFilter === "all" ? "border-[#005ae0] text-[#005ae0]" : "border-transparent text-[#5a6981]"
+                      } text-[13px] font-semibold`}
+                      onClick={() => setChatFilter("all")}
                     >
                       Tất cả
                     </button>
-                    <button className="text-[13px] font-semibold text-[#5a6981]" onClick={commingSoon}>
+                    <button
+                      className={`h-full border-b-[2px] ${
+                        chatFilter === "unread"
+                          ? "border-[#005ae0] text-[#005ae0]"
+                          : "border-transparent text-[#5a6981]"
+                      } text-[13px] font-semibold`}
+                      onClick={() => setChatFilter("unread")}
+                    >
                       Chưa đọc
                     </button>
                   </div>
+
                   <div className="ml-auto flex items-center gap-x-4">
                     <button className="flex items-center gap-x-2 pl-2 pr-1">
                       <span className="text-[13px]" onClick={commingSoon}>
@@ -419,12 +438,16 @@ export default function Sidebar({ onGroupCreated }) {
 
                 {/* Chat list */}
                 <div className="custom-scrollbar h-full overflow-y-auto">
-                  {allUsers.length === 0 ? (
+                  {/* Show appropriate message based on filtered results */}
+                  {getFilteredConversations().length === 0 ? (
                     <div className="flex h-[calc(100%-4rem)] items-center justify-center">
-                      <p className="mt-3 text-sm text-[#5a6981]">Không có tin nhắn nào</p>
+                      <p className="mt-3 text-sm text-[#5a6981]">
+                        {chatFilter === "unread" ? "Không có tin nhắn chưa đọc" : "Không có tin nhắn nào"}
+                      </p>
                     </div>
                   ) : (
-                    allUsers.map((chatItem) => (
+                    // Map through filtered conversations instead of all
+                    getFilteredConversations().map((chatItem) => (
                       <NavLink
                         to={"/chat/" + chatItem?.userDetails?._id}
                         key={chatItem?._id}
