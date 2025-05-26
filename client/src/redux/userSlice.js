@@ -19,6 +19,8 @@ export const userSlice = createSlice({
       state.phone = action.payload.phone;
       state.name = action.payload.name;
       state.profilePic = action.payload.profilePic;
+      state.gender = action.payload.gender;
+      state.dateOfBirth = action.payload.dateOfBirth;
     },
     setToken: (state, action) => {
       state.token = action.payload;
@@ -29,6 +31,8 @@ export const userSlice = createSlice({
       state.name = "";
       state.profilePic = "";
       state.token = "";
+      state.gender = "";
+      state.dateOfBirth = "";
       // state.onlineUser = [];
       // state.socketConnection = null;
     },
