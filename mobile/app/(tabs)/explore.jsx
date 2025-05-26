@@ -5,13 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const TOPICS = [
   { key: 'techcrunch', label: 'TechCrunch', url: 'https://newsapi.org/v2/top-headlines?sources=techcrunch&apiKey=4a969bca8e3d42ccad71c8f3531d32a0' },
   { key: 'business', label: 'Kinh doanh', url: 'https://newsapi.org/v2/top-headlines?country=us&category=business&apiKey=4a969bca8e3d42ccad71c8f3531d32a0' },
-  { key: 'technology', label: 'Công nghệ', url: 'https://newsapi.org/v2/top-headlines?country=us&category=technology&apiKey=4a969bca8e3d42ccad71c8f3531d32a0' },
-  { key: 'tesla', label: 'Tesla', url: 'https://newsapi.org/v2/everything?q=tesla&from=2025-04-25&sortBy=publishedAt&apiKey=4a969bca8e3d42ccad71c8f3531d32a0' },
+  { key: 'technology', label: 'Công nghệ', url: 'https://newsapi.org/v2/top-headlines?country=us&category=technology&apiKey=4a969bca8e3d42ccad71c8f3531d32a0' }
 ];
 
 const ExploreScreen = () => {
   const [selectedTopic, setSelectedTopic] = useState(TOPICS[0].key);
-  const [articles, setArticles] = useState([]);
+  const [articles, setArticles] = useState([]); // Bản gốc từ API
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -72,7 +71,7 @@ const ExploreScreen = () => {
               <Text className="mt-2 text-gray-500">Đang tải tin tức...</Text>
             </View>
           )}
-          {error && (
+          {error && !loading && (
             <View className="items-center justify-center mt-10">
               <Text className="text-red-500">{error}</Text>
             </View>
