@@ -5,6 +5,15 @@ const mongoose = require("mongoose");
 const friendHandler = (io, socket, userId) => {
   console.log(`Initializing friendHandler for user: ${userId}`);
 
+  // helper: đếm và emit count đến user
+  const emitPendingCount = async (targetId) => {
+    const cnt = await FriendModel.countDocuments({
+      receiver: targetId,
+      status: "pending",
+    });
+    io.to(targetId.toString()).emit("pendingRequestsCount", cnt);
+  };
+
   // Send a friend request
   socket.on("sendFriendRequest", async (data) => {
     console.log(`Received sendFriendRequest event:`, data);
@@ -67,6 +76,7 @@ const friendHandler = (io, socket, userId) => {
         requestId: newFriendRequest._id,
         sender: sender
       });
+      await emitPendingCount(receiverId);   // <= thêm
     } catch (error) {
       console.error("Send friend request error:", error);
       socket.emit("friendRequestError", {
@@ -122,6 +132,7 @@ const friendHandler = (io, socket, userId) => {
         requestId: requestId,
         sender: sender
       });
+      await emitPendingCount(receiverId);   // <= thêm
     } catch (error) {
       console.error("Cancel friend request error:", error);
       socket.emit("friendRequestError", {
@@ -173,6 +184,7 @@ const friendHandler = (io, socket, userId) => {
         requestId: requestId,
         receiver: receiver
       });
+      await emitPendingCount(userId);       // <= thêm
     } catch (error) {
       console.error("Accept friend request error:", error);
       socket.emit("friendRequestError", {
@@ -224,6 +236,7 @@ const friendHandler = (io, socket, userId) => {
         receiver: receiver,
         sender: sender    // Thêm thông tin sender để có thể xác định chính xác người gửi
       });
+      await emitPendingCount(userId);       // <= thêm
     } catch (error) {
       console.error("Reject friend request error:", error);
       socket.emit("friendRequestError", {
