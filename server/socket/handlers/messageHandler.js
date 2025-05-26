@@ -386,6 +386,128 @@ const messageHandler = (io, socket, userId) => {
       });
     }
   });
+
+  // Pin/unpin message handler
+  socket.on("pinMessage", async (data) => {
+    try {
+      const { conversationId, messageId, action, isGroup } = data;
+
+      if (!conversationId || !messageId || !action) {
+        return socket.emit("pinMessageError", { 
+          message: "Thiếu thông tin cần thiết" 
+        });
+      }
+
+      // Kiểm tra xem tin nhắn có tồn tại không
+      const message = await MessageModel.findById(messageId);
+      if (!message) {
+        return socket.emit("pinMessageError", { 
+          message: "Tin nhắn không tồn tại" 
+        });
+      }
+
+      // Lấy thông tin cuộc trò chuyện
+      const conversation = await ConversationModel.findById(conversationId)
+        .populate({
+          path: "pinnedMessages",
+          populate: {
+            path: "msgByUserId",
+            select: "name profilePic"
+          }
+        });
+
+      if (!conversation) {
+        return socket.emit("pinMessageError", { 
+          message: "Cuộc trò chuyện không tồn tại" 
+        });
+      }
+
+      // Kiểm tra giới hạn tin nhắn ghim
+      if (action === "pin" && conversation.pinnedMessages && conversation.pinnedMessages.length >= 5) {
+        return socket.emit("pinMessageError", { 
+          message: "Chỉ có thể ghim tối đa 5 tin nhắn", 
+          type: "PIN_LIMIT_EXCEEDED" 
+        });
+      }
+
+      // Thực hiện ghim hoặc bỏ ghim
+      if (action === "pin") {
+        // Ghim tin nhắn
+        conversation.pinnedMessages = conversation.pinnedMessages || [];
+        if (!conversation.pinnedMessages.some(pin => pin._id.toString() === messageId.toString())) {
+          conversation.pinnedMessages.push(messageId);
+        }
+      } else if (action === "unpin") {
+        // Bỏ ghim tin nhắn
+        if (conversation.pinnedMessages) {
+          conversation.pinnedMessages = conversation.pinnedMessages.filter(
+            pin => pin._id.toString() !== messageId.toString()
+          );
+        }
+      }
+
+      // Lưu thay đổi
+      await conversation.save();
+
+      // Lấy conversation đã cập nhật với đầy đủ thông tin
+      let updatedConversation;
+      if (isGroup) {
+        updatedConversation = await ConversationModel.findById(conversationId)
+          .populate("messages")
+          .populate("members")
+          .populate("groupAdmin")
+          .populate({
+            path: "pinnedMessages",
+            populate: {
+              path: "msgByUserId",
+              select: "name profilePic"
+            }
+          });
+
+        // Thông báo cho tất cả thành viên trong nhóm
+        for (const memberId of updatedConversation.members) {
+          const memberIdStr = typeof memberId === "object" 
+            ? (memberId._id ? memberId._id.toString() : memberId.toString()) 
+            : memberId;
+          
+          io.to(memberIdStr).emit("groupMessage", updatedConversation);
+        }
+      } else {
+        updatedConversation = await ConversationModel.findById(conversationId)
+          .populate("messages")
+          .populate({
+            path: "pinnedMessages",
+            populate: {
+              path: "msgByUserId",
+              select: "name profilePic"
+            }
+          });
+
+        // Xác định receiver là ai
+        const receiverId = updatedConversation.members.find(
+          member => member.toString() !== userId.toString()
+        );
+
+        // Thông báo cho cả người gửi và người nhận
+        io.to(userId.toString()).emit("message", updatedConversation);
+        if (receiverId) {
+          io.to(receiverId.toString()).emit("message", updatedConversation);
+        }
+      }
+
+      // Gửi thông báo thành công
+      socket.emit("messagePinnedUnpinned", {
+        success: true,
+        action: action,
+        messageId: messageId
+      });
+    } catch (error) {
+      console.error("Error handling pinMessage event:", error);
+      socket.emit("pinMessageError", { 
+        message: "Có lỗi xảy ra khi ghim tin nhắn: " + error.message 
+      });
+    }
+  });
 };
 
 module.exports = messageHandler;
