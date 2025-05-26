@@ -8,6 +8,7 @@ const socketAuthMiddleware = async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
     if (!token) {
+      console.error('Socket connection attempt with no token');
       return next(new Error('Authentication token required'));
     }
 
@@ -35,15 +36,18 @@ const socketAuthMiddleware = async (socket, next) => {
     }
 
     if (!user) {
+      console.error(`User ID ${userId} from token not found in database`);
       return next(new Error('User not found'));
     }
 
     socket.user = user;
     socket.userId = userId;
     socket.join(userId); // Tự động join room của user
+    console.log(`Socket authenticated for user: ${user.name} (${userId})`);
 
     next();
   } catch (error) {
+    console.error('Socket authentication error:', error.message);
     next(new Error('Authentication failed'));
   }
 };
