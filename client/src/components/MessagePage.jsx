@@ -1,4 +1,4 @@
-import { faFilePen, faImage, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { format } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +21,8 @@ import MessageIsCall from "./chat/MessageIsCall";
 import MessageIsNormal from "./chat/MessageIsNormal";
 import handleAudioCall from "./handles/handleAudioCall";
 import handleVideoCall from "./handles/handleVideoCall";
+// Import component PinnedMessagesHeader mới
+import PinnedMessagesHeader from "./chat/PinnedMessagesHeader";
 
 export default function MessagePage() {
   const params = useParams();
@@ -872,10 +874,91 @@ export default function MessagePage() {
     }
   };
 
+  const handlePinMessage = (message, action) => {
+    if (!socketConnection || !conversation) {
+      console.log("Không thể ghim tin nhắn: Thiếu socket hoặc conversation");
+      return;
+    }
+
+    // Kiểm tra xem có đang cố ghim (không phải bỏ ghim) và có đạt giới hạn chưa
+    if (action === "pin" && conversation?.pinnedMessages && conversation.pinnedMessages.length >= 5) {
+      toast.error("Bạn chỉ có thể ghim tối đa 5 tin nhắn.", { position: "top-center" });
+      return;
+    }
+
+    const messageId = message._id;
+    const conversationId = conversation._id;
+    
+    if (!messageId || !conversationId) {
+      console.error("Thiếu ID tin nhắn hoặc cuộc trò chuyện", { messageId, conversationId });
+      toast.error("Không thể thực hiện thao tác ghim tin nhắn");
+      return;
+    }
+
+    console.log("Đang ghim tin nhắn với thông số:", {
+      conversationId,
+      messageId,
+      action
+    });
+
+    socketConnection.emit("pinMessage", {
+      conversationId,
+      messageId,
+      action,
+      isGroup: dataUser.isGroup,
+    });
+    
+    setOpenActionMessage(false);
+  };
+
+  // Thêm useEffect để lắng nghe phản hồi từ server khi ghim/bỏ ghim tin nhắn
+  useEffect(() => {
+    if (!socketConnection) return;
+    
+    const handlePinError = (data) => {
+      toast.error(data.message || "Lỗi khi ghim tin nhắn.");
+    };
+    
+    const handleMessagePinnedUnpinned = (data) => {
+      if (data.success) {
+        toast.success(data.action === 'pin' ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
+      }
+    };
+
+    socketConnection.on("pinMessageError", handlePinError);
+    socketConnection.on("messagePinnedUnpinned", handleMessagePinnedUnpinned);
+
+    return () => {
+      socketConnection.off("pinMessageError", handlePinError);
+      socketConnection.off("messagePinnedUnpinned", handleMessagePinnedUnpinned);
+    };
+  }, [socketConnection]);
+
+  // Replace the problematic useEffect that's causing the loop
+  useEffect(() => {
+    if (conversation?.pinnedMessages?.length > 0) {
+      console.log("Current pinned messages:", conversation.pinnedMessages);
+      
+      // Only check once per conversation load if pinned messages need refreshing
+      const needsRefresh = conversation.pinnedMessages.some(msg => 
+        typeof msg !== 'object' || (typeof msg === 'object' && !msg.msgByUserId)
+      );
+      
+      // Use a ref to prevent multiple refreshes for the same conversation
+      if (needsRefresh && socketConnection && !conversationInitialized.current) {
+        console.log("Pinned messages need refresh, requesting data once...");
+        socketConnection.emit("joinRoom", params.userId);
+        
+        // Mark as initialized to prevent further refresh requests
+        conversationInitialized.current = true;
+      }
+    }
+  }, [conversation?._id, socketConnection, params.userId]); // Changed dependency from conversation.pinnedMessages to conversation._id
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
-        {/* Header - pass messages and onMessageFound props */}
+        {/* Header */}
         {(dataUser._id || isLoading) && (
           <Header
             dataUser={dataUser}
@@ -886,7 +969,8 @@ export default function MessagePage() {
             showRightSideBar={showRightSideBar}
             messages={allMessages}
             onMessageFound={handleScrollToMessage}
-            getSenderInfo={getSenderInfo} // Truyền hàm getSenderInfo
+            getSenderInfo={getSenderInfo}
+            conversation={conversation} // Thêm prop này
           />
         )}
 
@@ -901,16 +985,16 @@ export default function MessagePage() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* Show overlay when dragging files */}
-            {isDraggingFile && (
-              <div className="sticky inset-0 z-[9999] flex h-full items-center justify-center bg-blue-100 bg-opacity-80">
-                <div className="transform animate-pulse rounded-lg border-2 border-blue-500 bg-white p-7 shadow-2xl transition-transform">
-                  <div className="flex items-center justify-center text-7xl text-blue-500">
-                    <FontAwesomeIcon icon={faImage} width={30} />
-                  </div>
-                  <p className="text-md text-center font-medium text-blue-700">Thả để tải lên File, Ảnh hoặc Video</p>
-                </div>
-              </div>
+            {/* Thêm PinnedMessagesHeader vào đây */}
+            {!isLoading && !loadError && conversation?.pinnedMessages && conversation.pinnedMessages.length > 0 && (
+              <PinnedMessagesHeader
+                pinnedMessages={conversation.pinnedMessages}
+                onNavigateToMessage={handleScrollToMessage}
+                onUnpinMessage={handlePinMessage}
+                currentUserId={user?._id}
+                getSenderInfo={getSenderInfo}
+                allMessages={allMessages} // Add this prop to pass all messages
+              />
             )}
 
             {/* Loading chat */}
@@ -1008,6 +1092,7 @@ export default function MessagePage() {
                         sender={sender}
                         dataUser={dataUser}
                         user={user}
+                        conversation={conversation} // Add this prop
                         hoveredMessage={hoveredMessage}
                         setHoveredMessage={setHoveredMessage}
                         setHoveredLikeMessage={setHoveredLikeMessage}
@@ -1022,6 +1107,7 @@ export default function MessagePage() {
                         setOpenActionMessage={setOpenActionMessage}
                         handleEditMessage={handleEditMessage}
                         handleDeleteMessage={handleDeleteMessage}
+                        handlePinMessage={handlePinMessage} // Add this prop
                       />
                     );
                   }

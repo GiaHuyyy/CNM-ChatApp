@@ -113,6 +113,19 @@ const conversationSchema = new mongoose.Schema(
         ref: "Message",
       },
     ],
+    // Thêm field pinnedMessages để lưu các tin nhắn đã ghim
+    pinnedMessages: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+      },
+    ],
+    pinnedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     isGroup: {
       type: Boolean,
       default: false,
@@ -136,12 +149,6 @@ const conversationSchema = new mongoose.Schema(
       ref: "User",
     },
     mutedMembers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    pinnedBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",

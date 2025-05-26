@@ -386,6 +386,216 @@ const messageHandler = (io, socket, userId) => {
       });
     }
   });
+
+  // Pin/unpin message handler
+  socket.on("pinMessage", async (data) => {
+    try {
+      const { conversationId, messageId, action, isGroup } = data;
+
+      if (!conversationId || !messageId || !action) {
+        return socket.emit("pinMessageError", { 
+          message: "Thiếu thông tin cần thiết" 
+        });
+      }
+
+      // Kiểm tra xem tin nhắn có tồn tại không
+      const message = await MessageModel.findById(messageId);
+      if (!message) {
+        return socket.emit("pinMessageError", { 
+          message: "Tin nhắn không tồn tại" 
+        });
+      }
+
+      // Lấy thông tin cuộc trò chuyện
+      const conversation = await ConversationModel.findById(conversationId)
+        .populate({
+          path: "pinnedMessages",
+          populate: {
+            path: "msgByUserId",
+            select: "name profilePic"
+          }
+        });
+
+      if (!conversation) {
+        return socket.emit("pinMessageError", { 
+          message: "Cuộc trò chuyện không tồn tại" 
+        });
+      }
+
+      // Kiểm tra giới hạn tin nhắn ghim
+      if (action === "pin" && conversation.pinnedMessages && conversation.pinnedMessages.length >= 5) {
+        return socket.emit("pinMessageError", { 
+          message: "Chỉ có thể ghim tối đa 5 tin nhắn", 
+          type: "PIN_LIMIT_EXCEEDED" 
+        });
+      }
+
+      // Thực hiện ghim hoặc bỏ ghim
+      if (action === "pin") {
+        // Ghim tin nhắn
+        conversation.pinnedMessages = conversation.pinnedMessages || [];
+        if (!conversation.pinnedMessages.some(pin => pin._id.toString() === messageId.toString())) {
+          conversation.pinnedMessages.push(messageId);
+        }
+      } else if (action === "unpin") {
+        // Bỏ ghim tin nhắn
+        if (conversation.pinnedMessages) {
+          conversation.pinnedMessages = conversation.pinnedMessages.filter(
+            pin => pin._id.toString() !== messageId.toString()
+          );
+        }
+      }
+
+      // Lưu thay đổi
+      await conversation.save();
+
+      // Lấy conversation đã cập nhật với đầy đủ thông tin
+      let updatedConversation;
+      if (isGroup) {
+        updatedConversation = await ConversationModel.findById(conversationId)
+          .populate("messages")
+          .populate("members")
+          .populate("groupAdmin")
+          .populate({
+            path: "pinnedMessages",
+            populate: {
+              path: "msgByUserId",
+              select: "name profilePic"
+            }
+          });
+
+        // Thông báo cho tất cả thành viên trong nhóm
+        for (const memberId of updatedConversation.members) {
+          const memberIdStr = typeof memberId === "object" 
+            ? (memberId._id ? memberId._id.toString() : memberId.toString()) 
+            : memberId;
+          
+          io.to(memberIdStr).emit("groupMessage", updatedConversation);
+        }
+      } else {
+        updatedConversation = await ConversationModel.findById(conversationId)
+          .populate("messages")
+          .populate({
+            path: "pinnedMessages",
+            populate: {
+              path: "msgByUserId",
+              select: "name profilePic"
+            }
+          });
+
+        // Xác định receiver là ai
+        const receiverId = updatedConversation.members.find(
+          member => member.toString() !== userId.toString()
+        );
+
+        // Thông báo cho cả người gửi và người nhận
+        io.to(userId.toString()).emit("message", updatedConversation);
+        if (receiverId) {
+          io.to(receiverId.toString()).emit("message", updatedConversation);
+        }
+      }
+
+      // Gửi thông báo thành công
+      socket.emit("messagePinnedUnpinned", {
+        success: true,
+        action: action,
+        messageId: messageId
+      });
+    } catch (error) {
+      console.error("Error handling pinMessage event:", error);
+      socket.emit("pinMessageError", { 
+        message: "Có lỗi xảy ra khi ghim tin nhắn: " + error.message 
+      });
+    }
+  });
+
+  // Update the joinRoom handler to validate pinnedMessages
+  socket.on("joinRoom", async (roomId) => {
+    try {
+      // Find conversation with better error handling
+      const conversation = await ConversationModel.findById(roomId);
+      if (!conversation) {
+        socket.emit("error", { message: "Conversation not found" });
+        return;
+      }
+
+      // Check for invalid pinnedMessages references and clean them up
+      if (conversation.pinnedMessages && Array.isArray(conversation.pinnedMessages)) {
+        // Create a new array with valid message references only
+        const validPinnedMessages = [];
+        
+        for (const msgRef of conversation.pinnedMessages) {
+          try {
+            const msgExists = await MessageModel.exists({ _id: msgRef });
+            if (msgExists) {
+              validPinnedMessages.push(msgRef);
+            } else {
+              console.log(`Removing invalid pinned message reference: ${msgRef}`);
+            }
+          } catch (err) {
+            console.error(`Error validating pinned message: ${err.message}`);
+          }
+        }
+        
+        // Update conversation if any invalid references were removed
+        if (validPinnedMessages.length !== conversation.pinnedMessages.length) {
+          console.log(`Updated pinnedMessages from ${conversation.pinnedMessages.length} to ${validPinnedMessages.length} items`);
+          conversation.pinnedMessages = validPinnedMessages;
+          await conversation.save();
+        }
+      }
+
+      // If conversation has pinned messages, fully populate them first
+      if (conversation && conversation.pinnedMessages && conversation.pinnedMessages.length > 0) {
+        // Use deep population to ensure all pinned messages have complete data
+        await conversation.populate({
+          path: "pinnedMessages",
+          model: "Message",
+          select: "_id text files imageUrl fileUrl fileName reactions createdAt isEdited isDeleted",
+          populate: {
+            path: "msgByUserId",
+            model: "User",
+            select: "name email profilePic"
+          }
+        });
+      }
+      
+      // Continue with the rest of the function
+      if (conversation.isGroup) {
+        await conversation.populate("groupAdmin");
+        await conversation.populate("members");
+        await conversation.populate({
+          path: "messages",
+          populate: {
+            path: "msgByUserId",
+            select: "name email profilePic",
+          },
+        });
+
+        socket.join(roomId);
+        io.to(roomId).emit("newMember", conversation);
+      } else {
+        // Không phải nhóm
+        await conversation.populate({
+          path: "messages",
+          populate: {
+            path: "msgByUserId",
+            select: "name email profilePic",
+          },
+        });
+
+        // Đối với cuộc trò chuyện trực tiếp, chỉ cần thông báo cho hai thành viên
+        const [member1, member2] = conversation.members;
+        io.to(member1.toString()).emit("message", conversation);
+        io.to(member2.toString()).emit("message", conversation);
+      }
+
+      socket.emit("joinedRoom", conversation);
+    } catch (error) {
+      console.error("Error joining room:", error);
+      socket.emit("error", { message: "Error joining room" });
+    }
+  });
 };
 
 module.exports = messageHandler;

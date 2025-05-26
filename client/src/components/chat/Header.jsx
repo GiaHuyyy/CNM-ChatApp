@@ -1,5 +1,5 @@
 import { faBookmark } from "@fortawesome/free-regular-svg-icons";
-import { faBars, faMagnifyingGlass, faPhone, faUsers, faVideo } from "@fortawesome/free-solid-svg-icons";
+import { faBars, faMagnifyingGlass, faPhone, faThumbTack, faUsers, faVideo } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import axios from "axios";
 import PropTypes from "prop-types";
@@ -19,7 +19,8 @@ export default function Header({
   showRightSideBar,
   messages,
   onMessageFound,
-  getSenderInfo // Nhận prop getSenderInfo
+  getSenderInfo,
+  conversation // Add this prop
 }) {
   const { socketConnection } = useGlobalContext();
   const [onlineMembers, setOnlineMembers] = useState(0);
@@ -139,6 +140,9 @@ export default function Header({
     }
   };
 
+  // Lấy số lượng tin nhắn đã ghim
+  const pinnedMessagesCount = conversation?.pinnedMessages?.length || 0;
+
   return (
     <>
       <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4 bg-white z-10">
@@ -197,6 +201,16 @@ export default function Header({
           </div>
         )}
         <div className="flex items-center space-x-[3px]">
+          {/* Hiển thị biểu tượng ghim và số lượng khi có tin nhắn ghim */}
+          {pinnedMessagesCount > 0 && (
+            <div 
+              className="mr-2 flex items-center text-sm text-blue-500" 
+              title={`${pinnedMessagesCount} tin nhắn đã ghim`}
+            >
+              <FontAwesomeIcon icon={faThumbTack} className="mr-1" />
+              <span>{pinnedMessagesCount}</span>
+            </div>
+          )}
           <Button
             title={dataUser.online ? "Cuộc gọi thoại" : "Người dùng không trực tuyến"}
             icon={faPhone}
@@ -256,5 +270,6 @@ Header.propTypes = {
   showRightSideBar: PropTypes.bool.isRequired,
   messages: PropTypes.array,
   onMessageFound: PropTypes.func,
-  getSenderInfo: PropTypes.func // Thêm prop type cho getSenderInfo
+  getSenderInfo: PropTypes.func, // Thêm prop type cho getSenderInfo
+  conversation: PropTypes.object, // Add this prop type
 };
