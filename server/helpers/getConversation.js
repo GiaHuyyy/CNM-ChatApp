@@ -18,7 +18,13 @@ async function getConversation(userId, forceRefresh = false) {
 
     // Find all conversations where user is either sender, receiver, or group member
     const conversations = await ConversationModel.find({
-      $or: [{ sender: userObjectId }, { receiver: userObjectId }, { members: userObjectId }],
+      $or: [
+        // direct chats where user is sender or receiver
+        { isGroup: false, sender: userObjectId },
+        { isGroup: false, receiver: userObjectId },
+        // group chats where user is still a member
+        { isGroup: true, members: userObjectId },
+      ],
     }).sort({ updatedAt: -1 });
 
     console.log(`Found ${conversations.length} conversations for user ${userId}`);

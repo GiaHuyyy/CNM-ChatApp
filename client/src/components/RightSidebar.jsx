@@ -15,7 +15,9 @@ import {
   faCommentSlash,
   faComment,
   faUserPlus,
-  faUserMinus, // Add this new icon for removing deputy status
+  faUserMinus,
+  // faUserCrown,
+  faUserTie,
 } from "@fortawesome/free-solid-svg-icons";
 import commingSoon from "../helpers/commingSoon";
 import { format } from "date-fns";
@@ -27,6 +29,7 @@ import handleToggleMute from "./handles/handleToggleMute";
 import { useNavigate } from "react-router-dom";
 import handleLeaveGroup from "./handles/handleLeaveGroup";
 import handleDeleteConversation from "./handles/handleDeleteConversation";
+import SelectNewAdminModal from "./SelectNewAdminModal"; // Import the new modal component
 
 // File type
 const isImageFile = (url) => {
@@ -325,6 +328,7 @@ export default function RightSidebar({
   const [selectedImage, setSelectedImage] = useState("");
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
+  const [showSelectAdminModal, setShowSelectAdminModal] = useState(false);
   const navigate = useNavigate();
 
   // Add useEffect to get all conversations for counting pinned ones
@@ -518,7 +522,34 @@ export default function RightSidebar({
     }
   };
 
-  // if (!isVisible) return null;
+  // Handle transferring admin rights and leaving the group
+  const handleTransferAdminAndLeave = (newAdmin) => {
+    if (!newAdmin || !socketConnection) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Chuyển quyền quản trị viên",
+      message: `Bạn có chắc chắn muốn chuyển quyền quản trị viên cho ${newAdmin.name} và rời nhóm?`,
+      action: () => {
+        const payload = {
+          groupId: params.userId,
+          newAdminId: newAdmin._id,
+          currentAdminId: user._id,
+        };
+        socketConnection.emit("transferAdminAndLeave", payload);
+        socketConnection.once("adminTransferred", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            // Request fresh data
+            socketConnection.emit("joinRoom", params.userId);
+            navigate("/chat");
+          } else {
+            toast.error(response.message || "Có lỗi xảy ra khi chuyển quyền quản trị");
+          }
+        });
+      },
+    });
+  };
 
   return (
     <div className="custom-scrollbar !max-h-[100vh] w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
@@ -637,28 +668,53 @@ export default function RightSidebar({
             ))}
           </SidebarSection>
           <div className="mt-2 flex flex-col items-center bg-white">
-            <button
-              className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
-              onClick={() => {
-                if (dataUser.isGroup && user._id !== dataUser.groupAdmin?._id) {
-                  handleLeaveGroup({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
-                } else {
-                  handleDeleteConversation({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
-                }
-              }}
-            >
-              {user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? (
-                <>
-                  <FontAwesomeIcon icon={faSignOut} width={20} />
-                  Rời nhóm
-                </>
-              ) : (
-                <>
-                  <FontAwesomeIcon icon={faTrash} width={20} />
-                  {dataUser.isGroup ? "Xóa nhóm chat" : "Xóa lịch sử trò chuyện"}
-                </>
-              )}
-            </button>
+            {/* If user is admin in a group chat, show both options */}
+            {dataUser.isGroup && user._id === dataUser.groupAdmin?._id ? (
+              <>
+                <button
+                  className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
+                  onClick={() =>
+                    handleDeleteConversation({ socketConnection, setConfirmModal, params, user, dataUser, navigate })
+                  }
+                >
+                  <FontAwesomeIcon icon={faTrash} width={20} className="mr-2" />
+                  Xóa nhóm chat
+                </button>
+                <button
+                  className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
+                  onClick={() => setShowSelectAdminModal(true)}
+                >
+                  <FontAwesomeIcon icon={faUserTie} width={20} className="mr-2" />
+                  Rời nhóm (chọn trưởng nhóm)
+                </button>
+              </>
+            ) : (
+              /* For regular members and non-group chats */
+              <button
+                className="flex h-12 w-full items-center justify-start px-4 text-sm text-red-600 hover:bg-[#f1f2f4]"
+                onClick={() => {
+                  if (dataUser.isGroup && user._id !== dataUser.groupAdmin?._id) {
+                    handleLeaveGroup({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
+                  } else {
+                    handleDeleteConversation({ socketConnection, setConfirmModal, params, user, dataUser, navigate });
+                  }
+                }}
+              >
+                {user._id !== dataUser.groupAdmin?._id && dataUser.isGroup ? (
+                  <>
+                    <FontAwesomeIcon icon={faSignOut} width={20} className="mr-2" />
+                    Rời nhóm
+                  </>
+                ) : (
+                  !dataUser.isGroup && (
+                    <>
+                      <FontAwesomeIcon icon={faTrash} width={20} className="mr-2" />
+                      Xóa lịch sử trò chuyện
+                    </>
+                  )
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -809,6 +865,20 @@ export default function RightSidebar({
           onClose={() => setShowEditGroupModal(false)}
           group={dataUser}
           user={user}
+        />
+      )}
+
+      {/* Add SelectNewAdminModal */}
+      {showSelectAdminModal && (
+        <SelectNewAdminModal
+          isOpen={showSelectAdminModal}
+          onClose={() => setShowSelectAdminModal(false)}
+          members={dataUser.members || []}
+          currentAdmin={user}
+          onSelectNewAdmin={(newAdmin) => {
+            setShowSelectAdminModal(false);
+            handleTransferAdminAndLeave(newAdmin);
+          }}
         />
       )}
     </div>
