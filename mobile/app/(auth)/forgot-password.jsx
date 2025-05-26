@@ -87,10 +87,11 @@ export default function ForgotPassword() {
 
         setIsLoading(true);
         try {
+            // Fix: Changed parameter name from 'password' to 'newPassword' to match server expectation
             const res = await axios.post(`${REACT_APP_BACKEND_URL}/api/reset-password`, {
                 email,
                 otp,
-                password: newPassword,
+                newPassword: newPassword,
             });
 
             if (res.data && res.data.success) {
