@@ -1,27 +1,26 @@
-import { faFilePen, faPhone, faTrash, faVideo, faXmark, faImage } from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faImage, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { format } from "date-fns";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
-import { useGlobalContext } from "../context/GlobalProvider";
-import { format } from "date-fns";
 import { useCallContext } from "../context/CallProvider";
+import { useGlobalContext } from "../context/GlobalProvider";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 // eslint-disable-next-line no-unused-vars
-import uploadFileToS3 from "../helpers/uploadFileToS3";
 
+import { toast } from "sonner";
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmModal from "./ConfirmModal";
 import ImageViewerModal from "./ImageViewerModal";
 import RightSidebar from "./RightSidebar";
 import ShareMessageModal from "./ShareMessageModal";
-import Header from "./chat/Header";
 import Footer from "./chat/Footer";
-import handleAudioCall from "./handles/handleAudioCall";
-import handleVideoCall from "./handles/handleVideoCall";
+import Header from "./chat/Header";
 import MessageIsCall from "./chat/MessageIsCall";
 import MessageIsNormal from "./chat/MessageIsNormal";
-import { toast } from "sonner";
+import handleAudioCall from "./handles/handleAudioCall";
+import handleVideoCall from "./handles/handleVideoCall";
 
 export default function MessagePage() {
   const params = useParams();
@@ -816,10 +815,67 @@ export default function MessagePage() {
     };
   }, [params.userId]);
 
+  const handleScrollToMessage = (messageId) => {
+    console.log("Scrolling to message:", messageId);
+    
+    // Tìm tin nhắn trong danh sách
+    const messageIndex = allMessages.findIndex(msg => msg._id === messageId);
+    
+    if (messageIndex === -1) {
+      console.error("Message not found in the message list:", messageId);
+      return;
+    }
+
+    // Tính toán số tin nhắn cần hiển thị để đảm bảo tin nhắn được tìm thấy nằm trong DOM
+    const messagesNeeded = allMessages.length - messageIndex;
+    
+    // Cập nhật số lượng tin nhắn hiển thị nếu cần
+    if (visibleMessages < messagesNeeded) {
+      setVisibleMessages(messagesNeeded);
+      
+      // Đợi cho DOM cập nhật sau khi thay đổi số lượng tin nhắn hiển thị
+      setTimeout(() => {
+        const messageElement = document.getElementById(`message-${messageId}`);
+        if (messageElement) {
+          messageElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+          });
+          
+          // Thêm hiệu ứng highlight
+          messageElement.classList.add("bg-blue-100");
+          setTimeout(() => {
+            messageElement.classList.remove("bg-blue-100");
+          }, 2000);
+        } else {
+          console.error("Message element still not found after increasing visible messages:", messageId);
+        }
+      }, 300);
+    } else {
+      // Nếu tin nhắn đã nằm trong DOM, cuộn đến nó ngay lập tức
+      const messageElement = document.getElementById(`message-${messageId}`);
+      
+      if (messageElement) {
+        messageElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+        
+        // Thêm hiệu ứng highlight
+        messageElement.classList.add("bg-blue-100");
+        setTimeout(() => {
+          messageElement.classList.remove("bg-blue-100");
+        }, 2000);
+      } else {
+        console.error("Message element not found:", messageId);
+      }
+    }
+  };
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
-        {/* Header */}
+        {/* Header - pass messages and onMessageFound props */}
         {(dataUser._id || isLoading) && (
           <Header
             dataUser={dataUser}
@@ -828,6 +884,9 @@ export default function MessagePage() {
             handleVideoCall={() => handleVideoCall({ callUser, dataUser, params })}
             setShowRightSideBar={setShowRightSideBar}
             showRightSideBar={showRightSideBar}
+            messages={allMessages}
+            onMessageFound={handleScrollToMessage}
+            getSenderInfo={getSenderInfo} // Truyền hàm getSenderInfo
           />
         )}
 
