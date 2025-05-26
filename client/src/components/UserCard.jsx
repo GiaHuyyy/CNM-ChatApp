@@ -19,12 +19,12 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
     const checkFriendStatus = async () => {
       try {
         if (!dataUser?._id) return;
-        
+
         const response = await axios.get(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/check-friend-status/${dataUser._id}`,
           { withCredentials: true }
         );
-        
+
         if (response.data.success) {
           console.log("Friend status:", response.data.data);
           setFriendStatus(response.data.data);
@@ -36,7 +36,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
         console.error("Error checking friend status:", error);
       }
     };
-    
+
     if (!isUser && dataUser?._id) {
       checkFriendStatus();
     }
@@ -45,11 +45,11 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
   // Thiết lập socket listeners
   useEffect(() => {
     if (isUser || !dataUser?._id) return;
-    
+
     console.log(`Setting up socket listeners for user card: ${dataUser?.name}`);
     const socket = socketManager.connect();
     if (!socket) return;
-    
+
     function handleFriendRequestSent(data) {
       console.log("Friend request sent:", data);
       if (data.success) {
@@ -62,7 +62,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
         setIsSending(false);
       }
     }
-    
+
     function handleFriendRequestCancelled(data) {
       console.log("Friend request cancelled:", data);
       if (data.success) {
@@ -71,13 +71,13 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
         setIsSending(false);
       }
     }
-    
+
     function handleFriendRequestError(data) {
       console.error("Friend request error:", data);
       toast.error(data.message);
       setIsSending(false);
     }
-    
+
     // Thêm listener mới: Lắng nghe khi lời mời kết bạn bị từ chối
     function handleFriendRequestRejected(data) {
       console.log("Friend request rejected:", data);
@@ -90,12 +90,12 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
         setIsSending(false);
       }
     }
-    
+
     socket.on("friendRequestSent", handleFriendRequestSent);
     socket.on("friendRequestCancelled", handleFriendRequestCancelled);
     socket.on("friendRequestError", handleFriendRequestError);
     socket.on("friendRequestRejected", handleFriendRequestRejected);
-    
+
     return () => {
       socket.off("friendRequestSent", handleFriendRequestSent);
       socket.off("friendRequestCancelled", handleFriendRequestCancelled);
@@ -115,7 +115,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
       const toastId = toast.loading(
         friendStatus?.status === 'pending' ? "Đang hủy lời mời..." : "Đang gửi lời mời..."
       );
-      
+
       if (friendStatus?.status === 'pending' && friendStatus?.isSender) {
         console.log("Cancelling friend request:", friendStatus.requestId);
         // Hủy lời mời kết bạn qua socket
@@ -123,7 +123,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
           requestId: friendStatus.requestId,
           receiverId: dataUser._id
         });
-        
+
         // Fallback nếu socket không phản hồi sau 3 giây
         setTimeout(() => {
           if (isSending) {
@@ -137,7 +137,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
         socketManager.emit("sendFriendRequest", {
           receiverId: dataUser._id
         });
-        
+
         // Fallback nếu socket không phản hồi sau 3 giây
         setTimeout(() => {
           if (isSending) {
@@ -215,31 +215,28 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
 
       {!isUser && (
         <div className="flex justify-center gap-x-2 px-4 pb-4">
-          {friendStatus?.status === 'accepted' ? (
-            <button 
+          {friendStatus?.status === "accepted" ? (
+            <button
               className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold"
               disabled
             >
               Bạn bè
             </button>
           ) : (
-            <button 
-              className={`flex h-8 flex-1 items-center justify-center rounded-[3px] text-sm font-semibold disabled:opacity-50 
-                ${hasSentRequest 
-                  ? 'bg-[#ffebeb] text-[#ad0000] hover:bg-[#ffdbdb]' 
-                  : 'bg-[#e5e7eb] hover:bg-[#c6cad2]'
-                }`}
+            <button
+              className={`flex h-8 flex-1 items-center justify-center rounded-[3px] text-sm font-semibold disabled:opacity-50 ${
+                hasSentRequest ? "bg-[#ffebeb] text-[#ad0000] hover:bg-[#ffdbdb]" : "bg-[#e5e7eb] hover:bg-[#c6cad2]"
+              }`}
               onClick={handleFriendRequest}
-              disabled={isSending || (friendStatus?.status === 'pending' && !friendStatus?.isSender)}
+              disabled={isSending || (friendStatus?.status === "pending" && !friendStatus?.isSender)}
             >
-              {isSending 
-                ? "Đang xử lý..." 
-                : friendStatus?.status === 'pending'
-                  ? friendStatus.isSender 
+              {isSending
+                ? "Đang xử lý..."
+                : friendStatus?.status === "pending"
+                  ? friendStatus.isSender
                     ? "Hủy lời mời"
                     : "Đã nhận lời mời"
-                  : "Kết bạn"
-              }
+                  : "Kết bạn"}
             </button>
           )}
           <Link
@@ -261,16 +258,20 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
           <div className="mt-3">
             <div className="flex items-center">
               <span className="w-[100px] text-sm text-[#5a6981]">Giới tính</span>
-              <span className="text-sm">Chưa có</span>
+              <span className="text-sm">
+                {dataUser?.gender === "male" ? "Nam" : dataUser?.gender === "female" ? "Nữ" : "Chưa có"}
+              </span>
             </div>
             <div className="mt-2 flex items-center">
               <span className="w-[100px] text-sm text-[#5a6981]">Ngày sinh</span>
-              <span className="text-sm">Chưa có</span>
+              <span className="text-sm">
+                {dataUser?.dateOfBirth ? new Date(dataUser.dateOfBirth).toLocaleDateString("vi-VN") : "Chưa có"}
+              </span>
             </div>
             {isUser && (
               <div className="mt-2 flex items-center">
                 <span className="w-[100px] text-sm text-[#5a6981]">Điện thoại</span>
-                <span className="text-sm">+84 {dataUser?.phone}</span>
+                <span className="text-sm">{dataUser?.phone ? `+84 ${dataUser.phone}` : "Chưa có"}</span>
               </div>
             )}
             {isUser && (

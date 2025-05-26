@@ -27,8 +27,6 @@ import DropdownAvatar from "./DropdownAvatar";
 import DropdownSetting from "./DropdownSetting";
 import EditUserDetails from "./EditUserDetails";
 import GroupChatModal from "./GroupChatModal";
-import { socketManager } from "../socket/socketConfig";
-
 export default function Sidebar({ onGroupCreated }) {
   const user = useSelector((state) => state.user);
   const isOnline = user?.onlineUser?.includes(user?._id);
