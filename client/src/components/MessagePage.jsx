@@ -42,6 +42,7 @@ export default function MessagePage() {
     online: false,
     isGroup: false,
     members: [],
+    deputyAdmins: [], // Make sure this field is initialized
   });
 
   const [messages, setMessages] = useState({
@@ -151,20 +152,20 @@ export default function MessagePage() {
       });
 
       socketConnection.on("groupMessage", (groupData) => {
-        // Enhanced debugging for group data
+        // Enhanced debugging for group data with deputies
         console.log("Received groupMessage event:", {
           id: groupData?._id,
           name: groupData?.name,
           isGroup: groupData?.isGroup,
           membersCount: groupData?.members?.length || 0,
           profilePic: groupData?.profilePic,
-          hasSharedMessages: groupData?.messages?.some((msg) => msg.sharedContent),
+          hasDeputyAdmins: Boolean(groupData?.deputyAdmins && groupData?.deputyAdmins.length),
+          deputyAdminsCount: groupData?.deputyAdmins?.length || 0,
         });
 
-        // Debug any shared messages
-        const sharedMessages = groupData?.messages?.filter((msg) => msg.sharedContent);
-        if (sharedMessages?.length > 0) {
-          console.log("Shared messages in group:", sharedMessages);
+        // If there are deputy admins, log more details
+        if (groupData?.deputyAdmins && groupData?.deputyAdmins.length > 0) {
+          console.log("Deputy admins in group:", groupData.deputyAdmins);
         }
 
         setAllMessages(groupData?.messages || []);
@@ -176,7 +177,6 @@ export default function MessagePage() {
         setDataUser({
           _id: groupData._id,
           name: groupName,
-          // Use the actual profilePic if available, otherwise fallback to generated avatar
           profilePic:
             groupData?.profilePic ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=random`,
@@ -184,6 +184,7 @@ export default function MessagePage() {
           members: groupData.members || [],
           groupAdmin: groupData.groupAdmin,
           mutedMembers: groupData.mutedMembers || [],
+          deputyAdmins: groupData.deputyAdmins || [], // Make sure we save deputyAdmins
         });
         setSeenMessage(true);
         setIsLoading(false);
@@ -663,6 +664,8 @@ export default function MessagePage() {
       /đã thay đổi ảnh nhóm/i,
       /đã mở/i,
       /đã tắt/i,
+      /đã được/i,
+      /đã bị/i
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));

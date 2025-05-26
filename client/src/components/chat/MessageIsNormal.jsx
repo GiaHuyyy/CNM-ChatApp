@@ -300,7 +300,6 @@ const MessageIsNormal = ({
               )}
               {message.sharedContent.originalText && (
                 <p className="whitespace-pre-wrap break-words text-sm font-medium">
-                  {console.log("Rendering shared text:", message.sharedContent.originalText)}
                   {message.sharedContent.originalText}
                 </p>
               )}
