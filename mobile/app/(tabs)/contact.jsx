@@ -43,22 +43,22 @@ const ContactScreen = () => {
   const [activeTab, setActiveTab] = useState('friends');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [friends, setFriends] = useState([]);
-  const [friendsLoading, setFriendsLoading] = useState(true);
+  const [sentRequests, setSentRequests] = useState([]); // Lưu lời mời đã gửi
   const currentUserId = useSelector((state) => state.user._id);
 
   const {
-    contacts,
     friendRequests,
     loading,
     error,
     searchResults,
     searchLoading,
+    contacts
   } = useSelector((state) => state.contacts);
 
+  // Khi vào màn contact, lấy toàn bộ user (searchUsers với query rỗng)
   useEffect(() => {
-    dispatch(fetchContacts());
     dispatch(fetchFriendRequests());
+    dispatch(searchUsers(''));
   }, [dispatch]);
 
   useEffect(() => {
@@ -69,10 +69,10 @@ const ContactScreen = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (debouncedSearch) {
+    if (debouncedSearch !== '') {
       dispatch(searchUsers(debouncedSearch));
     } else {
-      dispatch(clearSearchResults());
+      dispatch(searchUsers(''));
     }
   }, [debouncedSearch, dispatch]);
 
@@ -101,13 +101,19 @@ const ContactScreen = () => {
 
   const handleSendFriendRequest = async (userId) => {
     try {
+      const token = useSelector((state) => state.user.token); // Lấy token từ Redux
       const res = await axios.post(
         'https://cnm-chatapp-server.onrender.com/api/send-friend-request',
         { receiverId: userId },
-        { headers: { Authorization: 'Bearer taki' } }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data && res.data.success) {
         Alert.alert('Thành công', res.data.message || 'Đã gửi lời mời kết bạn');
+        // Lấy thông tin user vừa gửi lời mời để thêm vào sentRequests
+        const sentUser = searchResults.find(u => u._id === userId);
+        if (sentUser) {
+          setSentRequests(prev => [{ receiver: sentUser, _id: Date.now().toString() }, ...prev]);
+        }
       } else {
         Alert.alert('Lỗi', res.data?.message || 'Không gửi được lời mời kết bạn');
       }
@@ -172,31 +178,47 @@ const ContactScreen = () => {
           Bạn bè
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setActiveTab('received')}
+        className={`mr-6 pb-2 ${activeTab === 'received' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'received' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          Lời mời kết bạn
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setActiveTab('sent')}
+        className={`pb-2 ${activeTab === 'sent' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'sent' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          Đã gửi lời mời
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const renderContactList = () => (
+  // Render friends list (dùng contacts)
+  const renderFriendList = () => (
     <View className="flex-1 bg-white">
       <View className="flex-row justify-between px-4 py-2 bg-gray-50">
-        <Text className="text-gray-500">Tất cả {friends.length}</Text>
-        <Text className="text-gray-500">Mới truy cập</Text>
+        <Text className="text-gray-500">Tất cả {contacts.length}</Text>
       </View>
-      {friendsLoading ? (
+      {loading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0068FF" />
         </View>
       ) : (
         <ScrollView className="flex-1">
-          {friends.length === 0 ? (
+          {contacts.length === 0 ? (
             <Text className="text-center text-gray-500 mt-8">Không có bạn bè nào.</Text>
           ) : (
-            friends.map(friend => (
+            contacts.map(friend => (
               <TouchableOpacity
                 key={friend._id}
                 className="flex-row items-center px-4 py-3 border-b border-gray-100"
               >
                 <Image
-                  source={{ uri: friend.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name)}` }}
+                  source={{ uri: friend.profilePic || friend.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(friend.name)}` }}
                   className="w-12 h-12 rounded-full"
                 />
                 <Text className="ml-3 flex-1 text-base">{friend.name}</Text>
@@ -216,93 +238,130 @@ const ContactScreen = () => {
     </View>
   );
 
-  // Render search results component
-  const renderSearchResults = () => {
-    if (searchLoading) {
-      return (
-        <View className="flex-1 bg-white items-center justify-center p-4">
+  // Render user list (dùng searchResults)
+  const renderUserList = () => (
+    <View className="flex-1 bg-white">
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {searchResults.length}</Text>
+      </View>
+      {searchLoading ? (
+        <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0068FF" />
-          <Text className="mt-2 text-gray-500">Đang tìm kiếm...</Text>
         </View>
-      );
-    }
-
-    if (searchResults && searchResults.length > 0) {
-      return (
-        <View className="flex-1 bg-white">
-          <Text className="px-4 py-2 bg-gray-50 text-gray-500">
-            Kết quả tìm kiếm ({searchResults.length})
-          </Text>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
+      ) : (
+        <ScrollView className="flex-1">
+          {searchResults.length === 0 ? (
+            <Text className="text-center text-gray-500 mt-8">Không có người dùng nào.</Text>
+          ) : (
+            searchResults.map(user => (
               <TouchableOpacity
+                key={user._id}
                 className="flex-row items-center px-4 py-3 border-b border-gray-100"
               >
                 <Image
-                  source={{ uri: item.avatar || item.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}` }}
+                  source={{ uri: user.profilePic || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` }}
                   className="w-12 h-12 rounded-full"
                 />
-                <View className="ml-3 flex-1">
-                  <Text className="text-base font-semibold">{item.name}</Text>
-                  {item.email && <Text className="text-sm text-gray-500">{item.email}</Text>}
-                </View>
-                <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded-full" onPress={() => handleSendFriendRequest(item._id)}>
+                <Text className="ml-3 flex-1 text-base">{user.name}</Text>
+                <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded-full" onPress={() => handleSendFriendRequest(user._id)}>
                   <Text className="text-white">Kết bạn</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <View className="flex-1 items-center justify-center py-8">
-                <Text className="text-gray-500">Không có kết quả phù hợp</Text>
-              </View>
-            }
-          />
+            ))
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  const renderFriendRequests = () => (
+    <View className="flex-1 bg-white">
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {friendRequests.length}</Text>
+      </View>
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#0068FF" />
         </View>
-      );
-    }
+      ) : (
+        <ScrollView className="flex-1">
+          {friendRequests.length === 0 ? (
+            <Text className="text-center text-gray-500 mt-8">Không có lời mời kết bạn nào.</Text>
+          ) : (
+            friendRequests.map(req => (
+              <View key={req._id} className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                <Image
+                  source={{ uri: req.sender?.profilePic || req.sender?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(req.sender?.name || '')}` }}
+                  className="w-12 h-12 rounded-full"
+                />
+                <Text className="ml-3 flex-1 text-base">{req.sender?.name}</Text>
+                <View className="flex-row">
+                  <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded-full mr-2" onPress={() => handleAcceptRequest(req._id)}>
+                    <Text className="text-white">Chấp nhận</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity className="bg-gray-300 px-3 py-1 rounded-full" onPress={() => handleRejectRequest(req._id)}>
+                    <Text className="text-black">Từ chối</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
 
-    return null;
-  };
+  const renderSentRequests = () => (
+    <View className="flex-1 bg-white">
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {sentRequests.length}</Text>
+      </View>
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#0068FF" />
+        </View>
+      ) : (
+        <ScrollView className="flex-1">
+          {sentRequests.length === 0 ? (
+            <Text className="text-center text-gray-500 mt-8">Không có lời mời đã gửi nào.</Text>
+          ) : (
+            sentRequests.map(req => (
+              <View key={req._id} className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                <Image
+                  source={{ uri: req.receiver?.profilePic || req.receiver?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(req.receiver?.name || '')}` }}
+                  className="w-12 h-12 rounded-full"
+                />
+                <Text className="ml-3 flex-1 text-base">{req.receiver?.name}</Text>
+                <Text className="text-gray-400">Đã gửi</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
 
-  // Add a function to clear the search
-  const clearSearch = () => {
-    setSearchQuery('');
-    dispatch(clearSearchResults());
-  };
-
+  // Lấy danh sách lời mời đã gửi khi vào màn hình
   useEffect(() => {
-    const fetchFriends = async () => {
-      setFriendsLoading(true);
+    const fetchSentRequests = async () => {
       try {
-        const res = await axios.get('https://cnm-chatapp-server.onrender.com/api/friends');
-        if (res.data && res.data.success && Array.isArray(res.data.data)) {
-          const friendList = res.data.data.map(item => {
-            if (item.sender._id === currentUserId) return item.receiver;
-            return item.sender;
-          }).filter(friend => friend._id !== currentUserId);
-          setFriends(friendList);
+        const token = useSelector((state) => state.user.token);
+        const res = await axios.get('https://cnm-chatapp-server.onrender.com/api/sent-friend-requests', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.data && res.data.success) {
+          setSentRequests(res.data.data || []);
         } else {
-          setFriends([]);
+          setSentRequests([]);
         }
       } catch (err) {
-        setFriends([]);
-      } finally {
-        setFriendsLoading(false);
+        setSentRequests([]);
       }
     };
-    fetchFriends();
-  }, [currentUserId]);
+    fetchSentRequests();
+  }, []);
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#0068FF" />
-      </View>
-    );
-  }
-
+  // Thay đổi phần render: nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
@@ -321,7 +380,7 @@ const ContactScreen = () => {
                   onChangeText={setSearchQuery}
                 />
                 {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={clearSearch}>
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
                     <FontAwesomeIcon icon={faTimes} size={16} color="#fff" />
                   </TouchableOpacity>
                 )}
@@ -335,8 +394,14 @@ const ContactScreen = () => {
 
         {renderTabs()}
 
-        {/* Show search results if there's a query, otherwise show contacts */}
-        {searchQuery.length > 0 ? renderSearchResults() : renderContactList()}
+        {/* Nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng */}
+        {searchQuery.length > 0
+          ? renderUserList()
+          : activeTab === 'friends'
+          ? renderFriendList()
+          : activeTab === 'received'
+          ? renderFriendRequests()
+          : renderSentRequests()}
       </View>
     </SafeAreaView>
   );

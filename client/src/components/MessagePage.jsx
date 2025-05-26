@@ -1,27 +1,28 @@
-import { faFilePen, faPhone, faTrash, faVideo, faXmark, faImage } from "@fortawesome/free-solid-svg-icons";
+import { faFilePen, faPhone, faTrash, faVideo, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useEffect, useRef, useState, useMemo } from "react";
+import { format } from "date-fns";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
-import { useGlobalContext } from "../context/GlobalProvider";
-import { format } from "date-fns";
 import { useCallContext } from "../context/CallProvider";
+import { useGlobalContext } from "../context/GlobalProvider";
 import uploadFileToCloud from "../helpers/uploadFileToClound";
 // eslint-disable-next-line no-unused-vars
-import uploadFileToS3 from "../helpers/uploadFileToS3";
 
+import { toast } from "sonner";
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmModal from "./ConfirmModal";
 import ImageViewerModal from "./ImageViewerModal";
 import RightSidebar from "./RightSidebar";
 import ShareMessageModal from "./ShareMessageModal";
-import Header from "./chat/Header";
 import Footer from "./chat/Footer";
-import handleAudioCall from "./handles/handleAudioCall";
-import handleVideoCall from "./handles/handleVideoCall";
+import Header from "./chat/Header";
 import MessageIsCall from "./chat/MessageIsCall";
 import MessageIsNormal from "./chat/MessageIsNormal";
-import { toast } from "sonner";
+import handleAudioCall from "./handles/handleAudioCall";
+import handleVideoCall from "./handles/handleVideoCall";
+// Import component PinnedMessagesHeader mới
+import PinnedMessagesHeader from "./chat/PinnedMessagesHeader";
 
 export default function MessagePage() {
   const params = useParams();
@@ -816,6 +817,144 @@ export default function MessagePage() {
     };
   }, [params.userId]);
 
+  const handleScrollToMessage = (messageId) => {
+    console.log("Scrolling to message:", messageId);
+    
+    // Tìm tin nhắn trong danh sách
+    const messageIndex = allMessages.findIndex(msg => msg._id === messageId);
+    
+    if (messageIndex === -1) {
+      console.error("Message not found in the message list:", messageId);
+      return;
+    }
+
+    // Tính toán số tin nhắn cần hiển thị để đảm bảo tin nhắn được tìm thấy nằm trong DOM
+    const messagesNeeded = allMessages.length - messageIndex;
+    
+    // Cập nhật số lượng tin nhắn hiển thị nếu cần
+    if (visibleMessages < messagesNeeded) {
+      setVisibleMessages(messagesNeeded);
+      
+      // Đợi cho DOM cập nhật sau khi thay đổi số lượng tin nhắn hiển thị
+      setTimeout(() => {
+        const messageElement = document.getElementById(`message-${messageId}`);
+        if (messageElement) {
+          messageElement.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+          });
+          
+          // Thêm hiệu ứng highlight
+          messageElement.classList.add("bg-blue-100");
+          setTimeout(() => {
+            messageElement.classList.remove("bg-blue-100");
+          }, 2000);
+        } else {
+          console.error("Message element still not found after increasing visible messages:", messageId);
+        }
+      }, 300);
+    } else {
+      // Nếu tin nhắn đã nằm trong DOM, cuộn đến nó ngay lập tức
+      const messageElement = document.getElementById(`message-${messageId}`);
+      
+      if (messageElement) {
+        messageElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+        
+        // Thêm hiệu ứng highlight
+        messageElement.classList.add("bg-blue-100");
+        setTimeout(() => {
+          messageElement.classList.remove("bg-blue-100");
+        }, 2000);
+      } else {
+        console.error("Message element not found:", messageId);
+      }
+    }
+  };
+
+  const handlePinMessage = (message, action) => {
+    if (!socketConnection || !conversation) {
+      console.log("Không thể ghim tin nhắn: Thiếu socket hoặc conversation");
+      return;
+    }
+
+    // Kiểm tra xem có đang cố ghim (không phải bỏ ghim) và có đạt giới hạn chưa
+    if (action === "pin" && conversation?.pinnedMessages && conversation.pinnedMessages.length >= 5) {
+      toast.error("Bạn chỉ có thể ghim tối đa 5 tin nhắn.", { position: "top-center" });
+      return;
+    }
+
+    const messageId = message._id;
+    const conversationId = conversation._id;
+    
+    if (!messageId || !conversationId) {
+      console.error("Thiếu ID tin nhắn hoặc cuộc trò chuyện", { messageId, conversationId });
+      toast.error("Không thể thực hiện thao tác ghim tin nhắn");
+      return;
+    }
+
+    console.log("Đang ghim tin nhắn với thông số:", {
+      conversationId,
+      messageId,
+      action
+    });
+
+    socketConnection.emit("pinMessage", {
+      conversationId,
+      messageId,
+      action,
+      isGroup: dataUser.isGroup,
+    });
+    
+    setOpenActionMessage(false);
+  };
+
+  // Thêm useEffect để lắng nghe phản hồi từ server khi ghim/bỏ ghim tin nhắn
+  useEffect(() => {
+    if (!socketConnection) return;
+    
+    const handlePinError = (data) => {
+      toast.error(data.message || "Lỗi khi ghim tin nhắn.");
+    };
+    
+    const handleMessagePinnedUnpinned = (data) => {
+      if (data.success) {
+        toast.success(data.action === 'pin' ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
+      }
+    };
+
+    socketConnection.on("pinMessageError", handlePinError);
+    socketConnection.on("messagePinnedUnpinned", handleMessagePinnedUnpinned);
+
+    return () => {
+      socketConnection.off("pinMessageError", handlePinError);
+      socketConnection.off("messagePinnedUnpinned", handleMessagePinnedUnpinned);
+    };
+  }, [socketConnection]);
+
+  // Replace the problematic useEffect that's causing the loop
+  useEffect(() => {
+    if (conversation?.pinnedMessages?.length > 0) {
+      console.log("Current pinned messages:", conversation.pinnedMessages);
+      
+      // Only check once per conversation load if pinned messages need refreshing
+      const needsRefresh = conversation.pinnedMessages.some(msg => 
+        typeof msg !== 'object' || (typeof msg === 'object' && !msg.msgByUserId)
+      );
+      
+      // Use a ref to prevent multiple refreshes for the same conversation
+      if (needsRefresh && socketConnection && !conversationInitialized.current) {
+        console.log("Pinned messages need refresh, requesting data once...");
+        socketConnection.emit("joinRoom", params.userId);
+        
+        // Mark as initialized to prevent further refresh requests
+        conversationInitialized.current = true;
+      }
+    }
+  }, [conversation?._id, socketConnection, params.userId]); // Changed dependency from conversation.pinnedMessages to conversation._id
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -828,6 +967,10 @@ export default function MessagePage() {
             handleVideoCall={() => handleVideoCall({ callUser, dataUser, params })}
             setShowRightSideBar={setShowRightSideBar}
             showRightSideBar={showRightSideBar}
+            messages={allMessages}
+            onMessageFound={handleScrollToMessage}
+            getSenderInfo={getSenderInfo}
+            conversation={conversation} // Thêm prop này
           />
         )}
 
@@ -842,16 +985,16 @@ export default function MessagePage() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* Show overlay when dragging files */}
-            {isDraggingFile && (
-              <div className="sticky inset-0 z-[9999] flex h-full items-center justify-center bg-blue-100 bg-opacity-80">
-                <div className="transform animate-pulse rounded-lg border-2 border-blue-500 bg-white p-7 shadow-2xl transition-transform">
-                  <div className="flex items-center justify-center text-7xl text-blue-500">
-                    <FontAwesomeIcon icon={faImage} width={30} />
-                  </div>
-                  <p className="text-md text-center font-medium text-blue-700">Thả để tải lên File, Ảnh hoặc Video</p>
-                </div>
-              </div>
+            {/* Thêm PinnedMessagesHeader vào đây */}
+            {!isLoading && !loadError && conversation?.pinnedMessages && conversation.pinnedMessages.length > 0 && (
+              <PinnedMessagesHeader
+                pinnedMessages={conversation.pinnedMessages}
+                onNavigateToMessage={handleScrollToMessage}
+                onUnpinMessage={handlePinMessage}
+                currentUserId={user?._id}
+                getSenderInfo={getSenderInfo}
+                allMessages={allMessages} // Add this prop to pass all messages
+              />
             )}
 
             {/* Loading chat */}
@@ -949,6 +1092,7 @@ export default function MessagePage() {
                         sender={sender}
                         dataUser={dataUser}
                         user={user}
+                        conversation={conversation} // Add this prop
                         hoveredMessage={hoveredMessage}
                         setHoveredMessage={setHoveredMessage}
                         setHoveredLikeMessage={setHoveredLikeMessage}
@@ -963,6 +1107,7 @@ export default function MessagePage() {
                         setOpenActionMessage={setOpenActionMessage}
                         handleEditMessage={handleEditMessage}
                         handleDeleteMessage={handleDeleteMessage}
+                        handlePinMessage={handlePinMessage} // Add this prop
                       />
                     );
                   }
