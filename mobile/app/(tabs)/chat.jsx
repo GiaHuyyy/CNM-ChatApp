@@ -1981,9 +1981,15 @@ export default function Chat() {
       console.log(`After UNREAD filter: ${finalFiltered.length} conversations`);
     }
 
+    // Store the total filtered count for use in the UI
+    const totalFilteredCount = finalFiltered.length;
+
     // Apply limit for showing all vs. limited conversations
     const result = showAllConversations ? finalFiltered : finalFiltered.slice(0, 7);
-    console.log(`Final displayed conversations: ${result.length}`);
+    console.log(`Final displayed conversations: ${result.length} of ${totalFilteredCount} total`);
+
+    // Attach the total count to the result array for use in the UI
+    result.totalCount = totalFilteredCount;
 
     return result;
   }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender]);
@@ -2895,14 +2901,25 @@ export default function Chat() {
                         )}
                       />
 
-                      {(Array.isArray(allUsers) && allUsers.length > displayedConversations.length && !showAllConversations) && (
+                      {/* Button to show all conversations when limited */}
+                      {!showAllConversations && displayedConversations.totalCount > 7 && (
                         <TouchableOpacity
                           className="py-3 border-t border-gray-200 items-center bg-gray-50"
                           onPress={toggleShowAllConversations}
                         >
                           <Text className="text-blue-500 font-medium">
-                            {`Xem tất cả (${allUsers.length})`}
+                            {`Xem tất cả (${displayedConversations.totalCount})`}
                           </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Button to show fewer conversations when showing all */}
+                      {showAllConversations && displayedConversations.totalCount > 7 && (
+                        <TouchableOpacity
+                          className="py-3 border-t border-gray-200 items-center bg-gray-50"
+                          onPress={toggleShowAllConversations}
+                        >
+                          <Text className="text-blue-500 font-medium">Hiển thị ít hơn</Text>
                         </TouchableOpacity>
                       )}
                     </View>
