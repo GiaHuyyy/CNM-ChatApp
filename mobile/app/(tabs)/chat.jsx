@@ -84,7 +84,8 @@ export default function Chat() {
 
   const [showAllConversations, setShowAllConversations] = useState(false);
   const [forceRender, setForceRender] = useState(false);
-
+  const [activeFilter, setActiveFilter] = useState('all'); // Add state for active filter: 'all' or 'unread'
+  
   const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
 
   const [messageToShare, setMessageToShare] = useState(null);
@@ -1836,14 +1837,21 @@ export default function Chat() {
   const displayedConversations = useMemo(() => {
     if (!Array.isArray(allUsers)) return [];
 
+    // First sort by timestamp
     const sortedConversations = [...allUsers].sort((a, b) => {
       const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
       const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
       return timeB - timeA;
     });
 
-    return showAllConversations ? sortedConversations : sortedConversations.slice(0, 7);
-  }, [allUsers, showAllConversations]);
+    // Then filter based on the active filter
+    const filteredConversations = activeFilter === 'unread' 
+      ? sortedConversations.filter(conv => conv.unseenMessages && conv.unseenMessages > 0)
+      : sortedConversations;
+
+    // Finally apply the limit if not showing all conversations
+    return showAllConversations ? filteredConversations : filteredConversations.slice(0, 7);
+  }, [allUsers, showAllConversations, activeFilter]);
 
   const toggleShowAllConversations = () => {
     setShowAllConversations(prevState => !prevState);
@@ -2363,6 +2371,18 @@ export default function Chat() {
                 onChangeText={setMessageText}
                 multiline
                 onFocus={() => setShowMediaOptions(false)}
+                onKeyPress={(e) => {
+                  if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                    // Prevent default behavior (new line)
+                    e.preventDefault?.();
+                    
+                    // Only send if there's a message or files selected
+                    if ((messageText.trim() || selectedFiles.length > 0) && 
+                        !isUploading && socketConnection && selectedChat) {
+                      handleSendMessage();
+                    }
+                  }
+                }}
               />
               <TouchableOpacity
                 onPress={handleSendMessage}
@@ -2388,13 +2408,27 @@ export default function Chat() {
 
                 <View className="flex-row items-center border-b border-gray-300 px-4">
                   <View className="h-8">
-                    <TouchableOpacity className="mr-3 h-full border-b-2 border-blue-500">
-                      <Text className="text-[13px] font-semibold text-blue-500">Tất cả</Text>
+                    <TouchableOpacity 
+                      className={`mr-3 h-full ${activeFilter === 'all' ? 'border-b-2 border-blue-500' : ''}`}
+                      onPress={() => setActiveFilter('all')}
+                    >
+                      <Text 
+                        className={`text-[13px] font-semibold ${activeFilter === 'all' ? 'text-blue-500' : 'text-gray-500'}`}
+                      >
+                        Tất cả
+                      </Text>
                     </TouchableOpacity>
                   </View>
-                  <View>
-                    <TouchableOpacity>
-                      <Text className="text-[13px] font-semibold text-gray-500">Chưa đọc</Text>
+                  <View className="h-8">
+                    <TouchableOpacity
+                      className={`h-full ${activeFilter === 'unread' ? 'border-b-2 border-blue-500' : ''}`}
+                      onPress={() => setActiveFilter('unread')}
+                    >
+                      <Text 
+                        className={`text-[13px] font-semibold ${activeFilter === 'unread' ? 'text-blue-500' : 'text-gray-500'}`}
+                      >
+                        Chưa đọc
+                      </Text>
                     </TouchableOpacity>
                   </View>
                   <View className="ml-auto flex-row items-center">
