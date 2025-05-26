@@ -97,6 +97,16 @@ export default function Chat() {
   // Add near the top with other refs
   const socketEventsInitialized = useRef(false);
 
+  // Add missing animation-related variables
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
+
+  // Add state for pinned conversations and context menu
+  const [pinnedConversations, setPinnedConversations] = useState([]);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [longPressedChat, setLongPressedChat] = useState(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+
   useEffect(() => {
     if (initializationAttempted.current) return;
     initializationAttempted.current = true;
@@ -1526,7 +1536,7 @@ export default function Chat() {
     );
   };
 
-  // Add the missing renderConversationItem function
+  // Modify the renderConversationItem function to add long press handler
   const renderConversationItem = ({ item }) => {
     if (!item || !item.userDetails) {
       console.log("Invalid conversation item:", item);
@@ -1535,6 +1545,7 @@ export default function Chat() {
 
     const isGroup = item.userDetails.isGroup;
     const lastMessage = item.latestMessage || {};
+    const isPinned = pinnedConversations.includes(item._id);
 
     // Format the timestamp
     const messageTime = lastMessage.createdAt
@@ -1558,8 +1569,10 @@ export default function Chat() {
 
     return (
       <TouchableOpacity
-        className="flex-row items-center px-4 py-2 border-b border-gray-100"
+        className={`flex-row items-center px-4 py-2 border-b border-gray-100 ${isPinned ? 'bg-blue-50' : ''}`}
         onPress={() => handleSelectChat(item)}
+        onLongPress={(event) => handleLongPressConversation(item, event)}
+        delayLongPress={500} // Adjust time for long press to trigger (500ms is standard)
       >
         <View className="relative">
           <Image
@@ -1576,9 +1589,14 @@ export default function Chat() {
 
         <View className="ml-3 flex-1">
           <View className="flex-row justify-between items-center">
-            <Text className={`font-semibold ${item.unseenMessages ? "text-black" : "text-gray-800"}`} numberOfLines={1}>
-              {item.userDetails.nickname || item.userDetails.name}
-            </Text>
+            <View className="flex-row items-center">
+              {isPinned && (
+                <View className="w-2 h-2 bg-blue-500 rounded-full mr-2" />
+              )}
+              <Text className={`font-semibold ${item.unseenMessages ? "text-black" : "text-gray-800"}`} numberOfLines={1}>
+                {item.userDetails.nickname || item.userDetails.name}
+              </Text>
+            </View>
             {lastMessage.createdAt && (
               <Text className="text-xs text-gray-500">{dateString}</Text>
             )}
@@ -1614,309 +1632,7 @@ export default function Chat() {
     );
   };
 
-  const refreshConversations = () => {
-    if (socketConnection && user?._id) {
-      console.log("Refreshing conversations for user:", user._id);
-      socketConnection.emit("sidebar", user._id);
-    }
-  };
-
-  const handleDeleteDirectConversation = () => {
-    console.log("Delete conversation handler called in Chat component");
-    if (!socketConnection || !selectedChat) {
-      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
-      return;
-    }
-
-    // Set loading state if needed
-    setIsChatLoading(true);
-
-    console.log("Emitting deleteConversation event to socket", {
-      conversationId: selectedChat.userDetails?._id,
-      userId: user._id
-    });
-
-    socketConnection.emit("deleteConversation", {
-      conversationId: selectedChat.userDetails?._id,
-      userId: user._id
-    });
-
-    socketConnection.once("conversationDeleted", (response) => {
-      setIsChatLoading(false);
-      console.log("Received conversationDeleted response:", response);
-
-      if (response.success) {
-        // Close the chat details modal
-        setShowDirectChatDetails(false);
-
-        // Navigate back to chat list
-        handleBackToList();
-
-        // Show success alert
-        Alert.alert("Thành công", "Cuộc hội thoại đã được xóa");
-
-        // Refresh the conversation list
-        refreshConversations();
-      } else {
-        Alert.alert("Lỗi", response.message || "Không thể xóa cuộc hội thoại");
-      }
-    });
-  };
-
-  const handleUpdateNickname = (newNickname) => {
-    if (!socketConnection || !selectedChat) {
-      Alert.alert("Error", "Unable to connect to server. Please try again later.");
-      return;
-    }
-
-    // Only proceed if the nickname changed
-    if (newNickname === chatUser?.nickname) return;
-
-    // If nickname is empty, it means we want to remove it
-    const nicknamePayload = {
-      userId: user._id,
-      contactId: selectedChat.userDetails?._id,
-      nickname: newNickname || null // If empty, set to null to remove nickname
-    };
-
-    console.log("Updating nickname:", nicknamePayload);
-
-    // Send the update to the server
-    socketConnection.emit("updateContactNickname", nicknamePayload);
-
-    // Handle the response from the server
-    socketConnection.once("nicknameUpdated", (response) => {
-      if (response.success) {
-        // Update the local chat user data with the new nickname
-        setChatUser(prev => ({
-          ...prev,
-          nickname: newNickname || null
-        }));
-
-        // Update in the all users list for the conversation list
-        setAllUsers(prev => {
-          return prev.map(chat => {
-            if (chat.userDetails?._id === selectedChat.userDetails?._id) {
-              return {
-                ...chat,
-                userDetails: {
-                  ...chat.userDetails,
-                  nickname: newNickname || null
-                }
-              };
-            }
-            return chat;
-          });
-        });
-
-        // Flash a success message
-        Alert.alert("Success", "Contact name updated successfully");
-      } else {
-        Alert.alert("Error", response.message || "Failed to update contact name");
-      }
-    });
-  };
-
-  // Add the handleRemoveMember function
-  const handleRemoveMember = (groupId, memberId, memberName) => {
-    console.log("Handling remove member:", { groupId, memberId, memberName });
-
-    if (!socketConnection) {
-      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
-      return;
-    }
-
-    setIsChatLoading(true);
-
-    // Clean up existing listeners
-    socketConnection.off("memberRemoved");
-    socketConnection.off("memberRemovedFromGroup");
-
-    // Set up the listener for the server response
-    const handleMemberRemovalResponse = (response) => {
-      setIsChatLoading(false);
-      console.log("Member removal response:", response);
-
-      if (response.success) {
-        // Update the chat user data by removing the member
-        if (chatUser && chatUser.members) {
-          const updatedMembers = chatUser.members.filter(m =>
-            (typeof m === 'object' ? m._id.toString() : m.toString()) !==
-            (typeof memberId === 'object' ? memberId.toString() : memberId.toString())
-          );
-
-          setChatUser(prev => ({
-            ...prev,
-            members: updatedMembers
-          }));
-        }
-
-        // Show success message
-        Alert.alert("Thành công", `Đã xóa ${memberName} khỏi nhóm`);
-
-        // Refresh the group data
-        if (socketConnection && selectedChat?.userDetails?._id) {
-          socketConnection.emit("joinRoom", selectedChat.userDetails._id);
-        }
-      } else {
-        Alert.alert("Lỗi", response.message || "Không thể xóa thành viên. Vui lòng thử lại sau.");
-      }
-    };
-
-    // Listen for both potential event names the server might emit
-    socketConnection.on("memberRemoved", handleMemberRemovalResponse);
-    socketConnection.on("memberRemovedFromGroup", handleMemberRemovalResponse);
-
-    // Prepare payload - normalize all IDs to strings for consistency
-    const payload = {
-      groupId: typeof groupId === 'object' ? groupId.toString() : groupId,
-      memberId: typeof memberId === 'object' ? memberId.toString() : memberId,
-      userId: typeof user._id === 'object' ? user._id.toString() : user._id, // Admin ID
-      adminId: typeof user._id === 'object' ? user._id.toString() : user._id  // Alternate format some APIs might use
-    };
-
-    console.log("Emitting removeMember with payload:", payload);
-
-    // Try both event names the server might be listening for
-    socketConnection.emit("removeMember", payload);
-    socketConnection.emit("removeMemberFromGroup", payload);
-
-    // Set timeout for no response
-    setTimeout(() => {
-      if (isChatLoading) {
-        setIsChatLoading(false);
-        socketConnection.off("memberRemoved");
-        socketConnection.off("memberRemovedFromGroup");
-        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
-      }
-    }, 10000);
-  };
-
-  const handleLeaveGroup = (groupId) => {
-    console.log("Handling leave group for:", groupId);
-    if (!socketConnection) {
-      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
-      return;
-    }
-
-    setIsChatLoading(true);
-
-    // Clean up existing listeners
-    socketConnection.off("groupLeft");
-
-    // Set up the listener for the server response
-    socketConnection.on("groupLeft", (response) => {
-      setIsChatLoading(false);
-      console.log("Group left response:", response);
-
-      if (response.success) {
-        // Close any open modals first
-        setShowGroupInfoModal(false);
-
-        // Show success message and navigate only AFTER user acknowledges
-        Alert.alert(
-          "Thành công",
-          "Bạn đã rời khỏi nhóm",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                // Navigate back to chat list
-                handleBackToList();
-
-                // Refresh the conversation list
-                refreshConversations();
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm. Vui lòng thử lại sau.");
-      }
-    });
-
-    // Prepare payload
-    const payload = {
-      groupId: typeof groupId === 'object' ? groupId.toString() : groupId,
-      userId: typeof user._id === 'object' ? user._id.toString() : user._id
-    };
-
-    console.log("Emitting leaveGroup with payload:", payload);
-    socketConnection.emit("leaveGroup", payload);
-
-    // Set timeout for no response
-    setTimeout(() => {
-      if (isChatLoading) {
-        setIsChatLoading(false);
-        socketConnection.off("groupLeft");
-        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
-      }
-    }, 10000);
-  };
-
-  const handleShowChatDetails = () => {
-    // Kiểm tra chặt chẽ hơn xem đây có phải là nhóm không
-    const isGroup = selectedChat?.userDetails?.isGroup === true ||
-      (chatUser && chatUser.isGroup === true) ||
-      (chatUser && Array.isArray(chatUser.members) && chatUser.members.length > 2);
-
-    console.log("Showing chat details for:", {
-      chatName: chatUser?.name,
-      isGroup: isGroup,
-      hasMembers: !!chatUser?.members,
-      membersCount: chatUser?.members?.length || 0
-    });
-
-    if (isGroup) {
-      setShowGroupInfoModal(true);
-    } else {
-      setShowDirectChatDetails(true);
-    }
-  };
-
-  const handleAddMember = () => {
-    // Close the group info modal first
-    setShowGroupInfoModal(false);
-
-    // Add a small delay before opening the add member modal
-    setTimeout(() => {
-      console.log("Opening add member modal for group:", selectedChat?.userDetails?._id);
-      setShowAddMemberModal(true);
-    }, 300);
-  };
-
-  const handleMembersAdded = () => {
-    console.log("Members added successfully");
-    setShowAddMemberModal(false);
-
-    // Refresh the chat data after members are added
-    if (socketConnection && selectedChat?.userDetails?._id) {
-      socketConnection.emit("joinRoom", selectedChat.userDetails._id);
-    }
-
-    // Show success notification
-    Alert.alert("Thành công", "Đã thêm thành viên vào nhóm");
-
-    // Refresh conversation list
-    refreshConversations();
-  };
-
-  // Update the filter functions with more robust implementation
-  const toggleFilterDropdown = () => {
-    console.log("Toggling filter dropdown, current state:", isFilterDropdownOpen);
-    setIsFilterDropdownOpen(prev => !prev);
-  };
-
-  // Enhanced filter selection with debugging
-  const handleFilterSelection = (filterType) => {
-    console.log("Filter selected:", filterType);
-    setChatTypeFilter(filterType);
-    setIsFilterDropdownOpen(false);
-
-    // Force refresh of the filtered conversations
-    setForceRender(Date.now()); // Use timestamp for more reliable refresh
-  };
-
+  // Modify displayedConversations to put pinned conversations at the top
   const displayedConversations = useMemo(() => {
     console.log(`Computing conversations with filter: ${chatTypeFilter}`);
 
@@ -1937,6 +1653,14 @@ export default function Chat() {
 
     // Sort conversations by timestamp (newest first)
     const sortedConversations = [...allUsers].sort((a, b) => {
+      // First, prioritize pinned conversations
+      const isPinnedA = pinnedConversations.includes(a._id);
+      const isPinnedB = pinnedConversations.includes(b._id);
+
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+
+      // If both are pinned or both are not pinned, sort by timestamp
       const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
       const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
       return timeB - timeA;
@@ -1992,236 +1716,279 @@ export default function Chat() {
     result.totalCount = totalFilteredCount;
 
     return result;
-  }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender]);
+  }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender, pinnedConversations]);
 
+  // Function to toggle the filter dropdown visibility
+  const toggleFilterDropdown = () => {
+    setIsFilterDropdownOpen(prev => !prev);
+  };
+
+  // Function to handle filter selection
+  const handleFilterSelection = (filterType) => {
+    setChatTypeFilter(filterType);
+    setIsFilterDropdownOpen(false);
+    // Force a re-render to update the conversation list
+    setForceRender(Date.now());
+  };
+
+  // Function to toggle between showing all conversations and limited view
   const toggleShowAllConversations = () => {
-    setShowAllConversations(prevState => !prevState);
+    setShowAllConversations(prev => !prev);
   };
 
-  // Add state variables for scroll tracking
-  const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
-
-  // Add this handler for share success notifications
-  const handleShareSuccess = (recipient) => {
-    const recipientName = recipient.userDetails?.name || recipient.name;
-    Alert.alert("Thành công", `Đã chia sẻ tin nhắn đến ${recipientName}`);
-  };
-
-  // Add the missing handleScreenTouch function
-  const handleScreenTouch = () => {
-    if (isFilterDropdownOpen) {
-      setIsFilterDropdownOpen(false);
-    }
-
-    if (showMediaOptions) {
-      setShowMediaOptions(false);
-    }
-  };
-
-  // Cải thiện hàm open message search để hiển thị modal tìm kiếm
-  const handleOpenMessageSearch = () => {
-    // Reset all search state when opening the modal
-    setShowMessageSearch(true);
-    setMessageSearchQuery('');
-    setMessageSearchResults([]);
-    setCurrentSearchResultIndex(-1);
-    setIsSearchingMessages(false);
-    setSearchScrollToIndex(null);
-  };
-
-  // Add these state variables for message search functionality
+  // Message search functionality
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [messageSearchQuery, setMessageSearchQuery] = useState('');
   const [messageSearchResults, setMessageSearchResults] = useState([]);
-  const [currentSearchResultIndex, setCurrentSearchResultIndex] = useState(-1);
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
-  const [searchScrollToIndex, setSearchScrollToIndex] = useState(null);
+  const [currentSearchResultIndex, setCurrentSearchResultIndex] = useState(0);
 
-  // Implement the message search function
-  const handleSearchMessages = (query) => {
-    setMessageSearchQuery(query);
+  // Function to handle opening message search modal
+  const handleOpenMessageSearch = () => {
+    setShowMessageSearch(true);
+    setMessageSearchQuery('');
+    setMessageSearchResults([]);
+  };
 
-    if (!query || !query.trim()) {
+  // Function to handle message search input changes
+  const handleSearchMessages = (text) => {
+    setMessageSearchQuery(text);
+
+    if (!text.trim()) {
       setMessageSearchResults([]);
-      setIsSearchingMessages(false);
-      setCurrentSearchResultIndex(-1);
       return;
     }
 
     setIsSearchingMessages(true);
 
-    try {
-      setTimeout(() => {
-        // Case-insensitive search through messages
-        const results = messages.filter(message =>
-          message.text &&
-          typeof message.text === 'string' &&
-          message.text.toLowerCase().includes(query.toLowerCase())
-        );
-
-        setMessageSearchResults(results);
-
-        if (results.length > 0) {
-          setCurrentSearchResultIndex(0);
-        } else {
-          setCurrentSearchResultIndex(-1);
-        }
-
-        setIsSearchingMessages(false);
-      }, 300);
-    } catch (error) {
-      console.error("Error searching messages:", error);
-      setMessageSearchResults([]);
+    // Search logic - filter messages that contain the search text
+    setTimeout(() => {
+      const results = messages.filter(msg =>
+        msg.text && msg.text.toLowerCase().includes(text.toLowerCase())
+      );
+      setMessageSearchResults(results);
       setIsSearchingMessages(false);
-      setCurrentSearchResultIndex(-1);
-      Alert.alert("Lỗi", "Không thể tìm kiếm tin nhắn. Vui lòng thử lại sau.");
-    }
-  };
-
-  // Implement navigation to search result
-  const navigateToSearchResult = (index) => {
-    if (!messageSearchResults || messageSearchResults.length === 0) return;
-
-    // Ensure index is within bounds
-    if (index < 0) {
-      index = messageSearchResults.length - 1;
-    } else if (index >= messageSearchResults.length) {
-      index = 0;
-    }
-
-    setCurrentSearchResultIndex(index);
-
-    const targetMessage = messageSearchResults[index];
-    if (!targetMessage || !targetMessage._id) return;
-
-    // Find the message in the list
-    const messageIndex = messages.findIndex(msg => msg._id === targetMessage._id);
-
-    if (messageIndex !== -1 && messagesEndRef.current) {
-      // Update the search scroll index
-      setSearchScrollToIndex(messageIndex);
-
-      // Use a timeout to ensure the scroll works properly
-      setTimeout(() => {
-        try {
-          messagesEndRef.current.scrollToIndex({
-            index: messageIndex,
-            animated: true,
-            viewPosition: 0.5, // Center the item in the visible area
-            viewOffset: 50,     // Add some padding
-          });
-
-          // Highlight the message
-          const updatedMessages = [...messages];
-          updatedMessages[messageIndex] = {
-            ...updatedMessages[messageIndex],
-            isHighlighted: true
-          };
-          setMessages(updatedMessages);
-
-          // Remove highlight after a short delay
-          setTimeout(() => {
-            const resetMessages = [...messages];
-            if (resetMessages[messageIndex]) {
-              resetMessages[messageIndex] = {
-                ...resetMessages[messageIndex],
-                isHighlighted: false
-              };
-              setMessages(resetMessages);
-            }
-          }, 1500);
-        } catch (error) {
-          console.error("Error scrolling to search result:", error);
-
-          // Fallback to a less efficient but more reliable method
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollToOffset({
-              offset: 0,
-              animated: true
-            });
-
-            setTimeout(() => {
-              if (messagesEndRef.current) {
-                messagesEndRef.current.scrollToIndex({
-                  index: messageIndex,
-                  animated: false,
-                });
-              }
-            }, 200);
-          }
-        }
-      }, 100);
-    }
+      setCurrentSearchResultIndex(0);
+    }, 300);
   };
 
   // Navigate between search results
   const navigateSearchResults = (direction) => {
-    if (!messageSearchResults || messageSearchResults.length === 0) return;
+    if (messageSearchResults.length === 0) return;
 
-    const newIndex = currentSearchResultIndex + direction;
-    navigateToSearchResult(newIndex);
+    let newIndex = currentSearchResultIndex + direction;
+
+    // Wrap around if needed
+    if (newIndex < 0) {
+      newIndex = messageSearchResults.length - 1;
+    } else if (newIndex >= messageSearchResults.length) {
+      newIndex = 0;
+    }
+
+    setCurrentSearchResultIndex(newIndex);
   };
 
-  // Helper function to add timestamp markers between messages with gaps > 10 minutes
-  // This needs to be defined before it's used in the useEffect hooks
+  // Function to navigate to a specific search result
+  const navigateToSearchResult = (index) => {
+    if (index < 0 || index >= messageSearchResults.length) return;
+
+    const targetMessage = messageSearchResults[index];
+    scrollToMessage(targetMessage._id);
+  };
+
+  // Function to handle share success
+  const handleShareSuccess = () => {
+    setMessageToShare(null);
+    Alert.alert("Thành công", "Tin nhắn đã được chia sẻ thành công!");
+  };
+
+  // Functions for direct chat details and group chat management
+  const handleShowChatDetails = () => {
+    if (selectedChat?.userDetails?.isGroup) {
+      setShowGroupInfoModal(true);
+    } else {
+      setShowDirectChatDetails(true);
+    }
+  };
+
+  const handleDeleteDirectConversation = () => {
+    // Implement delete conversation logic
+    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
+    setShowDirectChatDetails(false);
+  };
+
+  const handleUpdateNickname = (nickname) => {
+    // Implement nickname update logic
+    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
+    setShowDirectChatDetails(false);
+  };
+
+  const handleLeaveGroup = () => {
+    // Implement leave group logic
+    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
+    setShowGroupInfoModal(false);
+  };
+
+  const handleAddMember = () => {
+    setShowGroupInfoModal(false);
+    setShowAddMemberModal(true);
+  };
+
+  const handleRemoveMember = () => {
+    // Implement remove member logic
+    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
+  };
+
+  const handleMembersAdded = () => {
+    setShowAddMemberModal(false);
+    // Refresh group data
+    if (socketConnection && selectedChat?.userDetails?._id) {
+      socketConnection.emit("joinRoom", selectedChat.userDetails._id);
+    }
+  };
+
+  const refreshConversations = () => {
+    if (socketConnection && user?._id) {
+      socketConnection.emit("sidebar", user._id);
+    }
+  };
+
+  // Function to format timestamps for chat messages
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "";
+
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const isYesterday = new Date(now - 86400000).toDateString() === date.toDateString();
+
+    if (isToday) {
+      return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (isYesterday) {
+      return `Yesterday at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else {
+      return date.toLocaleDateString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+  };
+
+  // Helper function to add timestamp markers to message list
   const addTimestampMarkers = (messages) => {
-    if (!messages || messages.length <= 1) return messages;
+    if (!messages || messages.length === 0) return [];
 
     const result = [];
+    let lastMessageTime = null;
 
-    // For an inverted list (newest first), we compare each message with the next one
-    // which is chronologically earlier
     for (let i = 0; i < messages.length; i++) {
       const currentMsg = messages[i];
-      result.push(currentMsg);
+      const currentTime = new Date(currentMsg.createdAt);
 
-      // If there's a next message, check the time gap
-      if (i < messages.length - 1) {
-        const nextMsg = messages[i + 1];
+      // Skip timestamp messages
+      if (currentMsg.isTimestamp) {
+        result.push(currentMsg);
+        continue;
+      }
 
-        const currentTime = new Date(currentMsg.createdAt);
-        const nextTime = new Date(nextMsg.createdAt);
+      // If we have a previous message to compare to
+      if (lastMessageTime) {
+        // Calculate time difference in minutes
+        const timeDiff = (lastMessageTime - currentTime) / (60 * 1000);
 
-        // Calculate the time difference in minutes
-        const timeDiffMinutes = (currentTime - nextTime) / (1000 * 60);
-
-        // If the gap is more than 10 minutes, insert a timestamp marker
-        if (timeDiffMinutes > 10) {
+        // If gap is more than 10 minutes, add a timestamp marker
+        if (timeDiff > 10) {
           result.push({
-            _id: `timestamp-${nextMsg._id}`,
+            _id: `timestamp-${currentMsg._id}`,
             isTimestamp: true,
-            timestamp: currentTime, // Use the newer message's time instead of nextTime
-            createdAt: currentMsg.createdAt // Keep this for consistency
+            timestamp: lastMessageTime,
+            createdAt: messages[i - 1].createdAt
           });
         }
       }
+
+      result.push(currentMsg);
+      lastMessageTime = currentTime;
     }
 
     return result;
   };
 
-  // Helper function to format timestamp in a user-friendly way
-  const formatTimestamp = (date) => {
-    if (!date) return "";
-
-    const now = new Date();
-    const messageDate = new Date(date);
-    const isToday = messageDate.toDateString() === now.toDateString();
-    const isYesterday = new Date(now.setDate(now.getDate() - 1)).toDateString() === messageDate.toDateString();
-
-    // Format: Today at 12:34 PM
-    if (isToday) {
-      return `Tin nhắn lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  // Add the missing handleScreenTouch function
+  const handleScreenTouch = () => {
+    // Close the pin conversation context menu if open
+    if (showContextMenu) {
+      setShowContextMenu(false);
+      setLongPressedChat(null);
     }
 
-    // Format: Yesterday at 12:34 PM
-    if (isYesterday) {
-      return `Hôm qua lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Close filter dropdown if open
+    if (isFilterDropdownOpen) {
+      setIsFilterDropdownOpen(false);
     }
 
-    // Format: January 1 at 12:34 PM
-    return `${messageDate.toLocaleDateString([], { day: 'numeric', month: 'long' })} lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    // Close media options menu if open
+    if (showMediaOptions) {
+      setShowMediaOptions(false);
+    }
+  };
+
+  // Load pinned conversations on startup
+  useEffect(() => {
+    const loadPinnedConversations = async () => {
+      try {
+        const storedPinned = await AsyncStorage.getItem('pinnedConversations');
+        if (storedPinned) {
+          setPinnedConversations(JSON.parse(storedPinned));
+        }
+      } catch (error) {
+        console.error("Error loading pinned conversations:", error);
+      }
+    };
+
+    loadPinnedConversations();
+  }, []);
+
+  // Handle long press on a conversation item
+  const handleLongPressConversation = (item, event) => {
+    // Get the position of the press to position the context menu
+    const { pageX, pageY } = event.nativeEvent;
+
+    setLongPressedChat(item);
+    setContextMenuPosition({ x: pageX, y: pageY });
+    setShowContextMenu(true);
+  };
+
+  // Function to handle pinning/unpinning a conversation
+  const togglePinConversation = (chatId) => {
+    setPinnedConversations(prev => {
+      // Check if conversation is already pinned
+      if (prev.includes(chatId)) {
+        // If pinned, remove it (unpin)
+        const updated = prev.filter(id => id !== chatId);
+
+        // If we're unpinning all conversations, remove from storage
+        if (updated.length === 0) {
+          AsyncStorage.removeItem('pinnedConversations')
+            .catch(err => console.error("Error removing pinned conversations:", err));
+        }
+
+        return updated;
+      } else {
+        // If not pinned, add it
+        const updated = [...prev, chatId];
+        // Save to AsyncStorage
+        AsyncStorage.setItem('pinnedConversations', JSON.stringify(updated))
+          .catch(err => console.error("Error saving pinned conversations:", err));
+        return updated;
+      }
+    });
+
+    // Close the context menu after action
+    setShowContextMenu(false);
+    setLongPressedChat(null);
   };
 
   return (
@@ -2229,6 +1996,75 @@ export default function Chat() {
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
       <TouchableWithoutFeedback onPress={handleScreenTouch}>
         <View className="flex-1 bg-white">
+          {/* Add context menu modal that appears on long press */}
+          <Modal
+            transparent={true}
+            visible={showContextMenu}
+            animationType="fade"
+            onRequestClose={() => {
+              setShowContextMenu(false);
+              setLongPressedChat(null);
+            }}
+          >
+            <TouchableWithoutFeedback
+              onPress={() => {
+                setShowContextMenu(false);
+                setLongPressedChat(null);
+              }}
+            >
+              <View className="flex-1 bg-black/10">
+                <View
+                  className="absolute bg-white rounded-lg shadow-lg overflow-hidden"
+                  style={{
+                    top: contextMenuPosition.y - 40, // Adjust as needed
+                    left: contextMenuPosition.x - 150, // Position menu to the left of touch point
+                    width: 180,
+                  }}
+                >
+                  <View className="p-3 border-b border-gray-100 bg-blue-50">
+                    <Text className="text-blue-600 font-medium text-sm">Tùy chọn cuộc trò chuyện</Text>
+                  </View>
+
+                  {longPressedChat && (
+                    <TouchableOpacity
+                      className="flex-row items-center p-3 border-b border-gray-100"
+                      onPress={() => togglePinConversation(longPressedChat._id)}
+                    >
+                      <FontAwesomeIcon
+                        icon={pinnedConversations.includes(longPressedChat._id) ? faXmark : faCheck}
+                        size={16}
+                        color="#3b82f6"
+                        className="mr-3"
+                      />
+                      <Text className="text-gray-800">
+                        {pinnedConversations.includes(longPressedChat._id) ? "Bỏ ghim" : "Ghim cuộc trò chuyện"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    className="flex-row items-center p-3"
+                    onPress={() => {
+                      if (longPressedChat) {
+                        handleSelectChat(longPressedChat);
+                        setShowContextMenu(false);
+                        setLongPressedChat(null);
+                      }
+                    }}
+                  >
+                    <FontAwesomeIcon
+                      icon={faSearch}
+                      size={16}
+                      color="#3b82f6"
+                      className="mr-3"
+                    />
+                    <Text className="text-gray-800">Tìm tin nhắn</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+
           {!selectedChat ? (
             <View className="bg-blue-500">
               <View className="flex-row items-center justify-between px-4 pb-3">
