@@ -1,13 +1,14 @@
 import { faBookmark } from "@fortawesome/free-regular-svg-icons";
 import { faBars, faMagnifyingGlass, faPhone, faUsers, faVideo } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import Button from "./Button";
-import commingSoon from "../../helpers/commingSoon";
-import { useEffect, useState, useCallback } from "react";
-import { useGlobalContext } from "../../context/GlobalProvider";
 import axios from "axios";
+import PropTypes from "prop-types";
+import { useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import AddFriend from "../AddFriend"; // Import the AddFriend component
+import { useGlobalContext } from "../../context/GlobalProvider";
+import AddFriend from "../AddFriend";
+import Button from "./Button";
+import SearchMessageModal from "./SearchMessageModal";
 
 export default function Header({
   dataUser,
@@ -16,13 +17,17 @@ export default function Header({
   handleVideoCall,
   setShowRightSideBar,
   showRightSideBar,
+  messages,
+  onMessageFound,
+  getSenderInfo // Nhận prop getSenderInfo
 }) {
   const { socketConnection } = useGlobalContext();
   const [onlineMembers, setOnlineMembers] = useState(0);
   const [onlineUserList, setOnlineUserList] = useState([]);
   const [isFriend, setIsFriend] = useState(true);
   const currentUser = useSelector((state) => state.user);
-  const [showAddFriend, setShowAddFriend] = useState(false); // State to control AddFriend visibility
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Check if users are friends
   useEffect(() => {
@@ -122,9 +127,21 @@ export default function Header({
     socketConnection.emit("getOnlineUsers");
   }, [socketConnection, dataUser._id]);
 
+  // Xử lý tìm kiếm tin nhắn
+  const handleToggleSearch = () => {
+    setShowSearch(prev => !prev);
+  };
+
+  const handleSearchResultClick = (messageId) => {
+    if (onMessageFound) {
+      onMessageFound(messageId);
+      setShowSearch(false);
+    }
+  };
+
   return (
     <>
-      <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4">
+      <header className="sticky top-0 flex h-[68px] items-center justify-between border-b border-[#c8c9cc] px-4 bg-white z-10">
         {isLoading ? (
           <div className="flex w-full items-center space-x-4">
             <div className="h-12 w-12 animate-pulse rounded-full bg-gray-200"></div>
@@ -194,7 +211,13 @@ export default function Header({
             handleOnClick={handleVideoCall}
             styleIcon={dataUser.isGroup || !dataUser.online ? "text-gray-400" : ""}
           />
-          <Button title="Tìm kiếm tin nhắn" icon={faMagnifyingGlass} width={18} handleOnClick={commingSoon} />
+          <Button
+            title="Tìm kiếm tin nhắn"
+            icon={faMagnifyingGlass}
+            width={18}
+            handleOnClick={handleToggleSearch}
+            styleIcon={showSearch ? "text-[#005ae0]" : ""}
+          />
           <Button
             title="Thông tin hội thoại"
             icon={faBars}
@@ -204,6 +227,18 @@ export default function Header({
         </div>
       </header>
 
+      {/* Search message modal */}
+      {showSearch && (
+        <SearchMessageModal
+          isOpen={showSearch}
+          onClose={() => setShowSearch(false)}
+          messages={messages || []}
+          onResultClick={handleSearchResultClick}
+          currentUserId={currentUser?._id}
+          getSenderInfo={getSenderInfo} // Truyền getSenderInfo xuống
+        />
+      )}
+
       {/* AddFriend modal with pre-loaded user */}
       {showAddFriend && !dataUser.isGroup && (
         <AddFriend onClose={() => setShowAddFriend(false)} preloadedUser={dataUser} isFriend={isFriend} />
@@ -211,3 +246,15 @@ export default function Header({
     </>
   );
 }
+
+Header.propTypes = {
+  dataUser: PropTypes.object.isRequired,
+  isLoading: PropTypes.bool.isRequired,
+  handleAudioCall: PropTypes.func.isRequired,
+  handleVideoCall: PropTypes.func.isRequired,
+  setShowRightSideBar: PropTypes.func.isRequired,
+  showRightSideBar: PropTypes.bool.isRequired,
+  messages: PropTypes.array,
+  onMessageFound: PropTypes.func,
+  getSenderInfo: PropTypes.func // Thêm prop type cho getSenderInfo
+};

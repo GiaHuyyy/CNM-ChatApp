@@ -1,16 +1,16 @@
+import { faThumbsUp } from "@fortawesome/free-regular-svg-icons";
 import {
-  faArrowRotateRight,
-  faEllipsis,
-  faFilePen,
-  faQuoteRight,
-  faReply,
-  faTrash,
+    faArrowRotateRight,
+    faEllipsis,
+    faFilePen,
+    faQuoteRight,
+    faReply,
+    faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { format } from "date-fns";
-import ReactionDisplay from "../ReactionDisplay";
-import { faThumbsUp } from "@fortawesome/free-regular-svg-icons";
 import EmojiPicker from "emoji-picker-react";
+import ReactionDisplay from "../ReactionDisplay";
 
 const MessageIsNormal = ({
   message,
