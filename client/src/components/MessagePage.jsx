@@ -934,6 +934,27 @@ export default function MessagePage() {
     };
   }, [socketConnection]);
 
+  // Replace the problematic useEffect that's causing the loop
+  useEffect(() => {
+    if (conversation?.pinnedMessages?.length > 0) {
+      console.log("Current pinned messages:", conversation.pinnedMessages);
+      
+      // Only check once per conversation load if pinned messages need refreshing
+      const needsRefresh = conversation.pinnedMessages.some(msg => 
+        typeof msg !== 'object' || (typeof msg === 'object' && !msg.msgByUserId)
+      );
+      
+      // Use a ref to prevent multiple refreshes for the same conversation
+      if (needsRefresh && socketConnection && !conversationInitialized.current) {
+        console.log("Pinned messages need refresh, requesting data once...");
+        socketConnection.emit("joinRoom", params.userId);
+        
+        // Mark as initialized to prevent further refresh requests
+        conversationInitialized.current = true;
+      }
+    }
+  }, [conversation?._id, socketConnection, params.userId]); // Changed dependency from conversation.pinnedMessages to conversation._id
+
   return (
     <main className="flex h-full">
       <div className="flex h-full flex-1 flex-col">
@@ -972,6 +993,7 @@ export default function MessagePage() {
                 onUnpinMessage={handlePinMessage}
                 currentUserId={user?._id}
                 getSenderInfo={getSenderInfo}
+                allMessages={allMessages} // Add this prop to pass all messages
               />
             )}
 
