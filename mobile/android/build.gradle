@@ -1,0 +1,42 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  ext {
+    kotlin_version = '1.9.10'
+  }
+
+  dependencies {
+    // Bắt buộc phải có version của các classpath dependencies
+    classpath('com.android.tools.build:gradle:8.1.1') // Bạn thay version theo Android Gradle Plugin bạn dùng
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    classpath('com.facebook.react:react-native-gradle-plugin:0.71.8') // Thay version phù hợp React Native
+  }
+}
+
+def reactNativeAndroidDir = new File(
+        providers.exec {
+          workingDir(rootDir)
+          commandLine("node", "--print", "require.resolve('react-native/package.json')")
+        }.standardOutput.asText.get().trim(),
+        "../android"
+)
+
+allprojects {
+  repositories {
+    maven {
+      // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+      url(reactNativeAndroidDir)
+    }
+
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
