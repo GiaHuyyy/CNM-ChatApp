@@ -10,6 +10,7 @@ const groupUpdateHandler = require("./handlers/groupUpdateHandler");
 const callHandler = require("./handlers/callHandler");
 const userHandler = require("./handlers/userHandler");
 const conversationHandler = require("./handlers/conversationHandler");
+const friendHandler = require("./handlers/friendHandler");
 
 const setupSocket = (server) => {
   const io = new Server(server, {
@@ -28,6 +29,11 @@ const setupSocket = (server) => {
 
     try {
       const token = socket.handshake.auth.token;
+      if (!token) {
+        console.error("No token provided in socket connection");
+        return;
+      }
+
       const user = await getUserDetailsFromToken(token);
 
       if (!user || !user._id) {
@@ -41,6 +47,7 @@ const setupSocket = (server) => {
       // Store socket connection for friend requests
       socket.user = user;
       connectedUsers.set(userIdStr, socket.id);
+      console.log(`User ${userIdStr} (${user.name}) connected with socket ${socket.id}`);
 
       // Create a room with user id
       socket.join(userIdStr);
@@ -52,37 +59,15 @@ const setupSocket = (server) => {
       // Initialize all handlers
       messageHandler(io, socket, userId);
       groupHandler(io, socket, userId);
-      groupUpdateHandler(io, socket, userId); // Add the new handler here
+      groupUpdateHandler(io, socket, userId);
       callHandler(io, socket, userId, onlineUser);
       userHandler(io, socket, userId, onlineUser);
       conversationHandler(io, socket, userId, onlineUser);
-
-      // Handle friend requests
-      socket.on("sendFriendRequest", async (data) => {
-        try {
-          const { receiverId } = data;
-          const receiverSocketId = connectedUsers.get(receiverId);
-
-          const sender = {
-            _id: socket.user._id,
-            name: socket.user.name,
-            email: socket.user.email,
-            profilePic: socket.user.profilePic,
-          };
-
-          if (receiverSocketId) {
-            io.to(receiverSocketId).emit("receiveFriendRequest", {
-              ...data,
-              sender,
-            });
-          }
-        } catch (error) {
-          socket.emit("error", { message: error.message });
-        }
-      });
+      friendHandler(io, socket, userId, connectedUsers); // Truyền connectedUsers để dễ dàng tìm người dùng online
 
       // Handle disconnect
       socket.on("disconnect", () => {
+        console.log(`User ${userIdStr} disconnected`);
         connectedUsers.delete(userIdStr);
         onlineUser.delete(userIdStr);
         io.emit("onlineUser", Array.from(onlineUser));
