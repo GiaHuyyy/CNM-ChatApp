@@ -62,14 +62,29 @@ const respondToFriendRequest = async (req, res) => {
       });
     }
 
-    friendRequest.status = status;
-    await friendRequest.save();
-
-    res.status(200).json({
-      success: true,
-      message: status === "accepted" ? "Đã chấp nhận lời mời kết bạn" : "Đã từ chối lời mời kết bạn",
-      data: friendRequest,
-    });
+    if (status === "accepted") {
+      // Chấp nhận lời mời kết bạn
+      friendRequest.status = "accepted";
+      await friendRequest.save();
+      
+      res.status(200).json({
+        success: true,
+        message: "Đã chấp nhận lời mời kết bạn",
+        data: friendRequest,
+      });
+    } else {
+      // Từ chối: xóa lời mời kết bạn thay vì cập nhật trạng thái
+      await FriendModel.findByIdAndDelete(requestId);
+      
+      res.status(200).json({
+        success: true,
+        message: "Đã từ chối lời mời kết bạn",
+        data: { 
+          _id: requestId,
+          status: "deleted"
+        },
+      });
+    }
   } catch (error) {
     res.status(500).json({
       success: false,

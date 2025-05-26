@@ -27,6 +27,7 @@ import DropdownAvatar from "./DropdownAvatar";
 import DropdownSetting from "./DropdownSetting";
 import EditUserDetails from "./EditUserDetails";
 import GroupChatModal from "./GroupChatModal";
+import { socketManager } from "../socket/socketConfig";
 
 export default function Sidebar({ onGroupCreated }) {
   const user = useSelector((state) => state.user);
@@ -55,6 +56,8 @@ export default function Sidebar({ onGroupCreated }) {
 
   const [openTab, setOpenTab] = useState("chat");
   const [contextMenu, setContextMenu] = useState(null); // {x, y, id, pinned}
+
+  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
 
   const toggleDropdownSetting = () => {
     setDropdownSettingVisible(!dropdownSettingVisible);
@@ -121,38 +124,33 @@ export default function Sidebar({ onGroupCreated }) {
     notificationCount: PropTypes.number,
   };
 
-  // Add state for friend requests count
-  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
-
-  // Add useEffect to fetch friend requests count
+  // Khởi tạo count 1 lần
   useEffect(() => {
-    const fetchFriendRequestsCount = async () => {
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`, {
-          withCredentials: true,
-        });
-        setFriendRequestsCount(response.data.data.length);
-      } catch (error) {
-        console.error("Error fetching friend requests:", error);
-      }
-    };
-
-    fetchFriendRequestsCount();
-
-    // Set up interval to check for new requests
-    const interval = setInterval(fetchFriendRequestsCount, 30000); // Check every 30 seconds
-
-    return () => clearInterval(interval);
+    axios
+      .get(`${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`, { withCredentials: true })
+      .then((res) => setFriendRequestsCount(res.data.data.length))
+      .catch(console.error);
   }, []);
 
-  // Update the ButtonTab for bookphone
-  <ButtonTab
-    title="Danh bạ"
-    icon={faAddressBook}
-    isActive={openTab === "bookphone"}
-    handleClick={() => handleOpenTab("bookphone")}
-    notificationCount={friendRequestsCount}
-  />;
+  // Lắng nghe real-time trên socketConnection
+  useEffect(() => {
+    if (!socketConnection) return;
+    const inc = () => setFriendRequestsCount((c) => c + 1);
+    const dec = () => setFriendRequestsCount((c) => Math.max(c - 1, 0));
+
+    socketConnection.on("receiveFriendRequest", inc);
+    socketConnection.on("friendRequestCancelled", dec);
+    socketConnection.on("friendRequestAccepted", dec);
+    socketConnection.on("friendRequestRejected", dec);
+
+    return () => {
+      socketConnection.off("receiveFriendRequest", inc);
+      socketConnection.off("friendRequestCancelled", dec);
+      socketConnection.off("friendRequestAccepted", dec);
+      socketConnection.off("friendRequestRejected", dec);
+    };
+  }, [socketConnection]);
+
   const handleOpenTab = (tab) => {
     setOpenTab(tab);
     // Navigate to the corresponding route based on the tab
