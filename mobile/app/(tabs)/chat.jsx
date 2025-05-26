@@ -1859,6 +1859,150 @@ export default function Chat() {
     Alert.alert("Thành công", `Đã chia sẻ tin nhắn đến ${recipientName}`);
   };
 
+  // Cải thiện hàm open message search để hiển thị modal tìm kiếm
+  const handleOpenMessageSearch = () => {
+    // Reset all search state when opening the modal
+    setShowMessageSearch(true);
+    setMessageSearchQuery('');
+    setMessageSearchResults([]);
+    setCurrentSearchResultIndex(-1);
+    setIsSearchingMessages(false);
+    setSearchScrollToIndex(null);
+  };
+
+  // Add these state variables for message search functionality
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
+  const [messageSearchResults, setMessageSearchResults] = useState([]);
+  const [currentSearchResultIndex, setCurrentSearchResultIndex] = useState(-1);
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [searchScrollToIndex, setSearchScrollToIndex] = useState(null);
+
+  // Implement the message search function
+  const handleSearchMessages = (query) => {
+    setMessageSearchQuery(query);
+    
+    if (!query || !query.trim()) {
+      setMessageSearchResults([]);
+      setIsSearchingMessages(false);
+      setCurrentSearchResultIndex(-1);
+      return;
+    }
+    
+    setIsSearchingMessages(true);
+    
+    try {
+      setTimeout(() => {
+        // Case-insensitive search through messages
+        const results = messages.filter(message => 
+          message.text && 
+          typeof message.text === 'string' &&
+          message.text.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        setMessageSearchResults(results);
+        
+        if (results.length > 0) {
+          setCurrentSearchResultIndex(0);
+        } else {
+          setCurrentSearchResultIndex(-1);
+        }
+        
+        setIsSearchingMessages(false);
+      }, 300);
+    } catch (error) {
+      console.error("Error searching messages:", error);
+      setMessageSearchResults([]);
+      setIsSearchingMessages(false);
+      setCurrentSearchResultIndex(-1);
+      Alert.alert("Lỗi", "Không thể tìm kiếm tin nhắn. Vui lòng thử lại sau.");
+    }
+  };
+
+  // Implement navigation to search result
+  const navigateToSearchResult = (index) => {
+    if (!messageSearchResults || messageSearchResults.length === 0) return;
+    
+    // Ensure index is within bounds
+    if (index < 0) {
+      index = messageSearchResults.length - 1;
+    } else if (index >= messageSearchResults.length) {
+      index = 0;
+    }
+    
+    setCurrentSearchResultIndex(index);
+    
+    const targetMessage = messageSearchResults[index];
+    if (!targetMessage || !targetMessage._id) return;
+    
+    // Find the message in the list
+    const messageIndex = messages.findIndex(msg => msg._id === targetMessage._id);
+    
+    if (messageIndex !== -1 && messagesEndRef.current) {
+      // Update the search scroll index
+      setSearchScrollToIndex(messageIndex);
+      
+      // Use a timeout to ensure the scroll works properly
+      setTimeout(() => {
+        try {
+          messagesEndRef.current.scrollToIndex({
+            index: messageIndex,
+            animated: true,
+            viewPosition: 0.5, // Center the item in the visible area
+            viewOffset: 50,     // Add some padding
+          });
+          
+          // Highlight the message
+          const updatedMessages = [...messages];
+          updatedMessages[messageIndex] = {
+            ...updatedMessages[messageIndex],
+            isHighlighted: true
+          };
+          setMessages(updatedMessages);
+          
+          // Remove highlight after a short delay
+          setTimeout(() => {
+            const resetMessages = [...messages];
+            if (resetMessages[messageIndex]) {
+              resetMessages[messageIndex] = {
+                ...resetMessages[messageIndex],
+                isHighlighted: false
+              };
+              setMessages(resetMessages);
+            }
+          }, 1500);
+        } catch (error) {
+          console.error("Error scrolling to search result:", error);
+          
+          // Fallback to a less efficient but more reliable method
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollToOffset({
+              offset: 0,
+              animated: true
+            });
+            
+            setTimeout(() => {
+              if (messagesEndRef.current) {
+                messagesEndRef.current.scrollToIndex({
+                  index: messageIndex,
+                  animated: false,
+                });
+              }
+            }, 200);
+          }
+        }
+      }, 100);
+    }
+  };
+
+  // Navigate between search results
+  const navigateSearchResults = (direction) => {
+    if (!messageSearchResults || messageSearchResults.length === 0) return;
+    
+    const newIndex = currentSearchResultIndex + direction;
+    navigateToSearchResult(newIndex);
+  };
+
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
@@ -1941,7 +2085,7 @@ export default function Chat() {
                     />
                   </>
                 )}
-                <TouchableOpacity className="mr-4">
+                <TouchableOpacity className="mr-4" onPress={handleOpenMessageSearch}>
                   <FontAwesomeIcon icon={faSearch} size={18} color="white" />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -2483,6 +2627,119 @@ export default function Chat() {
 
         <IncomingCallModal />
         <CallScreen />
+
+        {/* Thêm Modal tìm kiếm tin nhắn */}
+        <Modal
+          visible={showMessageSearch}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowMessageSearch(false)}
+        >
+          <View className="flex-1 bg-black/50">
+            <View className="bg-white rounded-t-xl mt-16 flex-1">
+              <View className="flex-row items-center p-4 border-b border-gray-200">
+                <TouchableOpacity
+                  className="mr-3"
+                  onPress={() => setShowMessageSearch(false)}
+                >
+                  <FontAwesomeIcon icon={faArrowLeft} size={20} color="#444" />
+                </TouchableOpacity>
+                
+                <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-3 py-2">
+                  <FontAwesomeIcon icon={faSearch} size={16} color="#666" />
+                  <TextInput
+                    className="flex-1 ml-2 text-base"
+                    placeholder="Tìm tin nhắn..."
+                    value={messageSearchQuery}
+                    onChangeText={handleSearchMessages}
+                    autoFocus
+                  />
+                  {messageSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => handleSearchMessages('')}>
+                      <FontAwesomeIcon icon={faTimes} size={16} color="#888" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* Kết quả tìm kiếm */}
+              <View className="flex-1 bg-gray-50">
+                {isSearchingMessages ? (
+                  <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="large" color="#0084ff" />
+                    <Text className="mt-3 text-gray-500">Đang tìm kiếm...</Text>
+                  </View>
+                ) : messageSearchResults.length > 0 ? (
+                  <View className="flex-1">
+                    <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
+                      <Text className="font-medium">
+                        {messageSearchResults.length} kết quả
+                      </Text>
+                      <View className="flex-row">
+                        <TouchableOpacity 
+                          className="mr-4 p-2 bg-gray-200 rounded-full" 
+                          onPress={() => navigateSearchResults(-1)}
+                        >
+                          <FontAwesomeIcon icon={faArrowLeft} size={16} color="#555" />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          className="p-2 bg-gray-200 rounded-full" 
+                          onPress={() => navigateSearchResults(1)}
+                        >
+                          <FontAwesomeIcon icon={faArrowLeft} size={16} color="#555" rotation={180} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <FlatList
+                      data={messageSearchResults}
+                      keyExtractor={(item) => item._id}
+                      renderItem={({ item, index }) => (
+                        <TouchableOpacity 
+                          className={`p-4 border-b border-gray-200 ${index === currentSearchResultIndex ? 'bg-blue-50' : 'bg-white'}`}
+                          onPress={() => {
+                            setCurrentSearchResultIndex(index);
+                            navigateToSearchResult(index);
+                            setShowMessageSearch(false);
+                          }}
+                        >
+                          <View className="flex-row items-center mb-2">
+                            <Image 
+                              source={{ 
+                                uri: item.msgByUserId === user._id 
+                                  ? user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` 
+                                  : chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || 'User')}` 
+                              }} 
+                              className="w-8 h-8 rounded-full mr-2"
+                            />
+                            <Text className="text-sm text-gray-500">
+                              {item.msgByUserId === user._id ? 'Bạn' : chatUser?.name}
+                            </Text>
+                            <Text className="text-xs text-gray-400 ml-auto">
+                              {new Date(item.createdAt).toLocaleString()}
+                            </Text>
+                          </View>
+                          <Text className="text-gray-800">
+                            {item.text}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    />
+                  </View>
+                ) : messageSearchQuery ? (
+                  <View className="flex-1 items-center justify-center">
+                    <Text className="text-gray-500">Không tìm thấy tin nhắn nào</Text>
+                  </View>
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <FontAwesomeIcon icon={faSearch} size={50} color="#ddd" />
+                    <Text className="mt-3 text-gray-500">Nhập từ khóa để tìm kiếm tin nhắn</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
