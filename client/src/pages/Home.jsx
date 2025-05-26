@@ -125,7 +125,7 @@ export default function Home() {
       ) : isBaseChatPath ? (
         <div className="flex flex-1 flex-col items-center">
           <h1 className="mt-20 text-center text-xl flex items-center gap-x-1">
-            Chào mừng đến với <img src={logo} alt="logo" className="w-[30px] object-cover" /> <b>Z PC!</b>
+            Chào mừng đến với <img src={logo} alt="logo" className="w-[30px] object-cover" /> <b>ChatNow PC!</b>
           </h1>
           <p className="mt-5 w-1/2 text-center text-sm">
             Khám phá những tiện ích hỗ trợ làm việc và trò chuyện cùng người thân, bạn bè được tối ưu hóa cho máy tính
