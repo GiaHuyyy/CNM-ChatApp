@@ -89,7 +89,7 @@ export default function LoginPage() {
           <input
             type="email"
             name="email"
-            placeholder="Email address"
+            placeholder="Email"
             className="ml-3 flex-1 text-sm"
             value={data.email}
             onChange={handleOnChange}
@@ -102,7 +102,7 @@ export default function LoginPage() {
           <input
             type={showPassword ? "text" : "password"}
             name="password"
-            placeholder="Password"
+            placeholder="Mật khẩu"
             className="ml-3 flex-1 text-sm"
             value={data.password}
             onChange={handleOnChange}
@@ -118,7 +118,7 @@ export default function LoginPage() {
           className="mt-4 h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white disabled:bg-gray-400"
           disabled={loading}
         >
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
     </div>

@@ -109,13 +109,13 @@ export default function RegisterPage() {
 
   const handleSendOTP = async () => {
     if (!data.email) {
-      toast.error("Please enter your email");
+      toast.error("Vui lòng nhập email");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(data.email)) {
-      toast.error("Please enter a valid email address");
+      toast.error("Vui lòng nhập địa chỉ email hợp lệ");
       return;
     }
 
@@ -126,11 +126,11 @@ export default function RegisterPage() {
       });
 
       if (otpResponse.data) {
-        toast.success("OTP sent to your email");
+        toast.success("OTP đã được gửi đến email của bạn");
         setOtpSent(true);
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to send OTP");
+      toast.error(error.response?.data?.message || "Gửi OTP thất bại");
     } finally {
       setLoading(false);
     }
@@ -144,7 +144,7 @@ export default function RegisterPage() {
           <input
             type="email"
             name="email"
-            placeholder="Email address"
+            placeholder="Email"
             className="ml-3 flex-1 text-sm"
             value={data.email}
             onChange={handleOnChange}
@@ -176,7 +176,7 @@ export default function RegisterPage() {
           <input
             type="text"
             name="name"
-            placeholder="Full name"
+            placeholder="Họ và tên"
             className="ml-3 flex-1 text-sm"
             value={data.name}
             onChange={handleOnChange}
@@ -189,7 +189,7 @@ export default function RegisterPage() {
           <input
             type={showPassword ? "text" : "password"}
             name="password"
-            placeholder="Password"
+            placeholder="Mât khẩu"
             className="ml-3 flex-1 text-sm"
             value={data.password}
             onChange={handleOnChange}
@@ -205,7 +205,7 @@ export default function RegisterPage() {
           <input
             type={showConfirmPassword ? "text" : "password"}
             name="confirmPassword"
-            placeholder="Confirm password"
+            placeholder="Xác nhận mật khẩu"
             className="ml-3 flex-1 text-sm"
             value={data.confirmPassword}
             onChange={handleOnChange}
@@ -243,7 +243,7 @@ export default function RegisterPage() {
           className="mt-4 h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white disabled:bg-gray-400"
           disabled={loading || !otpSent}
         >
-          {loading ? "Processing..." : "Register"}
+          {loading ? "Đang xử lý..." : "Đăng ký"}
         </button>
       </form>
     </div>
