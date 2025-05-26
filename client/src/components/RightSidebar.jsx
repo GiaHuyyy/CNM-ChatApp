@@ -390,8 +390,6 @@ export default function RightSidebar({
     });
   };
 
-  console.log("dataUser.deputyAdmins", dataUser);
-
   // Check if user has admin privileges (either admin or deputy)
   const hasAdminPrivileges = () => {
     if (user._id === dataUser.groupAdmin?._id) return true;

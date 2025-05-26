@@ -208,7 +208,7 @@ export default function RightSidebar({
   return (
     <View className="w-full border-l border-[#c8c9cc] bg-[#ebecf0]">
       {/* Header */}
-      <View className="z-10 flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
+      <View className="flex h-[68px] items-center justify-center border-b border-[#c8c9cc] bg-white">
         {showContextMenu !== "Thông tin hội thoại" && (
           <TouchableOpacity
             className="absolute left-2 flex h-8 w-8 items-center justify-center rounded-full"

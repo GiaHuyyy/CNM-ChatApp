@@ -193,7 +193,7 @@ const groupHandler = (io, socket, userId) => {
     }
   });
 
-  // Remove member from group
+  // Remove member from group - Update to allow deputy admins to remove regular members
   socket.on("removeMemberFromGroup", async (data) => {
     try {
       const { groupId, memberId, adminId } = data;
@@ -210,8 +210,22 @@ const groupHandler = (io, socket, userId) => {
 
       const adminIdStr = typeof adminId === "object" ? adminId.toString() : adminId;
       const groupAdminIdStr = groupConversation.groupAdmin.toString();
+      const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
 
-      if (adminIdStr !== groupAdminIdStr) {
+      // Check if user trying to remove is either admin or deputy
+      const isMainAdmin = adminIdStr === groupAdminIdStr;
+      const isDeputyAdmin =
+        groupConversation.deputyAdmins && groupConversation.deputyAdmins.some((id) => id.toString() === adminIdStr);
+
+      // Check if target is admin or deputy
+      const isTargetAdmin = memberIdStr === groupAdminIdStr;
+      const isTargetDeputy =
+        groupConversation.deputyAdmins && groupConversation.deputyAdmins.some((id) => id.toString() === memberIdStr);
+
+      // Permission rules:
+      // 1. Admin can remove anyone except themselves
+      // 2. Deputy can remove regular members only (not admin or other deputies)
+      if (!isMainAdmin && !isDeputyAdmin) {
         socket.emit("memberRemovedFromGroup", {
           success: false,
           message: "Bạn không có quyền xóa thành viên khỏi nhóm này",
@@ -219,11 +233,23 @@ const groupHandler = (io, socket, userId) => {
         return;
       }
 
+      // Deputy admins cannot remove admin or other deputies
+      if (isDeputyAdmin && !isMainAdmin && (isTargetAdmin || isTargetDeputy)) {
+        socket.emit("memberRemovedFromGroup", {
+          success: false,
+          message: "Phó nhóm không thể xóa quản trị viên hoặc phó nhóm khác",
+        });
+        return;
+      }
+
+      // Get user details for notification message
       const memberToRemove = await UserModel.findById(memberId);
       const admin = await UserModel.findById(adminId);
 
+      // Remove the member
       await ConversationModel.findByIdAndUpdate(groupId, { $pull: { members: memberId } });
 
+      // Create notification message
       const notificationMessage = await MessageModel.create({
         text: `${admin.name} đã xóa ${memberToRemove.name} khỏi nhóm`,
         msgByUserId: adminId,
@@ -475,6 +501,131 @@ const groupHandler = (io, socket, userId) => {
       socket.emit("deputyAdminUpdated", {
         success: false,
         message: "Có lỗi xảy ra khi cập nhật quyền phó nhóm",
+      });
+    }
+  });
+
+  // Toggle mute member - Add to handle deputy admin permissions
+  socket.on("toggleMuteMember", async (data) => {
+    try {
+      const { groupId, memberId, adminId, isMuting } = data;
+
+      // Find the group conversation
+      const groupConversation = await ConversationModel.findById(groupId);
+
+      if (!groupConversation || !groupConversation.isGroup) {
+        socket.emit("memberMuteToggled", {
+          success: false,
+          message: "Nhóm không tồn tại",
+        });
+        return;
+      }
+
+      // Convert IDs to strings for consistent comparison
+      const adminIdStr = typeof adminId === "object" ? adminId.toString() : adminId;
+      const groupAdminIdStr = groupConversation.groupAdmin.toString();
+      const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
+
+      // Check permissions - admin or deputy admin
+      const isMainAdmin = adminIdStr === groupAdminIdStr;
+      const isDeputyAdmin =
+        groupConversation.deputyAdmins && groupConversation.deputyAdmins.some((id) => id.toString() === adminIdStr);
+
+      // Check if target is admin or deputy
+      const isTargetAdmin = memberIdStr === groupAdminIdStr;
+      const isTargetDeputy =
+        groupConversation.deputyAdmins && groupConversation.deputyAdmins.some((id) => id.toString() === memberIdStr);
+
+      // Validate permissions
+      if (!isMainAdmin && !isDeputyAdmin) {
+        socket.emit("memberMuteToggled", {
+          success: false,
+          message: "Bạn không có quyền tắt quyền chat trong nhóm này",
+        });
+        return;
+      }
+
+      // Deputy admins cannot mute admin or other deputies
+      if (isDeputyAdmin && !isMainAdmin && (isTargetAdmin || isTargetDeputy)) {
+        socket.emit("memberMuteToggled", {
+          success: false,
+          message: "Phó nhóm không thể tắt quyền chat của quản trị viên hoặc phó nhóm khác",
+        });
+        return;
+      }
+
+      // No one can mute the admin
+      if (isTargetAdmin) {
+        socket.emit("memberMuteToggled", {
+          success: false,
+          message: "Không thể tắt quyền chat của quản trị viên nhóm",
+        });
+        return;
+      }
+
+      // Get user details
+      const member = await UserModel.findById(memberId);
+      const admin = await UserModel.findById(adminId);
+
+      // Handle the mute/unmute operation
+      if (isMuting) {
+        // Add to muted members if not already muted
+        await ConversationModel.findByIdAndUpdate(groupId, { $addToSet: { mutedMembers: memberId } }, { new: true });
+
+        // Create notification message
+        const notificationMessage = await MessageModel.create({
+          text: `${admin.name} đã tắt quyền nhắn tin của ${member.name}`,
+          msgByUserId: adminId,
+          seenBy: [adminId],
+        });
+
+        await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
+
+        socket.emit("memberMuteToggled", {
+          success: true,
+          message: `Đã tắt quyền nhắn tin của ${member.name}`,
+        });
+      } else {
+        // Remove from muted members
+        await ConversationModel.findByIdAndUpdate(groupId, { $pull: { mutedMembers: memberId } }, { new: true });
+
+        // Create notification message
+        const notificationMessage = await MessageModel.create({
+          text: `${admin.name} đã mở quyền nhắn tin cho ${member.name}`,
+          msgByUserId: adminId,
+          seenBy: [adminId],
+        });
+
+        await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
+
+        socket.emit("memberMuteToggled", {
+          success: true,
+          message: `Đã mở quyền nhắn tin cho ${member.name}`,
+        });
+      }
+
+      // Update group data for all members
+      const updatedGroup = await ConversationModel.findById(groupId)
+        .populate("members")
+        .populate("messages")
+        .populate("groupAdmin")
+        .populate("deputyAdmins");
+
+      for (const memberId of groupConversation.members) {
+        const memberIdStr =
+          typeof memberId === "object"
+            ? memberId._id
+              ? memberId._id.toString()
+              : memberId.toString()
+            : memberId.toString();
+
+        io.to(memberIdStr).emit("groupMessage", updatedGroup);
+      }
+    } catch (error) {
+      console.error("Error toggling member mute status:", error);
+      socket.emit("memberMuteToggled", {
+        success: false,
+        message: "Có lỗi xảy ra khi thay đổi quyền nhắn tin",
       });
     }
   });
