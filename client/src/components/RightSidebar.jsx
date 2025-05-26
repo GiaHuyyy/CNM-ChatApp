@@ -14,6 +14,8 @@ import {
   faFilePen,
   faCommentSlash,
   faComment,
+  faUserPlus,
+  faUserMinus, // Add this new icon for removing deputy status
 } from "@fortawesome/free-solid-svg-icons";
 import commingSoon from "../helpers/commingSoon";
 import { format } from "date-fns";
@@ -369,6 +371,69 @@ export default function RightSidebar({
     }
   };
 
+  // Check if a member is a deputy admin
+  const isDeputyAdmin = (member) => {
+    if (!dataUser.deputyAdmins || !Array.isArray(dataUser.deputyAdmins)) {
+      return false;
+    }
+
+    const memberId = typeof member._id === "object" ? member._id.toString() : member._id.toString();
+
+    return dataUser.deputyAdmins.some((deputyId) => {
+      const deputyIdStr =
+        typeof deputyId === "object"
+          ? deputyId._id
+            ? deputyId._id.toString()
+            : deputyId.toString()
+          : deputyId.toString();
+      return deputyIdStr === memberId;
+    });
+  };
+
+  console.log("dataUser.deputyAdmins", dataUser);
+
+  // Check if user has admin privileges (either admin or deputy)
+  const hasAdminPrivileges = () => {
+    if (user._id === dataUser.groupAdmin?._id) return true;
+    return isDeputyAdmin({ _id: user._id });
+  };
+
+  // Toggle deputy admin status
+  const handleToggleDeputyAdmin = (memberId, memberName, isCurrentlyDeputy) => {
+    // Only the main admin can promote/demote deputies
+    if (user._id !== dataUser.groupAdmin?._id) {
+      toast.error("Chỉ quản trị viên chính mới có quyền này");
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: isCurrentlyDeputy ? "Hủy quyền phó nhóm" : "Thêm phó nhóm",
+      message: isCurrentlyDeputy
+        ? `Bạn có chắc chắn muốn hủy quyền phó nhóm của ${memberName}?`
+        : `Bạn có chắc chắn muốn thêm ${memberName} làm phó nhóm?`,
+      action: () => {
+        socketConnection.emit("toggleDeputyAdmin", {
+          groupId: params.userId,
+          memberId: memberId,
+          isPromoting: !isCurrentlyDeputy,
+          adminId: user._id,
+        });
+
+        // Add a one-time listener for the response
+        socketConnection.once("deputyAdminUpdated", (response) => {
+          if (response.success) {
+            toast.success(response.message);
+            // Request fresh data
+            socketConnection.emit("joinRoom", params.userId);
+          } else {
+            toast.error(response.message || "Có lỗi xảy ra");
+          }
+        });
+      },
+    });
+  };
+
   const isMemberMuted = (member, mutedMembers) => {
     if (!mutedMembers || !Array.isArray(mutedMembers) || mutedMembers.length === 0) {
       return false;
@@ -625,53 +690,90 @@ export default function RightSidebar({
                   {dataUser.groupAdmin?._id === member._id && (
                     <span className="text-xs text-blue-500">Quản trị viên</span>
                   )}
+                  {isDeputyAdmin(member) && <span className="text-xs text-green-600">Phó nhóm</span>}
                   {isMemberMuted(member, dataUser.mutedMembers) && (
                     <span className="text-xs text-red-500">Đã tắt quyền nhắn tin</span>
                   )}
                 </div>
               </div>
 
-              {user._id === dataUser.groupAdmin?._id && member._id !== user._id && (
+              {/* Action buttons for admins and deputy admins */}
+              {hasAdminPrivileges() && member._id !== user._id && (
                 <div className="flex space-x-2">
-                  <button
-                    onClick={() =>
-                      handleToggleMute({
-                        socketConnection,
-                        setConfirmModal,
-                        params,
-                        user,
-                        dataUser,
-                        memberId: member._id,
-                        memberName: member.name,
-                        isMuted: isMemberMuted(member, dataUser.mutedMembers),
-                      })
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
-                    title={isMemberMuted(member, dataUser.mutedMembers) ? "Bỏ tắt quyền chat" : "Tắt quyền chat"}
-                  >
-                    <FontAwesomeIcon
-                      icon={isMemberMuted(member, dataUser.mutedMembers) ? faCommentSlash : faComment}
-                      width={14}
-                      className={isMemberMuted(member, dataUser.mutedMembers) ? "text-gray-500" : "text-green-500"}
-                    />
-                  </button>
-                  <button
-                    onClick={() =>
-                      handleRemoveMember({
-                        socketConnection,
-                        setConfirmModal,
-                        params,
-                        user,
-                        dataUser,
-                        memberId: member._id,
-                        memberName: member.name,
-                      })
-                    }
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
-                    title="Xóa thành viên"
-                  >
-                    <FontAwesomeIcon icon={faTrash} width={14} />
-                  </button>
+                  {/* Only show mute button to main admin and deputy admins, but prevent action on main admin */}
+                  {(member._id !== dataUser.groupAdmin?._id || user._id === dataUser.groupAdmin?._id) && (
+                    <button
+                      onClick={() =>
+                        handleToggleMute({
+                          socketConnection,
+                          setConfirmModal,
+                          params,
+                          user,
+                          dataUser,
+                          memberId: member._id,
+                          memberName: member.name,
+                          isMuted: isMemberMuted(member, dataUser.mutedMembers),
+                        })
+                      }
+                      className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
+                      title={isMemberMuted(member, dataUser.mutedMembers) ? "Bỏ tắt quyền chat" : "Tắt quyền chat"}
+                      disabled={member._id === dataUser.groupAdmin?._id} // Can't mute the main admin
+                    >
+                      <FontAwesomeIcon
+                        icon={isMemberMuted(member, dataUser.mutedMembers) ? faCommentSlash : faComment}
+                        width={14}
+                        className={
+                          member._id === dataUser.groupAdmin?._id
+                            ? "text-gray-300" // If it's the main admin, show as disabled
+                            : isMemberMuted(member, dataUser.mutedMembers)
+                              ? "text-gray-500"
+                              : "text-green-500"
+                        }
+                      />
+                    </button>
+                  )}
+
+                  {/* Deputy admin toggle button (only for main admin) */}
+                  {user._id === dataUser.groupAdmin?._id && member._id !== dataUser.groupAdmin?._id && (
+                    <button
+                      onClick={() => handleToggleDeputyAdmin(member._id, member.name, isDeputyAdmin(member))}
+                      className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100"
+                      title={isDeputyAdmin(member) ? "Hủy quyền phó nhóm" : "Thêm làm phó nhóm"}
+                    >
+                      <FontAwesomeIcon
+                        icon={isDeputyAdmin(member) ? faUserMinus : faUserPlus}
+                        width={14}
+                        className={isDeputyAdmin(member) ? "text-red-500" : "text-blue-500"}
+                      />
+                    </button>
+                  )}
+
+                  {/* Remove member button */}
+                  {(user._id === dataUser.groupAdmin?._id ||
+                    (isDeputyAdmin({ _id: user._id }) && !isDeputyAdmin(member))) && (
+                    <button
+                      onClick={() =>
+                        handleRemoveMember({
+                          socketConnection,
+                          setConfirmModal,
+                          params,
+                          user,
+                          dataUser,
+                          memberId: member._id,
+                          memberName: member.name,
+                        })
+                      }
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-red-500 hover:bg-red-100"
+                      title="Xóa thành viên"
+                      disabled={member._id === dataUser.groupAdmin?._id} // Can't remove the main admin
+                    >
+                      <FontAwesomeIcon
+                        icon={faTrash}
+                        width={14}
+                        className={member._id === dataUser.groupAdmin?._id ? "text-gray-300" : ""}
+                      />
+                    </button>
+                  )}
                 </div>
               )}
             </div>

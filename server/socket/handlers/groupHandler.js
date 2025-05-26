@@ -271,7 +271,7 @@ const groupHandler = (io, socket, userId) => {
 
       // Clean and validate IDs
       const userIdStr = typeof userId === "object" ? userId.toString() : userId;
-      
+
       console.log("Group deletion request received:", { groupId, userId: userIdStr });
 
       // Find the group
@@ -280,25 +280,25 @@ const groupHandler = (io, socket, userId) => {
       if (!groupConversation || !groupConversation.isGroup) {
         socket.emit("groupDeleted", {
           success: false,
-          message: "Nhóm không tồn tại"
+          message: "Nhóm không tồn tại",
         });
         return;
       }
 
       // Check permissions - only admin can delete
       const groupAdminId = groupConversation.groupAdmin.toString();
-      
+
       if (groupAdminId !== userIdStr) {
         socket.emit("groupDeleted", {
           success: false,
-          message: "Chỉ quản trị viên mới có thể giải tán nhóm"
+          message: "Chỉ quản trị viên mới có thể giải tán nhóm",
         });
         return;
       }
 
       // Get all members for notification
-      const memberIds = groupConversation.members.map(id => id.toString());
-      
+      const memberIds = groupConversation.members.map((id) => id.toString());
+
       // Delete all messages in the group
       if (groupConversation.messages && groupConversation.messages.length > 0) {
         await MessageModel.deleteMany({ _id: { $in: groupConversation.messages } });
@@ -306,33 +306,33 @@ const groupHandler = (io, socket, userId) => {
 
       // Delete the group conversation
       await ConversationModel.findByIdAndDelete(groupId);
-      
+
       // Send success response to requester
       socket.emit("groupDeleted", {
         success: true,
-        message: "Nhóm đã được giải tán thành công"
+        message: "Nhóm đã được giải tán thành công",
       });
-      
+
       // Update sidebar for all members
       for (const memberId of memberIds) {
         const memberConversations = await getConversation(memberId);
         io.to(memberId).emit("conversation", memberConversations);
-        
+
         // Notify members that group was deleted
         if (memberId !== userIdStr) {
           io.to(memberId).emit("groupRemoved", {
             groupId,
-            message: "Nhóm đã bị giải tán bởi quản trị viên"
+            message: "Nhóm đã bị giải tán bởi quản trị viên",
           });
         }
       }
-      
+
       console.log("Group deleted successfully:", groupId);
     } catch (error) {
       console.error("Error deleting group:", error);
       socket.emit("groupDeleted", {
         success: false,
-        message: "Có lỗi xảy ra khi giải tán nhóm"
+        message: "Có lỗi xảy ra khi giải tán nhóm",
       });
     }
   });
@@ -347,8 +347,155 @@ const groupHandler = (io, socket, userId) => {
       console.error("Error in disbandGroup handler:", error);
       socket.emit("groupDeleted", {
         success: false,
-        message: "Có lỗi xảy ra khi giải tán nhóm"
+        message: "Có lỗi xảy ra khi giải tán nhóm",
       });
+    }
+  });
+
+  // Add to the groupHandler function
+  socket.on("toggleDeputyAdmin", async (data) => {
+    try {
+      const { groupId, memberId, isPromoting, adminId } = data;
+
+      // Find the group conversation
+      const groupConversation = await ConversationModel.findById(groupId);
+
+      if (!groupConversation || !groupConversation.isGroup) {
+        socket.emit("deputyAdminUpdated", {
+          success: false,
+          message: "Nhóm không tồn tại",
+        });
+        return;
+      }
+
+      // Check if the user is the admin
+      const adminIdStr = typeof adminId === "object" ? adminId.toString() : adminId;
+      const groupAdminStr = groupConversation.groupAdmin.toString();
+
+      if (adminIdStr !== groupAdminStr) {
+        socket.emit("deputyAdminUpdated", {
+          success: false,
+          message: "Bạn không có quyền thực hiện hành động này",
+        });
+        return;
+      }
+
+      // Initialize deputyAdmins array if it doesn't exist
+      if (!groupConversation.deputyAdmins) {
+        groupConversation.deputyAdmins = [];
+      }
+
+      const memberIdStr = typeof memberId === "object" ? memberId.toString() : memberId;
+
+      // Check if member exists in the group
+      if (!groupConversation.members.some((m) => m.toString() === memberIdStr)) {
+        socket.emit("deputyAdminUpdated", {
+          success: false,
+          message: "Thành viên không tồn tại trong nhóm",
+        });
+        return;
+      }
+
+      // Get member details
+      const member = await UserModel.findById(memberId);
+
+      if (isPromoting) {
+        // Add as deputy if not already one
+        if (!groupConversation.deputyAdmins.some((id) => id.toString() === memberIdStr)) {
+          await ConversationModel.findByIdAndUpdate(groupId, { $push: { deputyAdmins: memberId } }, { new: true });
+
+          // Create notification message
+          const notificationMessage = await MessageModel.create({
+            text: `${member.name} đã được thêm làm phó nhóm`,
+            msgByUserId: adminId,
+            seenBy: [adminId],
+          });
+
+          await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
+
+          socket.emit("deputyAdminUpdated", {
+            success: true,
+            message: `Đã thêm ${member.name} làm phó nhóm`,
+          });
+        } else {
+          socket.emit("deputyAdminUpdated", {
+            success: false,
+            message: "Người dùng đã là phó nhóm",
+          });
+        }
+      } else {
+        // Remove from deputy admins
+        await ConversationModel.findByIdAndUpdate(groupId, { $pull: { deputyAdmins: memberId } }, { new: true });
+
+        // Create notification message
+        const notificationMessage = await MessageModel.create({
+          text: `${member.name} đã bị hủy quyền phó nhóm`,
+          msgByUserId: adminId,
+          seenBy: [adminId],
+        });
+
+        await ConversationModel.findByIdAndUpdate(groupId, { $push: { messages: notificationMessage._id } });
+
+        socket.emit("deputyAdminUpdated", {
+          success: true,
+          message: `Đã hủy quyền phó nhóm của ${member.name}`,
+        });
+      }
+
+      // Update group data for all members
+      const updatedGroup = await ConversationModel.findById(groupId)
+        .populate("members")
+        .populate("messages")
+        .populate("groupAdmin")
+        .populate("deputyAdmins");
+
+      // Log to confirm deputyAdmins is included in the data
+      console.log("Updated group with deputies:", {
+        groupId,
+        hasDeputies: Boolean(updatedGroup.deputyAdmins && updatedGroup.deputyAdmins.length),
+        deputyCount: updatedGroup.deputyAdmins?.length || 0,
+      });
+
+      for (const memberId of groupConversation.members) {
+        const memberIdStr =
+          typeof memberId === "object"
+            ? memberId._id
+              ? memberId._id.toString()
+              : memberId.toString()
+            : memberId.toString();
+
+        io.to(memberIdStr).emit("groupMessage", updatedGroup);
+
+        // Update sidebar for all members
+        const memberConversations = await getConversation(memberIdStr);
+        io.to(memberIdStr).emit("conversation", memberConversations);
+      }
+    } catch (error) {
+      console.error("Error toggling deputy admin status:", error);
+      socket.emit("deputyAdminUpdated", {
+        success: false,
+        message: "Có lỗi xảy ra khi cập nhật quyền phó nhóm",
+      });
+    }
+  });
+
+  // When joining a room, make sure we populate deputyAdmins
+  socket.on("joinRoom", async (roomName) => {
+    try {
+      // ...existing code...
+
+      const conversation = await ConversationModel.findById(roomName)
+        .populate("members")
+        .populate({
+          path: "messages",
+          // ...existing code...
+        })
+        .populate("groupAdmin")
+        .populate("deputyAdmins"); // Make sure this is added
+
+      // ...existing code...
+    } catch (error) {
+      // ...existing code...
     }
   });
 };

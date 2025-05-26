@@ -147,6 +147,12 @@ const conversationSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+    deputyAdmins: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,
