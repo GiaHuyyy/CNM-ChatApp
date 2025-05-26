@@ -87,7 +87,7 @@ export default function Chat() {
   const [activeFilter, setActiveFilter] = useState('all'); // Filter for read/unread
   const [chatTypeFilter, setChatTypeFilter] = useState('all'); // Filter for chat types: 'all', 'group', 'direct'
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
-  
+
   const [showDirectChatDetails, setShowDirectChatDetails] = useState(false);
 
   const [messageToShare, setMessageToShare] = useState(null);
@@ -533,7 +533,9 @@ export default function Chat() {
           new Date(b.createdAt) - new Date(a.createdAt)
         );
 
-        setMessages(sortedMessages);
+        // Add timestamp markers for gaps of more than 10 minutes
+        const messagesWithTimestamps = addTimestampMarkers(sortedMessages);
+        setMessages(messagesWithTimestamps);
 
         if (conversation.messages.length > 0 && socketConnection) {
           socketConnection.emit("seen", selectedChat.userDetails?._id);
@@ -553,7 +555,9 @@ export default function Chat() {
           new Date(b.createdAt) - new Date(a.createdAt)
         );
 
-        setMessages(sortedMessages);
+        // Add timestamp markers for gaps of more than 10 minutes
+        const messagesWithTimestamps = addTimestampMarkers(sortedMessages);
+        setMessages(messagesWithTimestamps);
 
         setChatUser({
           _id: groupData._id,
@@ -596,13 +600,33 @@ export default function Chat() {
         }
 
         // For inverted list, add to beginning of array
-        return [
+        let updatedMessages = [
           { ...message, key: Date.now().toString() },
           ...prevMessages.filter(msg =>
             !(msg.isTemp &&
               ((msg.imageUrl && message.imageUrl && msg.imageUrl === message.imageUrl) ||
                 (msg.text && message.text && msg.text === message.text))))
         ];
+
+        // Check if we need to add a timestamp marker
+        if (prevMessages.length > 0 && !prevMessages[0].isTimestamp) {
+          const firstOldMsg = prevMessages[0];
+          const newMsgTime = new Date(message.createdAt);
+          const oldMsgTime = new Date(firstOldMsg.createdAt);
+
+          // If gap is more than 10 minutes, add a timestamp marker
+          const timeDiffMinutes = (newMsgTime - oldMsgTime) / (1000 * 60);
+          if (timeDiffMinutes > 10) {
+            updatedMessages.splice(1, 0, {
+              _id: `timestamp-${firstOldMsg._id}`,
+              isTimestamp: true,
+              timestamp: oldMsgTime,
+              createdAt: firstOldMsg.createdAt
+            });
+          }
+        }
+
+        return updatedMessages;
       });
 
       // Scroll to the new message
@@ -629,7 +653,27 @@ export default function Chat() {
           if (messageExists) return prevMessages;
 
           // For inverted list, add to beginning of array
-          return [newMessage, ...prevMessages];
+          const updatedMessages = [newMessage, ...prevMessages];
+
+          // Check if we need to add a timestamp marker
+          if (prevMessages.length > 0 && !prevMessages[0].isTimestamp) {
+            const firstOldMsg = prevMessages[0];
+            const newMsgTime = new Date(newMessage.createdAt);
+            const oldMsgTime = new Date(firstOldMsg.createdAt);
+
+            // If gap is more than 10 minutes, add a timestamp marker
+            const timeDiffMinutes = (newMsgTime - oldMsgTime) / (1000 * 60);
+            if (timeDiffMinutes > 10) {
+              updatedMessages.splice(1, 0, {
+                _id: `timestamp-${firstOldMsg._id}`,
+                isTimestamp: true,
+                timestamp: oldMsgTime,
+                createdAt: firstOldMsg.createdAt
+              });
+            }
+          }
+
+          return updatedMessages;
         });
 
         // Scroll to the new message
@@ -1045,8 +1089,31 @@ export default function Chat() {
         replyTo: replyInfo
       };
 
-      // Add temporary message to start of list for immediate feedback
-      setMessages(prev => [tempMessage, ...prev]);
+      // Check if we need to add a timestamp
+      setMessages(prevMessages => {
+        // Add the temporary message at the beginning (for inverted list)
+        let updatedMessages = [tempMessage, ...prevMessages];
+
+        // Check if we need to add a timestamp marker between the new message and the previous message
+        if (prevMessages.length > 0 && !prevMessages[0].isTimestamp) {
+          const firstOldMsg = prevMessages[0];
+          const newMsgTime = new Date();
+          const oldMsgTime = new Date(firstOldMsg.createdAt);
+
+          // If gap is more than 10 minutes, add a timestamp marker
+          const timeDiffMinutes = (newMsgTime - oldMsgTime) / (1000 * 60);
+          if (timeDiffMinutes > 10) {
+            updatedMessages.splice(1, 0, {
+              _id: `timestamp-${firstOldMsg._id}`,
+              isTimestamp: true,
+              timestamp: oldMsgTime,
+              createdAt: firstOldMsg.createdAt
+            });
+          }
+        }
+
+        return updatedMessages;
+      });
 
       // Scroll to show the new message immediately
       setTimeout(() => {
@@ -1235,7 +1302,7 @@ export default function Chat() {
     // Also try this alternative event name if the server might be using it
     socketConnection.emit("disbandGroup", payload);
 
-    // Set up timeout for no response
+    // Set timeout for no response
     setTimeout(() => {
       if (isChatLoading) {
         setIsChatLoading(false);
@@ -1401,9 +1468,22 @@ export default function Chat() {
   };
 
   const renderMessage = ({ item }) => {
+    // Handle timestamp marker
+    if (item.isTimestamp) {
+      return (
+        <View className="flex justify-center my-3 px-4">
+          <View className="bg-gray-200 rounded-full px-4 py-1 self-center shadow-sm">
+            <Text className="text-xs text-gray-600">
+              {formatTimestamp(item.timestamp)}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
     console.log(`Rendering message ${item._id}:`, {
       hasImage: !!item.imageUrl,
-      imageUrl: item.imageUrl || 'none',  // Fixed missing closing quote
+      imageUrl: item.imageUrl || 'none',
       hasFile: !!item.fileUrl,
       hasFiles: item.files ? item.files.length : 0,
       fileTypes: item.files ? item.files.map(f => f.type || 'unknown').join(', ') : 'none',
@@ -1411,21 +1491,6 @@ export default function Chat() {
       isTemp: !!item.isTemp,
       key: item.key || 'none'
     });
-
-    if (item.text && (
-      item.text.includes("đã tạo nhóm") ||
-      item.text.includes("đã thêm") ||
-      item.text.includes("vào nhóm") ||
-      item.text.includes("đã rời khỏi nhóm")
-    )) {
-      return (
-        <View className="flex justify-center my-1">
-          <View className="bg-white rounded-full px-3 py-1 self-center">
-            <Text className="text-xs text-gray-500">{item.text}</Text>
-          </View>
-        </View>
-      );
-    }
 
     const isCurrentUser = item.msgByUserId === user._id;
     const senderName = selectedChat?.isGroup && !isCurrentUser
@@ -1847,14 +1912,14 @@ export default function Chat() {
     console.log("Filter selected:", filterType);
     setChatTypeFilter(filterType);
     setIsFilterDropdownOpen(false);
-    
+
     // Force refresh of the filtered conversations
     setForceRender(Date.now()); // Use timestamp for more reliable refresh
   };
 
   const displayedConversations = useMemo(() => {
     console.log(`Computing conversations with filter: ${chatTypeFilter}`);
-    
+
     if (!Array.isArray(allUsers) || allUsers.length === 0) {
       console.log("No conversations available");
       return [];
@@ -1862,64 +1927,64 @@ export default function Chat() {
 
     // First, let's log what we're working with
     console.log(`Total conversations: ${allUsers.length}`);
-    
+
     // Debug log of conversation types
     allUsers.forEach((conv, idx) => {
       if (idx < 10) { // Limit logging to first 10 items to avoid console spam
         console.log(`Conv ${idx}: ID=${conv._id}, Name=${conv.userDetails?.name}, isGroup=${conv.userDetails?.isGroup === true ? 'YES' : 'NO'}`);
       }
     });
-    
+
     // Sort conversations by timestamp (newest first)
     const sortedConversations = [...allUsers].sort((a, b) => {
       const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
       const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
       return timeB - timeA;
     });
-    
+
     // Apply chat type filter with robust type checking
     let typeFiltered = sortedConversations;
-    
+
     if (chatTypeFilter === 'group') {
       // Filter to include ONLY group conversations
       typeFiltered = sortedConversations.filter(conv => {
         // Multiple ways to check if it's a group chat for robustness
-        const isGroup = 
+        const isGroup =
           conv.userDetails?.isGroup === true || // Boolean check
           conv.isGroup === true ||              // Alternative location
           (conv.members && Array.isArray(conv.members) && conv.members.length > 2); // Group has >2 members
-      
+
         return isGroup;
       });
       console.log(`After GROUP filter: ${typeFiltered.length} conversations`);
-    } 
+    }
     else if (chatTypeFilter === 'direct') {
       // Filter to include ONLY direct conversations
       typeFiltered = sortedConversations.filter(conv => {
         // Multiple ways to check if it's NOT a group chat
-        const isDirect = 
+        const isDirect =
           conv.userDetails?.isGroup !== true && // Boolean check
           conv.isGroup !== true;                // Alternative location
-      
+
         return isDirect;
       });
       console.log(`After DIRECT filter: ${typeFiltered.length} conversations`);
     }
-    
+
     // Apply read/unread filter
     let finalFiltered = typeFiltered;
-    
+
     if (activeFilter === 'unread') {
       finalFiltered = typeFiltered.filter(conv => {
         return typeof conv.unseenMessages === 'number' && conv.unseenMessages > 0;
       });
       console.log(`After UNREAD filter: ${finalFiltered.length} conversations`);
     }
-    
+
     // Apply limit for showing all vs. limited conversations
     const result = showAllConversations ? finalFiltered : finalFiltered.slice(0, 7);
     console.log(`Final displayed conversations: ${result.length}`);
-    
+
     return result;
   }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender]);
 
@@ -1942,7 +2007,7 @@ export default function Chat() {
     if (isFilterDropdownOpen) {
       setIsFilterDropdownOpen(false);
     }
-    
+
     if (showMediaOptions) {
       setShowMediaOptions(false);
     }
@@ -1970,33 +2035,33 @@ export default function Chat() {
   // Implement the message search function
   const handleSearchMessages = (query) => {
     setMessageSearchQuery(query);
-    
+
     if (!query || !query.trim()) {
       setMessageSearchResults([]);
       setIsSearchingMessages(false);
       setCurrentSearchResultIndex(-1);
       return;
     }
-    
+
     setIsSearchingMessages(true);
-    
+
     try {
       setTimeout(() => {
         // Case-insensitive search through messages
-        const results = messages.filter(message => 
-          message.text && 
+        const results = messages.filter(message =>
+          message.text &&
           typeof message.text === 'string' &&
           message.text.toLowerCase().includes(query.toLowerCase())
         );
-        
+
         setMessageSearchResults(results);
-        
+
         if (results.length > 0) {
           setCurrentSearchResultIndex(0);
         } else {
           setCurrentSearchResultIndex(-1);
         }
-        
+
         setIsSearchingMessages(false);
       }, 300);
     } catch (error) {
@@ -2011,26 +2076,26 @@ export default function Chat() {
   // Implement navigation to search result
   const navigateToSearchResult = (index) => {
     if (!messageSearchResults || messageSearchResults.length === 0) return;
-    
+
     // Ensure index is within bounds
     if (index < 0) {
       index = messageSearchResults.length - 1;
     } else if (index >= messageSearchResults.length) {
       index = 0;
     }
-    
+
     setCurrentSearchResultIndex(index);
-    
+
     const targetMessage = messageSearchResults[index];
     if (!targetMessage || !targetMessage._id) return;
-    
+
     // Find the message in the list
     const messageIndex = messages.findIndex(msg => msg._id === targetMessage._id);
-    
+
     if (messageIndex !== -1 && messagesEndRef.current) {
       // Update the search scroll index
       setSearchScrollToIndex(messageIndex);
-      
+
       // Use a timeout to ensure the scroll works properly
       setTimeout(() => {
         try {
@@ -2040,7 +2105,7 @@ export default function Chat() {
             viewPosition: 0.5, // Center the item in the visible area
             viewOffset: 50,     // Add some padding
           });
-          
+
           // Highlight the message
           const updatedMessages = [...messages];
           updatedMessages[messageIndex] = {
@@ -2048,7 +2113,7 @@ export default function Chat() {
             isHighlighted: true
           };
           setMessages(updatedMessages);
-          
+
           // Remove highlight after a short delay
           setTimeout(() => {
             const resetMessages = [...messages];
@@ -2062,14 +2127,14 @@ export default function Chat() {
           }, 1500);
         } catch (error) {
           console.error("Error scrolling to search result:", error);
-          
+
           // Fallback to a less efficient but more reliable method
           if (messagesEndRef.current) {
             messagesEndRef.current.scrollToOffset({
               offset: 0,
               animated: true
             });
-            
+
             setTimeout(() => {
               if (messagesEndRef.current) {
                 messagesEndRef.current.scrollToIndex({
@@ -2087,9 +2152,70 @@ export default function Chat() {
   // Navigate between search results
   const navigateSearchResults = (direction) => {
     if (!messageSearchResults || messageSearchResults.length === 0) return;
-    
+
     const newIndex = currentSearchResultIndex + direction;
     navigateToSearchResult(newIndex);
+  };
+
+  // Helper function to add timestamp markers between messages with gaps > 10 minutes
+  // This needs to be defined before it's used in the useEffect hooks
+  const addTimestampMarkers = (messages) => {
+    if (!messages || messages.length <= 1) return messages;
+
+    const result = [];
+
+    // For an inverted list (newest first), we compare each message with the next one
+    // which is chronologically earlier
+    for (let i = 0; i < messages.length; i++) {
+      const currentMsg = messages[i];
+      result.push(currentMsg);
+
+      // If there's a next message, check the time gap
+      if (i < messages.length - 1) {
+        const nextMsg = messages[i + 1];
+
+        const currentTime = new Date(currentMsg.createdAt);
+        const nextTime = new Date(nextMsg.createdAt);
+
+        // Calculate the time difference in minutes
+        const timeDiffMinutes = (currentTime - nextTime) / (1000 * 60);
+
+        // If the gap is more than 10 minutes, insert a timestamp marker
+        if (timeDiffMinutes > 10) {
+          result.push({
+            _id: `timestamp-${nextMsg._id}`,
+            isTimestamp: true,
+            timestamp: currentTime, // Use the newer message's time instead of nextTime
+            createdAt: currentMsg.createdAt // Keep this for consistency
+          });
+        }
+      }
+    }
+
+    return result;
+  };
+
+  // Helper function to format timestamp in a user-friendly way
+  const formatTimestamp = (date) => {
+    if (!date) return "";
+
+    const now = new Date();
+    const messageDate = new Date(date);
+    const isToday = messageDate.toDateString() === now.toDateString();
+    const isYesterday = new Date(now.setDate(now.getDate() - 1)).toDateString() === messageDate.toDateString();
+
+    // Format: Today at 12:34 PM
+    if (isToday) {
+      return `Tin nhắn lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    // Format: Yesterday at 12:34 PM
+    if (isYesterday) {
+      return `Hôm qua lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    // Format: January 1 at 12:34 PM
+    return `${messageDate.toLocaleDateString([], { day: 'numeric', month: 'long' })} lúc ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   return (
@@ -2145,7 +2271,7 @@ export default function Chat() {
                           {selectedChat.userDetails?.isGroup
                             ? chatUser?.name
                             : (chatUser?.nickname || chatUser?.name)
-                        }
+                          }
                         </Text>
                         <Text className="text-white text-xs opacity-80">
                           {selectedChat.userDetails?.isGroup
@@ -2457,10 +2583,10 @@ export default function Chat() {
                     if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
                       // Prevent default behavior (new line)
                       e.preventDefault?.();
-                      
+
                       // Only send if there's a message or files selected
-                      if ((messageText.trim() || selectedFiles.length > 0) && 
-                          !isUploading && socketConnection && selectedChat) {
+                      if ((messageText.trim() || selectedFiles.length > 0) &&
+                        !isUploading && socketConnection && selectedChat) {
                         handleSendMessage();
                       }
                     }
@@ -2490,11 +2616,11 @@ export default function Chat() {
 
                   <View className="flex-row items-center border-b border-gray-300 px-4">
                     <View className="h-10">
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         className={`mr-3 h-full flex items-center justify-center ${activeFilter === 'all' ? 'border-b-2 border-blue-500' : ''}`}
                         onPress={() => setActiveFilter('all')}
                       >
-                        <Text 
+                        <Text
                           className={`text-[13px] font-semibold ${activeFilter === 'all' ? 'text-blue-500' : 'text-gray-500'}`}
                         >
                           Tất cả
@@ -2506,7 +2632,7 @@ export default function Chat() {
                         className={`h-full flex items-center justify-center ${activeFilter === 'unread' ? 'border-b-2 border-blue-500' : ''}`}
                         onPress={() => setActiveFilter('unread')}
                       >
-                        <Text 
+                        <Text
                           className={`text-[13px] font-semibold ${activeFilter === 'unread' ? 'text-blue-500' : 'text-gray-500'}`}
                         >
                           Chưa đọc
@@ -2514,7 +2640,7 @@ export default function Chat() {
                       </TouchableOpacity>
                     </View>
                     <View className="ml-auto flex-row items-center">
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         className={`flex-row items-center gap-x-2 pl-2 pr-1 py-2 rounded-lg ${chatTypeFilter !== 'all' ? 'bg-blue-100' : ''}`}
                         onPress={toggleFilterDropdown}
                         activeOpacity={0.6}
@@ -2522,15 +2648,15 @@ export default function Chat() {
                         {chatTypeFilter === 'group' && <FontAwesomeIcon icon={faUsers} size={14} color="#3b82f6" className="mr-1" />}
                         {chatTypeFilter === 'direct' && <FontAwesomeIcon icon={faUserShield} size={14} color="#3b82f6" className="mr-1" />}
                         <Text className={`text-[13px] font-medium ${chatTypeFilter !== 'all' ? 'text-blue-600' : 'text-blue-500'}`}>
-                          {chatTypeFilter === 'all' ? 'Tất cả' : 
-                           chatTypeFilter === 'group' ? 'Nhóm' : 'Cá nhân'}
+                          {chatTypeFilter === 'all' ? 'Tất cả' :
+                            chatTypeFilter === 'group' ? 'Nhóm' : 'Cá nhân'}
                         </Text>
-                        <FontAwesomeIcon 
-                          icon={faAngleDown} 
-                          size={12} 
+                        <FontAwesomeIcon
+                          icon={faAngleDown}
+                          size={12}
                           color="#3b82f6"
-                          style={{ 
-                            transform: [{ rotate: isFilterDropdownOpen ? '180deg' : '0deg' }] 
+                          style={{
+                            transform: [{ rotate: isFilterDropdownOpen ? '180deg' : '0deg' }]
                           }}
                         />
                       </TouchableOpacity>
@@ -2539,7 +2665,7 @@ export default function Chat() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                  
+
                   {/* Create a Modal-based dropdown instead of absolute positioning */}
                   <Modal
                     transparent={true}
@@ -2553,7 +2679,7 @@ export default function Chat() {
                           <View className="px-4 py-3 border-b border-gray-200 bg-blue-50">
                             <Text className="font-semibold text-sm text-gray-700">Lọc theo loại chat</Text>
                           </View>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             className={`px-4 py-4 border-b border-gray-100 flex-row items-center justify-between ${chatTypeFilter === 'all' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('all')}
@@ -2565,8 +2691,8 @@ export default function Chat() {
                               <FontAwesomeIcon icon={faCheck} size={14} color="#3b82f6" />
                             )}
                           </TouchableOpacity>
-                          
-                          <TouchableOpacity 
+
+                          <TouchableOpacity
                             className={`px-4 py-4 border-b border-gray-100 flex-row items-center justify-between ${chatTypeFilter === 'group' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('group')}
@@ -2581,8 +2707,8 @@ export default function Chat() {
                               <FontAwesomeIcon icon={faCheck} size={14} color="#3b82f6" />
                             )}
                           </TouchableOpacity>
-                          
-                          <TouchableOpacity 
+
+                          <TouchableOpacity
                             className={`px-4 py-4 flex-row items-center justify-between ${chatTypeFilter === 'direct' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('direct')}
@@ -2601,7 +2727,7 @@ export default function Chat() {
                       </View>
                     </TouchableWithoutFeedback>
                   </Modal>
-                  
+
                   {/* Add this filter indicator badge */}
                   {(chatTypeFilter !== 'all' || activeFilter !== 'all') && (
                     <View className="bg-blue-50 px-4 py-2 flex-row justify-between items-center border-b border-blue-100">
@@ -2614,7 +2740,7 @@ export default function Chat() {
                           {activeFilter !== 'all' && 'Chỉ tin nhắn chưa đọc'}
                         </Text>
                       </View>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         className="py-1 px-3 bg-blue-100 rounded-full"
                         onPress={() => {
                           setChatTypeFilter('all');
@@ -2640,7 +2766,7 @@ export default function Chat() {
                           <View className="px-4 py-3 border-b border-gray-200 bg-blue-50">
                             <Text className="font-semibold text-sm text-gray-700">Lọc theo loại chat</Text>
                           </View>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             className={`px-4 py-4 border-b border-gray-100 flex-row items-center justify-between ${chatTypeFilter === 'all' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('all')}
@@ -2652,8 +2778,8 @@ export default function Chat() {
                               <FontAwesomeIcon icon={faCheck} size={14} color="#3b82f6" />
                             )}
                           </TouchableOpacity>
-                          
-                          <TouchableOpacity 
+
+                          <TouchableOpacity
                             className={`px-4 py-4 border-b border-gray-100 flex-row items-center justify-between ${chatTypeFilter === 'group' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('group')}
@@ -2668,8 +2794,8 @@ export default function Chat() {
                               <FontAwesomeIcon icon={faCheck} size={14} color="#3b82f6" />
                             )}
                           </TouchableOpacity>
-                          
-                          <TouchableOpacity 
+
+                          <TouchableOpacity
                             className={`px-4 py-4 flex-row items-center justify-between ${chatTypeFilter === 'direct' ? 'bg-blue-50' : ''}`}
                             activeOpacity={0.7}
                             onPress={() => handleFilterSelection('direct')}
@@ -2688,7 +2814,7 @@ export default function Chat() {
                       </View>
                     </TouchableWithoutFeedback>
                   </Modal>
-                  
+
                   {/* Add enhanced empty state screen */}
                   {displayedConversations.length === 0 && allUsers.length > 0 && (
                     <View className="flex-1 items-center justify-center p-8">
@@ -2733,7 +2859,7 @@ export default function Chat() {
                       ) : (
                         <>
                           <FontAwesomeIcon icon={faSearch} size={50} color="#d1d5db" />
-                          <Text className="text-lg text-gray-500 mt-4 text-center font-medium">Không tìm thấy cuộc trò chuyện nào</Text>
+                          <Text className="text-lg text-gray-500 mt-4 text-center font-medium">Không tìm thấy cuộc hội thoại nào</Text>
                           <Text className="text-gray-400 mt-2 text-center">Không có kết quả cho bộ lọc hiện tại</Text>
                           <TouchableOpacity
                             className="mt-6 bg-blue-500 px-5 py-3 rounded-full"
@@ -2760,15 +2886,15 @@ export default function Chat() {
                         ListHeaderComponent={() => (
                           <View className="px-4 py-2 bg-gray-50">
                             <Text className="text-sm text-gray-500">
-                              {displayedConversations.length} {chatTypeFilter === 'group' ? 'nhóm' : 
-                                                           chatTypeFilter === 'direct' ? 'chat cá nhân' : 
-                                                           'cuộc trò chuyện'} 
+                              {displayedConversations.length} {chatTypeFilter === 'group' ? 'nhóm' :
+                                chatTypeFilter === 'direct' ? 'chat cá nhân' :
+                                  'cuộc trò chuyện'}
                               {activeFilter === 'unread' ? ' chưa đọc' : ''}
                             </Text>
                           </View>
                         )}
                       />
-                    
+
                       {(Array.isArray(allUsers) && allUsers.length > displayedConversations.length && !showAllConversations) && (
                         <TouchableOpacity
                           className="py-3 border-t border-gray-200 items-center bg-gray-50"
@@ -3001,7 +3127,7 @@ export default function Chat() {
                   >
                     <FontAwesomeIcon icon={faArrowLeft} size={20} color="#444" />
                   </TouchableOpacity>
-                  
+
                   <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-3 py-2">
                     <FontAwesomeIcon icon={faSearch} size={16} color="#666" />
                     <TextInput
@@ -3033,14 +3159,14 @@ export default function Chat() {
                           {messageSearchResults.length} kết quả
                         </Text>
                         <View className="flex-row">
-                          <TouchableOpacity 
-                            className="mr-4 p-2 bg-gray-200 rounded-full" 
+                          <TouchableOpacity
+                            className="mr-4 p-2 bg-gray-200 rounded-full"
                             onPress={() => navigateSearchResults(-1)}
                           >
                             <FontAwesomeIcon icon={faArrowLeft} size={16} color="#555" />
                           </TouchableOpacity>
-                          <TouchableOpacity 
-                            className="p-2 bg-gray-200 rounded-full" 
+                          <TouchableOpacity
+                            className="p-2 bg-gray-200 rounded-full"
                             onPress={() => navigateSearchResults(1)}
                           >
                             <FontAwesomeIcon icon={faArrowLeft} size={16} color="#555" rotation={180} />
@@ -3052,7 +3178,7 @@ export default function Chat() {
                         data={messageSearchResults}
                         keyExtractor={(item) => item._id}
                         renderItem={({ item, index }) => (
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             className={`p-4 border-b border-gray-200 ${index === currentSearchResultIndex ? 'bg-blue-50' : 'bg-white'}`}
                             onPress={() => {
                               setCurrentSearchResultIndex(index);
@@ -3061,12 +3187,12 @@ export default function Chat() {
                             }}
                           >
                             <View className="flex-row items-center mb-2">
-                              <Image 
-                                source={{ 
-                                  uri: item.msgByUserId === user._id 
-                                    ? user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` 
-                                    : chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || 'User')}` 
-                                }} 
+                              <Image
+                                source={{
+                                  uri: item.msgByUserId === user._id
+                                    ? user.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`
+                                    : chatUser?.profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatUser?.name || 'User')}`
+                                }}
                                 className="w-8 h-8 rounded-full mr-2"
                               />
                               <Text className="text-sm text-gray-500">
