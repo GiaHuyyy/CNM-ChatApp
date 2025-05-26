@@ -508,6 +508,94 @@ const messageHandler = (io, socket, userId) => {
       });
     }
   });
+
+  // Update the joinRoom handler to validate pinnedMessages
+  socket.on("joinRoom", async (roomId) => {
+    try {
+      // Find conversation with better error handling
+      const conversation = await ConversationModel.findById(roomId);
+      if (!conversation) {
+        socket.emit("error", { message: "Conversation not found" });
+        return;
+      }
+
+      // Check for invalid pinnedMessages references and clean them up
+      if (conversation.pinnedMessages && Array.isArray(conversation.pinnedMessages)) {
+        // Create a new array with valid message references only
+        const validPinnedMessages = [];
+        
+        for (const msgRef of conversation.pinnedMessages) {
+          try {
+            const msgExists = await MessageModel.exists({ _id: msgRef });
+            if (msgExists) {
+              validPinnedMessages.push(msgRef);
+            } else {
+              console.log(`Removing invalid pinned message reference: ${msgRef}`);
+            }
+          } catch (err) {
+            console.error(`Error validating pinned message: ${err.message}`);
+          }
+        }
+        
+        // Update conversation if any invalid references were removed
+        if (validPinnedMessages.length !== conversation.pinnedMessages.length) {
+          console.log(`Updated pinnedMessages from ${conversation.pinnedMessages.length} to ${validPinnedMessages.length} items`);
+          conversation.pinnedMessages = validPinnedMessages;
+          await conversation.save();
+        }
+      }
+
+      // If conversation has pinned messages, fully populate them first
+      if (conversation && conversation.pinnedMessages && conversation.pinnedMessages.length > 0) {
+        // Use deep population to ensure all pinned messages have complete data
+        await conversation.populate({
+          path: "pinnedMessages",
+          model: "Message",
+          select: "_id text files imageUrl fileUrl fileName reactions createdAt isEdited isDeleted",
+          populate: {
+            path: "msgByUserId",
+            model: "User",
+            select: "name email profilePic"
+          }
+        });
+      }
+      
+      // Continue with the rest of the function
+      if (conversation.isGroup) {
+        await conversation.populate("groupAdmin");
+        await conversation.populate("members");
+        await conversation.populate({
+          path: "messages",
+          populate: {
+            path: "msgByUserId",
+            select: "name email profilePic",
+          },
+        });
+
+        socket.join(roomId);
+        io.to(roomId).emit("newMember", conversation);
+      } else {
+        // Không phải nhóm
+        await conversation.populate({
+          path: "messages",
+          populate: {
+            path: "msgByUserId",
+            select: "name email profilePic",
+          },
+        });
+
+        // Đối với cuộc trò chuyện trực tiếp, chỉ cần thông báo cho hai thành viên
+        const [member1, member2] = conversation.members;
+        io.to(member1.toString()).emit("message", conversation);
+        io.to(member2.toString()).emit("message", conversation);
+      }
+
+      socket.emit("joinedRoom", conversation);
+    } catch (error) {
+      console.error("Error joining room:", error);
+      socket.emit("error", { message: "Error joining room" });
+    }
+  });
 };
 
 module.exports = messageHandler;
