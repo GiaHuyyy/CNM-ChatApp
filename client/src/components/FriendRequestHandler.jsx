@@ -1,9 +1,10 @@
+import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import axios from 'axios';
-import { socketManager } from '../socket/socketConfig';
 import { useNotifications } from '../contexts/NotificationContext';
+import { updateNotificationCount } from '../helpers/friendsHelper';
+import { socketManager } from '../socket/socketConfig';
 
 export default function FriendRequestHandler() {
   const navigate = useNavigate();
@@ -50,6 +51,8 @@ export default function FriendRequestHandler() {
         }];
         // Update notification count in global context
         updateNotifications(updated.length);
+        // Also update notification count globally for other components
+        updateNotificationCount();
         return updated;
       });
 
@@ -72,6 +75,8 @@ export default function FriendRequestHandler() {
         const updated = prev.filter(request => request._id !== requestId);
         // Update notification count in global context
         updateNotifications(updated.length);
+        // Also update notification count globally for other components
+        updateNotificationCount();
         return updated;
       });
 
@@ -89,9 +94,32 @@ export default function FriendRequestHandler() {
         const updated = prev.filter(request => request._id !== requestId);
         // Update notification count in global context 
         updateNotifications(updated.length);
+        // Also update notification count globally for other components
+        updateNotificationCount();
         return updated;
       });
     });
+    
+    // Listen for rejected requests
+    socket.on("friendRequestRejected", (data) => {
+      console.log("Friend request rejected:", data);
+      const { requestId } = data;
+      setPendingRequests(prev => {
+        const updated = prev.filter(request => request._id !== requestId);
+        // Update notification count in global context
+        updateNotifications(updated.length);
+        // Also update notification count globally for other components
+        updateNotificationCount();
+        return updated;
+      });
+    });
+    
+    // Listen for global notification count updates
+    const handleCountUpdate = (event) => {
+      updateNotifications(event.detail.count);
+    };
+    
+    document.addEventListener('friendRequestCountUpdated', handleCountUpdate);
 
     return () => {
       console.log("Cleaning up friend request socket listeners");
@@ -99,7 +127,9 @@ export default function FriendRequestHandler() {
         socket.off("receiveFriendRequest");
         socket.off("friendRequestCancelled");
         socket.off("friendRequestAccepted");
+        socket.off("friendRequestRejected");
       }
+      document.removeEventListener('friendRequestCountUpdated', handleCountUpdate);
     };
   }, [navigate, updateNotifications]);
 

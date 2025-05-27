@@ -1,7 +1,7 @@
 import { faChevronDown, faChevronUp, faFilePen, faImage, faThumbTack, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import PropTypes from 'prop-types';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function PinnedMessagesHeader({ 
   pinnedMessages, 
@@ -60,7 +60,7 @@ export default function PinnedMessagesHeader({
   if (!validPinnedMessages.length) return null;
 
   return (
-    <div className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
+    <div className="sticky top-0 z-[4] border-b border-gray-200 bg-white shadow-sm">
       <div 
         className="flex cursor-pointer items-center justify-between px-4 py-2 hover:bg-gray-50"
         onClick={() => setIsExpanded(!isExpanded)}
