@@ -754,14 +754,20 @@ export default function Chat() {
         }
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
+      // Enhanced options for mobile compatibility
+      const options = {
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
         quality: 0.7,
         videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
         allowsMultipleSelection: !IS_MOBILE || Platform.OS === 'ios', // Multiple selection not supported on Android
         exif: true
-      });
+      };
+
+      // Log options for debugging
+      console.log("Image picker options:", options);
+
+      const result = await ImagePicker.launchImageLibraryAsync(options);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         console.log("Media picker result:", IS_WEB ? "Web format" : "Mobile format", {
@@ -769,6 +775,19 @@ export default function Chat() {
           firstAssetUri: result.assets[0].uri ? "Has URI" : "No URI",
           firstAssetType: result.assets[0].type || result.assets[0].mimeType || "unknown"
         });
+
+        // For mobile, log more details about the first asset
+        if (IS_MOBILE && result.assets[0]) {
+          console.log("First asset details (mobile):", {
+            uri: result.assets[0].uri ? result.assets[0].uri.substring(0, 30) + '...' : 'No URI',
+            width: result.assets[0].width,
+            height: result.assets[0].height,
+            fileName: result.assets[0].fileName || 'No fileName',
+            fileSize: result.assets[0].fileSize,
+            type: result.assets[0].type || result.assets[0].mimeType || 'unknown',
+            assetId: result.assets[0].assetId || 'No assetId'
+          });
+        }
 
         const newFiles = result.assets.map(asset => {
           const uri = asset.uri;
@@ -780,16 +799,38 @@ export default function Chat() {
           // Get the file extension
           const fileExtension = uri.split('.').pop().toLowerCase();
 
-          // Determine the MIME type
-          const mimeType = asset.mimeType || asset.type ||
-            (fileExtension === 'mp4' ? 'video/mp4' :
-              fileExtension === 'mov' ? 'video/quicktime' :
-                fileExtension === 'jpg' || fileExtension === 'jpeg' ? 'image/jpeg' :
-                  fileExtension === 'png' ? 'image/png' : 'application/octet-stream');
+          // Determine the MIME type - more reliable for mobile
+          let mimeType;
+          if (IS_MOBILE) {
+            // On mobile, we try to be very explicit about the type
+            if (asset.type) {
+              mimeType = asset.type;
+            } else if (asset.mimeType) {
+              mimeType = asset.mimeType;
+            } else if (fileExtension === 'jpg' || fileExtension === 'jpeg') {
+              mimeType = 'image/jpeg';
+            } else if (fileExtension === 'png') {
+              mimeType = 'image/png';
+            } else if (fileExtension === 'mp4') {
+              mimeType = 'video/mp4';
+            } else if (fileExtension === 'mov') {
+              mimeType = 'video/quicktime';
+            } else {
+              // If we can't determine from extension, check if it's an image by looking for dimensions
+              mimeType = (asset.width && asset.height) ? 'image/jpeg' : 'application/octet-stream';
+            }
+          } else {
+            // Web handling remains the same
+            mimeType = asset.mimeType || asset.type ||
+              (fileExtension === 'mp4' ? 'video/mp4' :
+                fileExtension === 'mov' ? 'video/quicktime' :
+                  fileExtension === 'jpg' || fileExtension === 'jpeg' ? 'image/jpeg' :
+                    fileExtension === 'png' ? 'image/png' : 'application/octet-stream');
+          }
 
           const isVideo = mimeType.startsWith('video/');
 
-          // Extract real filename from either fileName property or URI
+          // More reliable filename extraction
           let originalName = '';
 
           if (asset.fileName) {
@@ -810,6 +851,7 @@ export default function Chat() {
 
           console.log(`Selected file: ${originalName} (${mimeType})`);
 
+          // Create a more consistent file object
           return {
             uri,
             fileName: originalName,
@@ -818,7 +860,13 @@ export default function Chat() {
             isVideo,
             name: originalName,
             type: mimeType,
-            ...(IS_WEB && { file: asset.file })
+            ...(IS_WEB && { file: asset.file }),
+            // Add additional properties for mobile
+            ...(IS_MOBILE && {
+              width: asset.width,
+              height: asset.height,
+              fileSize: asset.fileSize
+            })
           };
         }).filter(Boolean); // Remove any null entries
 
@@ -1084,13 +1132,22 @@ export default function Chat() {
                 throw new Error("Invalid file format for upload");
               }
             } else {
-              // For mobile, we use a different approach
+              // IMPROVED MOBILE FILE HANDLING
               fileToUpload = {
                 uri: file.uri,
                 name: originalName,
                 originalName: originalName,
-                type: file.mimeType || file.type || 'application/octet-stream'
+                type: file.mimeType || file.type || 'image/jpeg' // Default to image/jpeg if no type
               };
+
+              // Debugging info for mobile file
+              console.log('Mobile file prepared for upload:', {
+                uri: fileToUpload.uri ? (fileToUpload.uri.length > 30 ?
+                  fileToUpload.uri.substring(0, 15) + '...' + fileToUpload.uri.substring(fileToUpload.uri.length - 15) :
+                  fileToUpload.uri) : 'No URI',
+                name: fileToUpload.name,
+                type: fileToUpload.type
+              });
             }
 
             // Add original name to the file object for the upload
@@ -1099,14 +1156,19 @@ export default function Chat() {
             console.log(`Starting upload for ${originalName}...`);
             const uploadResult = await uploadFileToCloud(fileToUpload);
 
+            // Enhanced error handling for upload results
             if (uploadResult.error || !uploadResult.secure_url) {
-              console.error(`Upload failed for ${originalName}: ${uploadResult.message || 'No URL returned'}`);
-              Alert.alert(
-                "Upload Error",
-                `Couldn't upload file ${originalName}. Please try again.`,
-                [{ text: "OK" }]
-              );
-              throw new Error("Upload failed - no URL returned");
+              console.error(`Upload failed for ${originalName}:`, uploadResult.message || 'No URL returned');
+
+              // Show more detailed error on mobile
+              if (!IS_WEB) {
+                Alert.alert(
+                  "Upload Error",
+                  `Couldn't upload file ${originalName}. ${uploadResult.message || 'Server error'}`,
+                  [{ text: "OK" }]
+                );
+              }
+              throw new Error("Upload failed - " + (uploadResult.message || "no URL returned"));
             }
 
             console.log(`Upload successful for ${originalName}: ${uploadResult.secure_url.substring(0, 50)}...`);
@@ -1120,6 +1182,10 @@ export default function Chat() {
             };
           } catch (error) {
             console.error(`Error uploading file ${file.name || file.fileName}:`, error);
+            // Show error for mobile
+            if (!IS_WEB) {
+              Alert.alert("Upload Error", `File upload failed: ${error.message}`);
+            }
             return null;
           }
         });
@@ -3355,11 +3421,12 @@ export default function Chat() {
                         </Text>
                         <View className="flex-row">
                           <TouchableOpacity
-                            className="mr-4 p-2 bg-gray-200 rounded-full"
+                            className="p-2 bg-gray-200 rounded-full mr-4"
                             onPress={() => navigateSearchResults(-1)}
                           >
                             <FontAwesomeIcon icon={faArrowLeft} size={16} color="#555" />
                           </TouchableOpacity>
+
                           <TouchableOpacity
                             className="p-2 bg-gray-200 rounded-full"
                             onPress={() => navigateSearchResults(1)}
@@ -3397,9 +3464,7 @@ export default function Chat() {
                                 {new Date(item.createdAt).toLocaleString()}
                               </Text>
                             </View>
-                            <Text className="text-gray-800">
-                              {item.text}
-                            </Text>
+                            <Text className="text-gray-800">{item.text}</Text>
                           </TouchableOpacity>
                         )}
                       />

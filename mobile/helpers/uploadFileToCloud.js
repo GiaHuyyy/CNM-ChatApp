@@ -30,6 +30,14 @@ const uploadFileToCloud = async (file) => {
 
         console.log(`Uploading to Cloudinary with cloud name: ${cloudName}`);
 
+        // Log more details about the file being uploaded
+        console.log('File details:', {
+            uri: file.uri ? file.uri.substring(0, 50) + '...' : 'No URI',
+            type: file.type || file.mimeType || 'Unknown type',
+            name: file.name || file.originalName || 'No name',
+            platform: Platform.OS
+        });
+
         const formData = new FormData();
 
         // Handle file data differently based on platform
@@ -37,12 +45,22 @@ const uploadFileToCloud = async (file) => {
             // For web, we can add the file directly
             formData.append('file', file);
         } else {
-            // For mobile, create the correct file structure
-            formData.append('file', {
+            // MOBILE FIX: Handle file upload differently for iOS vs Android
+            const fileObj = {
                 uri: file.uri,
-                type: file.type || 'application/octet-stream',
-                name: file.name || file.originalName || `file_${Date.now()}`
-            });
+                type: file.type || file.mimeType || 'application/octet-stream',
+                name: file.name || file.originalName || `file_${Date.now()}.jpg`
+            };
+
+            // On Android, some URIs need to be prefixed with 'file://'
+            if (Platform.OS === 'android' && !file.uri.startsWith('file://') && !file.uri.startsWith('content://')) {
+                fileObj.uri = 'file://' + file.uri;
+            }
+
+            // Log the final file object before upload
+            console.log('Mobile file object for upload:', fileObj);
+
+            formData.append('file', fileObj);
         }
 
         formData.append('upload_preset', uploadPreset);
@@ -58,14 +76,24 @@ const uploadFileToCloud = async (file) => {
         // Log upload attempt for debugging
         console.log(`Attempting to upload file: ${file.name || file.originalName || 'unnamed file'}`);
 
+        // Enhanced request configuration
+        const config = {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            },
+            // Add timeout to prevent hanging requests
+            timeout: 30000,
+            // Show upload progress if possible
+            onUploadProgress: (progressEvent) => {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                console.log(`Upload progress: ${percentCompleted}%`);
+            }
+        };
+
         const response = await axios.post(
             `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
             formData,
-            {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            }
+            config
         );
 
         console.log('Upload successful:', response.data.secure_url);
@@ -75,6 +103,8 @@ const uploadFileToCloud = async (file) => {
 
         if (error.response) {
             console.error('Error response:', error.response.status, error.response.data);
+        } else if (error.request) {
+            console.error('No response received from server. Network issue or timeout.');
         }
 
         // Return a standard object with error information
