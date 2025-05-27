@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
 // eslint-disable-next-line no-unused-vars
 import uploadFileToS3 from "../helpers/uploadFileToS3";
-import uploadFileToCloud from "../helpers/uploadFileToClound";
+// import uploadFileToCloud from "../helpers/uploadFileToClound";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -71,9 +71,9 @@ export default function RegisterPage() {
         if (uploadPhoto) {
 
           // Upload use S3 AWS
-          // const uploadPhotoToCloud = await uploadFileToS3(uploadPhoto);
+          const uploadPhotoToCloud = await uploadFileToS3(uploadPhoto);
           // Upload use Cloudinary
-          const uploadPhotoToCloud = await uploadFileToCloud(uploadPhoto);
+          // const uploadPhotoToCloud = await uploadFileToCloud(uploadPhoto);
           if (!uploadPhotoToCloud?.url) {
             throw new Error("Failed to upload profile picture");
           }
