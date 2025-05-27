@@ -16,7 +16,7 @@ import { Video } from 'expo-av';
 const { width } = Dimensions.get('window');
 const THUMBNAIL_SIZE = (width - 60) / 3; // 3 columns with some margin
 
-// Add platform detection constants
+// Enhance platform detection with more reliable checks
 const IS_WEB = Platform.OS === 'web';
 const IS_MOBILE = Platform.OS === 'ios' || Platform.OS === 'android';
 
@@ -76,6 +76,10 @@ const GroupChatInfoModal = ({
     // Add these missing state variables for admin selection
     const [selectingNewAdmin, setSelectingNewAdmin] = useState(false);
     const [eligibleAdminMembers, setEligibleAdminMembers] = useState([]);
+
+    // Add state for member removal modal (for web)
+    const [memberToRemove, setMemberToRemove] = useState(null);
+    const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
 
     // Normalize IDs for comparison to handle both string and object IDs
     const normalizeId = (id) => {
@@ -341,85 +345,111 @@ const GroupChatInfoModal = ({
             return;
         }
 
-        setConfirmModal({
-            visible: true,
-            title: "Xác nhận xóa thành viên",
-            message: `Bạn có chắc muốn xóa ${memberName} khỏi nhóm?`,
-            type: "warning",
-            action: () => {
-                setRemovingMember(true);
+        // Store the member to remove
+        const memberData = {
+            id: memberIdStr,
+            name: memberName
+        };
 
-                // Clean up previous listeners
+        // Show platform-specific confirmation UI
+        if (IS_WEB) {
+            // For web: show custom modal
+            setMemberToRemove(memberData);
+            setShowRemoveMemberModal(true);
+        } else {
+            // For mobile: use native Alert
+            Alert.alert(
+                "Xác nhận xóa thành viên",
+                `Bạn có chắc muốn xóa ${memberName} khỏi nhóm?`,
+                [
+                    {
+                        text: "Hủy",
+                        style: "cancel"
+                    },
+                    {
+                        text: "Xóa",
+                        style: "destructive",
+                        onPress: () => performMemberRemoval(groupIdStr, memberIdStr, memberName, adminIdStr)
+                    }
+                ],
+                { cancelable: true }
+            );
+        }
+    };
+
+    // Function to perform the actual member removal
+    const performMemberRemoval = (groupId, memberId, memberName, adminId) => {
+        setRemovingMember(true);
+
+        // Clean up previous listeners
+        socketConnection.off("memberRemoved");
+        socketConnection.off("memberRemovedFromGroup");
+
+        // Set up listener for both potential event names
+        const handleMemberRemovalResponse = (response) => {
+            console.log("Response from member removal:", response);
+            setRemovingMember(false);
+
+            if (response.success) {
+                setConfirmModal({
+                    visible: true,
+                    title: "Thành công",
+                    message: "Đã xóa thành viên khỏi nhóm",
+                    type: "success"
+                });
+
+                // Call the original handler which updates UI
+                if (onRemoveMember) {
+                    onRemoveMember(groupId, memberId, memberName);
+                }
+            } else {
+                setConfirmModal({
+                    visible: true,
+                    title: "Lỗi",
+                    message: response.message || "Không thể xóa thành viên",
+                    type: "error"
+                });
+            }
+        };
+
+        socketConnection.on("memberRemoved", handleMemberRemovalResponse);
+        socketConnection.on("memberRemovedFromGroup", handleMemberRemovalResponse);
+
+        // Try both payload formats to ensure compatibility
+        const payloadStandard = {
+            groupId: groupId,
+            userId: adminId,
+            memberId: memberId
+        };
+
+        const payloadAlternate = {
+            groupId: groupId,
+            memberId: memberId,
+            adminId: adminId
+        };
+
+        console.log("Emitting removeMember with payload:", payloadStandard);
+        socketConnection.emit("removeMember", payloadStandard);
+
+        // Try alternative event name if the server might be listening for it
+        console.log("Emitting removeMemberFromGroup with payload:", payloadAlternate);
+        socketConnection.emit("removeMemberFromGroup", payloadAlternate);
+
+        // Set timeout for no response
+        setTimeout(() => {
+            if (removingMember) {
+                console.log("No response received for member removal");
+                setRemovingMember(false);
                 socketConnection.off("memberRemoved");
                 socketConnection.off("memberRemovedFromGroup");
-
-                // Set up listener for both potential event names
-                const handleMemberRemovalResponse = (response) => {
-                    console.log("Response from member removal:", response);
-                    setRemovingMember(false);
-
-                    if (response.success) {
-                        setConfirmModal({
-                            visible: true,
-                            title: "Thành công",
-                            message: "Đã xóa thành viên khỏi nhóm",
-                            type: "success"
-                        });
-
-                        // Call the original handler which updates UI
-                        if (onRemoveMember) {
-                            onRemoveMember(groupIdStr, memberIdStr, memberName);
-                        }
-                    } else {
-                        setConfirmModal({
-                            visible: true,
-                            title: "Lỗi",
-                            message: response.message || "Không thể xóa thành viên",
-                            type: "error"
-                        });
-                    }
-                };
-
-                socketConnection.on("memberRemoved", handleMemberRemovalResponse);
-                socketConnection.on("memberRemovedFromGroup", handleMemberRemovalResponse);
-
-                // Try both payload formats to ensure compatibility
-                const payloadStandard = {
-                    groupId: groupIdStr,
-                    userId: adminIdStr,
-                    memberId: memberIdStr
-                };
-
-                const payloadAlternate = {
-                    groupId: groupIdStr,
-                    memberId: memberIdStr,
-                    adminId: adminIdStr
-                };
-
-                console.log("Emitting removeMember with payload:", payloadStandard);
-                socketConnection.emit("removeMember", payloadStandard);
-
-                // Try alternative event name if the server might be listening for it
-                console.log("Emitting removeMemberFromGroup with payload:", payloadAlternate);
-                socketConnection.emit("removeMemberFromGroup", payloadAlternate);
-
-                // Set timeout for no response
-                setTimeout(() => {
-                    if (removingMember) {
-                        console.log("No response received for member removal");
-                        setRemovingMember(false);
-                        socketConnection.off("memberRemoved");
-                        socketConnection.off("memberRemovedFromGroup");
-                        setConfirmModal({
-                            visible: true,
-                            title: "Lỗi",
-                            message: "Không nhận được phản hồi từ máy chủ",
-                            type: "error"
-                        });
-                    }
-                }, 10000);
+                setConfirmModal({
+                    visible: true,
+                    title: "Lỗi",
+                    message: "Không nhận được phản hồi từ máy chủ",
+                    type: "error"
+                });
             }
-        });
+        }, 10000);
     };
 
     const handleDeleteGroupWithAlert = () => {
@@ -512,21 +542,25 @@ const GroupChatInfoModal = ({
                         // First close the current modal
                         onClose();
 
-                        // Show success message
-                        Alert.alert(
-                            "Thành công",
-                            "Đã giải tán nhóm thành công",
-                            [{
-                                text: "OK",
-                                onPress: () => {
-                                    // Call parent handler for cleanup and navigation
-                                    if (onDeleteGroup) {
-                                        // Pass true to indicate navigation back to main chat should happen
-                                        onDeleteGroup(groupIdStr, true);
+                        // Show success message with improved reliability for mobile
+                        setTimeout(() => {
+                            Alert.alert(
+                                "Thành công",
+                                "Đã giải tán nhóm thành công",
+                                [{
+                                    text: "OK",
+                                    onPress: () => {
+                                        console.log("Group deletion confirmed by user");
+                                        // Call parent handler for cleanup and navigation
+                                        if (onDeleteGroup) {
+                                            // Pass true to indicate navigation back to main chat should happen
+                                            onDeleteGroup(groupIdStr, true);
+                                        }
                                     }
-                                }
-                            }]
-                        );
+                                }],
+                                { cancelable: false }
+                            );
+                        }, 300); // Give UI time to update
                     } else {
                         // Show error message
                         setConfirmModal({
@@ -551,6 +585,8 @@ const GroupChatInfoModal = ({
     };
 
     const handleLeaveGroupWithConfirmation = () => {
+        console.log("Leave group function called. Platform:", Platform.OS);
+
         if (!group || !onLeaveGroup) {
             setConfirmModal({
                 visible: true,
@@ -567,50 +603,53 @@ const GroupChatInfoModal = ({
         const isCurrentUserAdmin = groupAdminId === userId;
 
         if (isCurrentUserAdmin) {
-            // Show admin transfer screen instead of direct confirmation
+            // Admin needs to transfer ownership first
             setConfirmModal({
                 visible: true,
                 title: "Chuyển quyền quản trị",
                 message: "Bạn là quản trị viên của nhóm này. Vui lòng chọn người quản trị mới trước khi rời nhóm.",
                 type: "warning",
                 action: () => {
-                    // Close current modal
-                    setConfirmModal({
-                        visible: false
-                    });
-
+                    // Close confirmation modal
+                    setConfirmModal({ visible: false });
                     // Show admin selection UI
                     showSelectNewAdminUI();
                 }
             });
         } else {
-            // Regular member can leave directly - use different UI based on platform
+            // Regular member can leave directly
             if (IS_WEB) {
-                // On web, show our custom modal
+                console.log("Web platform detected, showing web modal");
                 setShowLeaveConfirmModal(true);
             } else {
-                // On mobile, use native Alert
-                Alert.alert(
-                    "Rời nhóm",
-                    "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-                    [
-                        {
-                            text: "Hủy",
-                            style: "cancel"
-                        },
-                        {
-                            text: "Rời nhóm",
-                            style: "destructive",
-                            onPress: () => {
-                                onClose(); // Close modal first for better UX
-                                setTimeout(() => {
-                                    onLeaveGroup(group._id); // Call the parent component's handler
-                                }, 300);
+                // Mobile: use native Alert with improved handling
+                console.log("Mobile platform detected, showing native Alert", Platform.OS);
+
+                // Use setTimeout to ensure UI is ready
+                setTimeout(() => {
+                    Alert.alert(
+                        "Rời nhóm",
+                        "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+                        [
+                            {
+                                text: "Hủy",
+                                style: "cancel"
+                            },
+                            {
+                                text: "Rời nhóm",
+                                style: "destructive",
+                                onPress: () => {
+                                    console.log("User confirmed leaving group");
+                                    onClose(); // Close modal first for better UX
+                                    setTimeout(() => {
+                                        onLeaveGroup(group._id); // Call parent handler
+                                    }, 300);
+                                }
                             }
-                        }
-                    ],
-                    { cancelable: true }
-                );
+                        ],
+                        { cancelable: true }
+                    );
+                }, 100);
             }
         }
     };
@@ -1302,12 +1341,61 @@ const GroupChatInfoModal = ({
         );
     };
 
-    // Add state for custom leave confirmation modal on web
+    // Add web remove member confirmation modal
+    const renderRemoveMemberModal = () => {
+        if (!IS_WEB || !showRemoveMemberModal || !memberToRemove) return null;
+
+        return (
+            <Modal
+                visible={showRemoveMemberModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowRemoveMemberModal(false)}
+            >
+                <View className="flex-1 bg-black/50 items-center justify-center">
+                    <View className="bg-white rounded-lg p-5 w-[90%] max-w-[400px]">
+                        <Text className="text-xl font-bold mb-3 text-center">Xác nhận xóa thành viên</Text>
+                        <Text className="text-gray-700 text-center mb-5">
+                            Bạn có chắc muốn xóa {memberToRemove.name} khỏi nhóm?
+                        </Text>
+
+                        <View className="flex-row justify-center">
+                            <TouchableOpacity
+                                className="bg-gray-200 py-2 px-5 rounded-lg mr-4"
+                                onPress={() => setShowRemoveMemberModal(false)}
+                            >
+                                <Text className="font-medium">Hủy</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className="bg-red-500 py-2 px-5 rounded-lg"
+                                onPress={() => {
+                                    setShowRemoveMemberModal(false);
+                                    const groupId = normalizeId(group._id);
+                                    const adminId = normalizeId(currentUser._id);
+                                    performMemberRemoval(groupId, memberToRemove.id, memberToRemove.name, adminId);
+                                }}
+                                disabled={removingMember}
+                            >
+                                {removingMember ? (
+                                    <ActivityIndicator size="small" color="#ffffff" />
+                                ) : (
+                                    <Text className="font-medium text-white">Xóa</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        );
+    };
+
+    // Make sure the web leave confirmation modal state is correctly initialized
     const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false);
 
-    // Add a custom Web modal for leave confirmation
+    // Improved web leave confirmation modal
     const renderWebLeaveConfirmModal = () => {
-        if (!IS_WEB || !showLeaveConfirmModal) return null;
+        if (!showLeaveConfirmModal) return null;
 
         return (
             <Modal
@@ -1337,7 +1425,7 @@ const GroupChatInfoModal = ({
                                     setShowLeaveConfirmModal(false);
                                     onClose(); // Close group info modal
                                     setTimeout(() => {
-                                        onLeaveGroup(group._id);
+                                        if (onLeaveGroup) onLeaveGroup(group._id);
                                     }, 300);
                                 }}
                             >
@@ -1446,16 +1534,19 @@ const GroupChatInfoModal = ({
                 </View>
             </Modal>
 
-            {/* Add the media viewer */
+            {/* Media viewer modal */
                 renderMediaViewer()}
 
-            {/* Add the admin selection UI */
+            {/* Admin selection UI for transfer */
                 renderAdminSelectionUI()}
 
-            {/* Add web leave confirmation modal */
-                renderWebLeaveConfirmModal()}
+            {/* Web-specific leave confirmation modal */
+                Platform.OS === 'web' && renderWebLeaveConfirmModal()}
 
-            {/* Only show this if we're handling add members directly within this component */}
+            {/* Member removal confirmation modal for web */}
+            {renderRemoveMemberModal()}
+
+            {/* Add members modal */}
             {!onAddMember && (
                 <AddGroupMembersModal
                     visible={showAddMembersModal}
@@ -1472,7 +1563,7 @@ const GroupChatInfoModal = ({
                 />
             )}
 
-            {/* Fix the confirmation modal props */}
+            {/* Generic confirmation modal */}
             <ConfirmationModal
                 visible={confirmModal.visible}
                 title={confirmModal.title}
