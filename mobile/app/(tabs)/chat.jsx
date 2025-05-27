@@ -1099,8 +1099,13 @@ export default function Chat() {
             console.log(`Starting upload for ${originalName}...`);
             const uploadResult = await uploadFileToCloud(fileToUpload);
 
-            if (!uploadResult || !uploadResult.secure_url) {
-              console.error(`Upload failed for ${originalName} - no URL returned`);
+            if (uploadResult.error || !uploadResult.secure_url) {
+              console.error(`Upload failed for ${originalName}: ${uploadResult.message || 'No URL returned'}`);
+              Alert.alert(
+                "Upload Error",
+                `Couldn't upload file ${originalName}. Please try again.`,
+                [{ text: "OK" }]
+              );
               throw new Error("Upload failed - no URL returned");
             }
 
