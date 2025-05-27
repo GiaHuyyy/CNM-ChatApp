@@ -16,6 +16,7 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
   const isMounted = useRef(true);
   const [retryCount, setRetryCount] = useState(0);
   const checkTimeoutRef = useRef(null);
+  const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
 
   // Kiểm tra trạng thái kết bạn ban đầu với socket và API fallback
   useEffect(() => {
@@ -279,6 +280,30 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
     }
   };
 
+  // Add a new function to handle unfriending
+  const handleUnfriend = () => {
+    // Show confirmation dialog
+    setShowUnfriendConfirm(true);
+  };
+
+  // Confirm unfriend action
+  const confirmUnfriend = () => {
+    if (!socketManager.isConnected()) {
+      toast.error("Không thể kết nối đến máy chủ");
+      setShowUnfriendConfirm(false);
+      return;
+    }
+
+    setShowUnfriendConfirm(false);
+    const toastId = toast.message("Đang hủy kết bạn...");
+
+    // Use socket for unfriending
+    console.log("Removing friend via socket:", dataUser._id);
+    socketManager.emit("removeFriend", {
+      friendId: dataUser._id
+    });
+  };
+
   return (
     <div className="max-h-[570px] overflow-y-auto">
       <div className="h-[171px] w-full">
@@ -305,9 +330,10 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
               Đang kiểm tra trạng thái...
             </button>
           ) : friendStatus?.status === "accepted" ? (
+            // Updated button - not disabled, clear hover state
             <button
-              className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold"
-              disabled
+              className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold hover:bg-[#d3d5d9]"
+              onClick={handleUnfriend}
             >
               Bạn bè
             </button>
@@ -411,6 +437,32 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
               <FontAwesomeIcon icon={faTriangleExclamation} width={14} className="text-[#717a88]" />
               <span className="text-sm">Báo xấu</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation modal for unfriending */}
+      {showUnfriendConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-80 rounded-lg bg-white p-4 shadow-lg">
+            <h3 className="mb-4 text-lg font-medium">Xác nhận hủy kết bạn</h3>
+            <p className="mb-4 text-sm text-gray-600">
+              Bạn có chắc chắn muốn hủy kết bạn với {dataUser?.name}?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-md bg-gray-200 px-4 py-2 text-sm hover:bg-gray-300"
+                onClick={() => setShowUnfriendConfirm(false)}
+              >
+                Hủy
+              </button>
+              <button
+                className="rounded-md bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600"
+                onClick={confirmUnfriend}
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}
