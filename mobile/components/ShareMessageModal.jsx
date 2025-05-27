@@ -53,53 +53,62 @@ const ShareMessageModal = ({ visible, onClose, message, allUsers, socketConnecti
     }, [visible, allUsers]);
 
     const handleShareMessage = async (recipient) => {
-        if (!socketConnection || !message) {
-            Alert.alert('Lỗi', 'Không thể chia sẻ tin nhắn. Vui lòng thử lại.');
-            return;
-        }
-
-        setIsSharing(true);
-        setSelectedUser(recipient);
-
         try {
-            // Create shared content object with original message data
-            const sharedContent = {
-                originalText: message.text || '',
-                originalSender: message.msgByUserId === currentUser._id ? 'Bạn' : 'Người dùng khác',
-                originalImage: message.imageUrl || '',
-                originalFile: message.fileUrl || '',
-                originalFileName: message.fileName || '',
-                isShared: true
+            // Enhanced message data preparation
+            const messageData = {
+                conversationId: recipient.userDetails?._id,
+                text: message.text || "",
+                msgByUserId: currentUser._id,
+                sharedContent: {
+                    originalSender: message.msgByUserName || "Unknown",
+                    originalMessage: message.text || ""
+                }
             };
 
-            // Create message data
-            const recipientId = recipient.userDetails?._id || recipient._id;
-            const isGroup = recipient.userDetails?.isGroup || recipient.isGroup;
-
-            const messageData = isGroup ? {
-                conversationId: recipientId,
-                text: message.text || '',
-                msgByUserId: currentUser._id,
-                sharedContent,
-                isShared: true
-            } : {
-                sender: currentUser._id,
-                receiver: recipientId,
-                text: message.text || '',
-                msgByUserId: currentUser._id,
-                sharedContent,
-                isShared: true
-            };
-
-            // Include media if present in original message
-            if (message.imageUrl) messageData.imageUrl = message.imageUrl;
-            if (message.fileUrl) messageData.fileUrl = message.fileUrl;
-            if (message.fileName) messageData.fileName = message.fileName;
-
-            // Preserve files array if present
+            // Prepare files with better mobile handling
             if (message.files && message.files.length > 0) {
-                messageData.files = message.files;
+                console.log(`Sharing message with ${message.files.length} files`);
+
+                // Ensure files have the correct structure
+                messageData.files = message.files.map(file => ({
+                    url: file.url,
+                    name: file.name || "File",
+                    type: file.type || inferFileTypeFromUrl(file.url)
+                }));
+
+                // Log files being shared
+                console.log("Files being shared:", messageData.files.map(f => ({
+                    name: f.name,
+                    type: f.type
+                })));
+            } else if (message.imageUrl) {
+                // Handle legacy imageUrl format
+                console.log("Sharing message with legacy imageUrl");
+                messageData.files = [{
+                    url: message.imageUrl,
+                    name: message.fileName || "Image.jpg",
+                    type: "image/jpeg"
+                }];
+            } else if (message.fileUrl) {
+                // Handle legacy fileUrl format
+                console.log("Sharing message with legacy fileUrl");
+                messageData.files = [{
+                    url: message.fileUrl,
+                    name: message.fileName || "File",
+                    type: inferFileTypeFromUrl(message.fileUrl) || "application/octet-stream"
+                }];
             }
+
+            // Determine if this is a group or direct message
+            const isGroup = recipient.userDetails?.isGroup === true ||
+                recipient.isGroup === true ||
+                (typeof recipient.userDetails?.isGroup === 'string' &&
+                    recipient.userDetails?.isGroup.toLowerCase() === 'true');
+
+            console.log(`Sharing message to ${isGroup ? 'group' : 'direct'} chat:`, {
+                recipientId: recipient.userDetails?._id,
+                isGroup: isGroup
+            });
 
             // Send message using appropriate event
             const eventName = isGroup ? 'newGroupMessage' : 'newMessage';
@@ -118,6 +127,23 @@ const ShareMessageModal = ({ visible, onClose, message, allUsers, socketConnecti
             Alert.alert('Lỗi', 'Có lỗi xảy ra khi chia sẻ tin nhắn.');
             setIsSharing(false);
         }
+    };
+
+    // Helper function to determine file type from URL
+    const inferFileTypeFromUrl = (url) => {
+        if (!url) return 'application/octet-stream';
+
+        if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+            return 'image/jpeg';
+        } else if (url.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+            return 'video/mp4';
+        } else if (url.match(/\.(pdf)$/i)) {
+            return 'application/pdf';
+        } else if (url.match(/\.(doc|docx)$/i)) {
+            return 'application/msword';
+        }
+
+        return 'application/octet-stream';
     };
 
     return (
