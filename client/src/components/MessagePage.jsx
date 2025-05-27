@@ -205,9 +205,11 @@ export default function MessagePage() {
 
         // Handle specific error messages with user-friendly text
         let userMessage = "Error loading conversation";
-        if (error.message === "Invalid conversation ID format" ||
-            error.message === "Invalid room ID" ||
-            error.message === "Conversation not found") {
+        if (
+          error.message === "Invalid conversation ID format" ||
+          error.message === "Invalid room ID" ||
+          error.message === "Conversation not found"
+        ) {
           userMessage = "Không thể tìm thấy cuộc hội thoại. Vui lòng thử lại.";
         } else if (error.message.includes("Error loading")) {
           userMessage = "Không thể tải dữ liệu. Vui lòng thử lại sau.";
@@ -693,7 +695,7 @@ export default function MessagePage() {
       /đã mở/i,
       /đã tắt/i,
       /đã được/i,
-      /đã bị/i
+      /đã bị/i,
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));
@@ -848,7 +850,7 @@ export default function MessagePage() {
     console.log("Scrolling to message:", messageId);
 
     // Tìm tin nhắn trong danh sách
-    const messageIndex = allMessages.findIndex(msg => msg._id === messageId);
+    const messageIndex = allMessages.findIndex((msg) => msg._id === messageId);
 
     if (messageIndex === -1) {
       console.error("Message not found in the message list:", messageId);
@@ -868,7 +870,7 @@ export default function MessagePage() {
         if (messageElement) {
           messageElement.scrollIntoView({
             behavior: "smooth",
-            block: "center"
+            block: "center",
           });
 
           // Thêm hiệu ứng highlight
@@ -887,7 +889,7 @@ export default function MessagePage() {
       if (messageElement) {
         messageElement.scrollIntoView({
           behavior: "smooth",
-          block: "center"
+          block: "center",
         });
 
         // Thêm hiệu ứng highlight
@@ -925,7 +927,7 @@ export default function MessagePage() {
     console.log("Đang ghim tin nhắn với thông số:", {
       conversationId,
       messageId,
-      action
+      action,
     });
 
     socketConnection.emit("pinMessage", {
@@ -948,7 +950,7 @@ export default function MessagePage() {
 
     const handleMessagePinnedUnpinned = (data) => {
       if (data.success) {
-        toast.success(data.action === 'pin' ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
+        toast.success(data.action === "pin" ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
       }
     };
 
@@ -967,8 +969,8 @@ export default function MessagePage() {
       console.log("Current pinned messages:", conversation.pinnedMessages);
 
       // Only check once per conversation load if pinned messages need refreshing
-      const needsRefresh = conversation.pinnedMessages.some(msg =>
-        typeof msg !== 'object' || (typeof msg === 'object' && !msg.msgByUserId)
+      const needsRefresh = conversation.pinnedMessages.some(
+        (msg) => typeof msg !== "object" || (typeof msg === "object" && !msg.msgByUserId),
       );
 
       // Use a ref to prevent multiple refreshes for the same conversation
@@ -980,7 +982,35 @@ export default function MessagePage() {
         conversationInitialized.current = true;
       }
     }
-  }, [conversation?._id, socketConnection, params.userId]); // Changed dependency from conversation.pinnedMessages to conversation._id
+  }, [conversation?._id, socketConnection, params.userId, conversation?.pinnedMessages]);
+
+  // Improve the message comparison function to safely handle different ID formats
+  const isCurrentUserMessage = (message) => {
+    if (!message || !user || !user._id) return false;
+
+    // Get string version of user ID
+    const currentUserIdStr =
+      typeof user._id === "object"
+        ? user._id?.toString
+          ? user._id.toString()
+          : user._id
+        : user._id?.toString
+          ? user._id.toString()
+          : user._id;
+
+    // Get string version of message sender ID
+    const senderIdStr =
+      typeof message.msgByUserId === "object"
+        ? message.msgByUserId?._id
+          ? message.msgByUserId._id.toString()
+          : message.msgByUserId?.toString()
+        : message.msgByUserId?.toString
+          ? message.msgByUserId.toString()
+          : message.msgByUserId;
+
+    // Compare as strings
+    return senderIdStr === currentUserIdStr;
+  };
 
   return (
     <main className="flex h-full">
@@ -1083,7 +1113,7 @@ export default function MessagePage() {
                       </div>
                     );
                   } else if (isCallMessage(message)) {
-                    const isCurrentUser = message.msgByUserId === user._id;
+                    const isCurrentUser = isCurrentUserMessage(message); // Replace with function
                     let sender = null;
                     if (dataUser.isGroup && !isCurrentUser) {
                       sender = getSenderInfo(message.msgByUserId);
@@ -1106,7 +1136,7 @@ export default function MessagePage() {
                       />
                     );
                   } else {
-                    const isCurrentUser = message.msgByUserId === user._id;
+                    const isCurrentUser = isCurrentUserMessage(message); // Replace with function
                     let sender = null;
                     if (dataUser.isGroup && !isCurrentUser) {
                       sender = getSenderInfo(message.msgByUserId);
