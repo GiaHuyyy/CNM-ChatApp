@@ -44,7 +44,7 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 const ContactScreen = () => {
   const dispatch = useDispatch();
-  const [activeTab, setActiveTab] = useState('friends');
+  const [activeTab, setActiveTab] = useState('phonebook');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sentRequests, setSentRequests] = useState([]); // Lưu lời mời đã gửi
@@ -174,40 +174,32 @@ const ContactScreen = () => {
     </View>
   );
 
-  // Thêm tab mới cho danh bạ
+  // Tabs UI: Đưa tab Danh bạ lên đầu, canh chỉnh đều, nổi bật tab đang chọn
   const renderTabs = () => (
-    <View className="flex-row bg-white px-4 py-2 border-b border-gray-200">
+    <View className="flex-row bg-white px-2 py-2 border-b border-gray-200 justify-between">
+      <TouchableOpacity
+        onPress={() => setActiveTab('phonebook')}
+        className={`flex-1 items-center pb-2 ${activeTab === 'phonebook' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-xs ${activeTab === 'phonebook' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Danh bạ máy</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('friends')}
-        className={`mr-6 pb-2 ${activeTab === 'friends' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'friends' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'friends' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Bạn bè
-        </Text>
+        <Text className={`text-xs ${activeTab === 'friends' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Bạn bè</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('received')}
-        className={`mr-6 pb-2 ${activeTab === 'received' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'received' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'received' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Lời mời kết bạn
-        </Text>
+        <Text className={`text-xs ${activeTab === 'received' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Lời mời kết bạn</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('sent')}
-        className={`pb-2 ${activeTab === 'sent' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'sent' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'sent' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Đã gửi lời mời
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => setActiveTab('phonebook')}
-        className={`pb-2 ${activeTab === 'phonebook' ? 'border-b-2 border-blue-500' : ''}`}
-      >
-        <Text className={`text-base ${activeTab === 'phonebook' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Danh bạ máy
-        </Text>
+        <Text className={`text-xs ${activeTab === 'sent' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Đã gửi</Text>
       </TouchableOpacity>
     </View>
   );
@@ -484,7 +476,7 @@ const ContactScreen = () => {
     });
   };
 
-  // Thay đổi phần render: nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng
+  // Đưa renderPhoneContacts lên đầu phần render
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
@@ -517,16 +509,11 @@ const ContactScreen = () => {
 
         {renderTabs()}
 
-        {/* Nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng */}
-        {searchQuery.length > 0
-          ? renderUserList()
-          : activeTab === 'friends'
-          ? renderFriendList()
-          : activeTab === 'received'
-          ? renderFriendRequests()
-          : activeTab === 'sent'
-          ? renderSentRequests()
-          : renderPhoneContacts()}
+        {/* Danh bạ luôn là tab đầu tiên và mặc định */}
+        {activeTab === 'phonebook' && renderPhoneContacts()}
+        {activeTab === 'friends' && renderFriendList()}
+        {activeTab === 'received' && renderFriendRequests()}
+        {activeTab === 'sent' && renderSentRequests()}
       </View>
     </SafeAreaView>
   );
