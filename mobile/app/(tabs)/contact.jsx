@@ -520,11 +520,17 @@ const ContactScreen = () => {
 
         {renderTabs()}
 
-        {/* Danh bạ luôn là tab đầu tiên và mặc định */}
-        {activeTab === 'phonebook' && renderPhoneContacts()}
-        {activeTab === 'friends' && renderFriendList()}
-        {activeTab === 'received' && renderFriendRequests()}
-        {activeTab === 'sent' && renderSentRequests()}
+        {searchQuery.trim().length > 0 ? (
+          renderUserList()
+        ) : (
+          <>
+            {/* Danh bạ luôn là tab đầu tiên và mặc định */}
+            {activeTab === 'phonebook' && renderPhoneContacts()}
+            {activeTab === 'friends' && renderFriendList()}
+            {activeTab === 'received' && renderFriendRequests()}
+            {activeTab === 'sent' && renderSentRequests()}
+          </>
+        )}
       </View>
     </SafeAreaView>
   );
