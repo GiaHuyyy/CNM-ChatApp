@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert, Dimensions, Animated, PanResponder } from 'react-native';
+import { View, Text, Image, Modal, TouchableOpacity, FlatList, TextInput, ActivityIndicator, Alert, Dimensions, Animated, PanResponder, Platform } from 'react-native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
     faTimes, faPen, faInfoCircle, faImage, faUsers,
@@ -15,6 +15,10 @@ import { Video } from 'expo-av';
 // Get screen dimensions for responsive sizing
 const { width } = Dimensions.get('window');
 const THUMBNAIL_SIZE = (width - 60) / 3; // 3 columns with some margin
+
+// Add platform detection constants
+const IS_WEB = Platform.OS === 'web';
+const IS_MOBILE = Platform.OS === 'ios' || Platform.OS === 'android';
 
 // Helper functions to identify file types
 const isImageFile = (url) => {
@@ -580,19 +584,34 @@ const GroupChatInfoModal = ({
                 }
             });
         } else {
-            // Regular member can leave directly
-            setConfirmModal({
-                visible: true,
-                title: "Rời nhóm",
-                message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-                type: "warning",
-                action: () => {
-                    onClose(); // Close modal first for better UX
-                    setTimeout(() => {
-                        onLeaveGroup(group._id); // Call the parent component's handler
-                    }, 300);
-                }
-            });
+            // Regular member can leave directly - use different UI based on platform
+            if (IS_WEB) {
+                // On web, show our custom modal
+                setShowLeaveConfirmModal(true);
+            } else {
+                // On mobile, use native Alert
+                Alert.alert(
+                    "Rời nhóm",
+                    "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+                    [
+                        {
+                            text: "Hủy",
+                            style: "cancel"
+                        },
+                        {
+                            text: "Rời nhóm",
+                            style: "destructive",
+                            onPress: () => {
+                                onClose(); // Close modal first for better UX
+                                setTimeout(() => {
+                                    onLeaveGroup(group._id); // Call the parent component's handler
+                                }, 300);
+                            }
+                        }
+                    ],
+                    { cancelable: true }
+                );
+            }
         }
     };
 
@@ -661,7 +680,14 @@ const GroupChatInfoModal = ({
 
                 // IMMEDIATE NAVIGATION: Call the leave group handler first to handle navigation
                 if (onLeaveGroup) {
-                    onLeaveGroup(group._id);
+                    // For web, we need to add a slight delay to ensure UI updates properly
+                    if (IS_WEB) {
+                        setTimeout(() => {
+                            onLeaveGroup(group._id);
+                        }, 100);
+                    } else {
+                        onLeaveGroup(group._id);
+                    }
                 }
 
                 // Then show success message (after navigation has started)
@@ -670,7 +696,7 @@ const GroupChatInfoModal = ({
                         "Thành công",
                         "Bạn đã chuyển quyền quản trị và rời nhóm thành công"
                     );
-                }, 300);
+                }, IS_WEB ? 500 : 300); // Longer delay for web
             } else {
                 setConfirmModal({
                     visible: true,
@@ -1202,7 +1228,7 @@ const GroupChatInfoModal = ({
         </Modal>
     );
 
-    // Render function to display the admin selection UI
+    // Render function to display the admin selection UI - improve for platform compatibility
     const renderAdminSelectionUI = () => {
         if (!selectingNewAdmin) return null;
 
@@ -1214,7 +1240,7 @@ const GroupChatInfoModal = ({
                 onRequestClose={() => setSelectingNewAdmin(false)}
             >
                 <View className="flex-1 bg-black/50">
-                    <View className="bg-white rounded-t-xl flex-1 mt-20">
+                    <View className={`bg-white rounded-t-xl flex-1 ${IS_MOBILE ? 'mt-20' : 'mt-[10vh]'}`}>
                         <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
                             <Text className="text-xl font-bold">Chọn quản trị viên mới</Text>
                             <TouchableOpacity onPress={() => setSelectingNewAdmin(false)}>
@@ -1276,6 +1302,54 @@ const GroupChatInfoModal = ({
         );
     };
 
+    // Add state for custom leave confirmation modal on web
+    const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false);
+
+    // Add a custom Web modal for leave confirmation
+    const renderWebLeaveConfirmModal = () => {
+        if (!IS_WEB || !showLeaveConfirmModal) return null;
+
+        return (
+            <Modal
+                visible={showLeaveConfirmModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowLeaveConfirmModal(false)}
+            >
+                <View className="flex-1 bg-black/50 items-center justify-center">
+                    <View className="bg-white rounded-lg p-5 w-[90%] max-w-[400px]">
+                        <Text className="text-xl font-bold mb-3 text-center">Rời nhóm</Text>
+                        <Text className="text-gray-700 text-center mb-5">
+                            Bạn có chắc chắn muốn rời khỏi nhóm này?
+                        </Text>
+
+                        <View className="flex-row justify-center">
+                            <TouchableOpacity
+                                className="bg-gray-200 py-2 px-5 rounded-lg mr-4"
+                                onPress={() => setShowLeaveConfirmModal(false)}
+                            >
+                                <Text className="font-medium">Hủy</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                className="bg-red-500 py-2 px-5 rounded-lg"
+                                onPress={() => {
+                                    setShowLeaveConfirmModal(false);
+                                    onClose(); // Close group info modal
+                                    setTimeout(() => {
+                                        onLeaveGroup(group._id);
+                                    }, 300);
+                                }}
+                            >
+                                <Text className="font-medium text-white">Rời nhóm</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        );
+    };
+
     return (
         <>
             <Modal
@@ -1285,7 +1359,7 @@ const GroupChatInfoModal = ({
                 onRequestClose={onClose}
             >
                 <View className="flex-1 bg-black/40">
-                    <View className="bg-white rounded-t-xl flex-1 mt-20">
+                    <View className={`bg-white rounded-t-xl flex-1 ${IS_MOBILE ? 'mt-20' : 'mt-[10vh]'}`}>
                         {/* Header with updated title */}
                         <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
                             <Text className="text-xl font-bold">{getModalTitle()}</Text>
@@ -1377,6 +1451,9 @@ const GroupChatInfoModal = ({
 
             {/* Add the admin selection UI */
                 renderAdminSelectionUI()}
+
+            {/* Add web leave confirmation modal */
+                renderWebLeaveConfirmModal()}
 
             {/* Only show this if we're handling add members directly within this component */}
             {!onAddMember && (
