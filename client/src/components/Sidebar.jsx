@@ -12,9 +12,9 @@ import {
   faFilePen,
   faGear,
   faMagnifyingGlass,
+  faThumbTack,
   faUserPlus,
   faUsers,
-  faThumbTack,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import axios from "axios";
@@ -123,39 +123,63 @@ export default function Sidebar({ onGroupCreated }) {
     notificationCount: PropTypes.number,
   };
 
-  // Khởi tạo count 1 lần
+  // Khởi tạo count và set up event listener
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`, { withCredentials: true })
-      .then((res) => setFriendRequestsCount(res.data.data.length))
-      .catch(console.error);
+    // Initial fetch using the helper function
+    const initializeFriendRequestCount = async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_APP_BACKEND_URL}/api/pending-friend-requests`, 
+          { withCredentials: true }
+        );
+        if (response.data.success) {
+          setFriendRequestsCount(response.data.data.length);
+        }
+      } catch (error) {
+        console.error("Error fetching initial friend request count:", error);
+      }
+    };
+
+    initializeFriendRequestCount();
+    
+    // Listen for global notification count updates
+    const handleCountUpdate = (event) => {
+      setFriendRequestsCount(event.detail.count);
+    };
+    
+    document.addEventListener('friendRequestCountUpdated', handleCountUpdate);
+    
+    return () => {
+      document.removeEventListener('friendRequestCountUpdated', handleCountUpdate);
+    };
   }, []);
 
-  // Lắng nghe real-time trên socketConnection
+  // Set up Socket event listeners
   useEffect(() => {
     if (!socketConnection) return;
-    const inc = () => setFriendRequestsCount((c) => c + 1);
-    const dec = () => setFriendRequestsCount((c) => Math.max(c - 1, 0));
-
-    socketConnection.on("receiveFriendRequest", inc);
-    socketConnection.on("friendRequestCancelled", dec);
-    socketConnection.on("friendRequestAccepted", dec);
-    socketConnection.on("friendRequestRejected", dec);
+    
+    const handlePendingCount = (count) => {
+      console.log("Received pending count update:", count);
+      setFriendRequestsCount(count);
+    };
+    
+    // Listen for direct count updates from server
+    socketConnection.on("pendingRequestsCount", handlePendingCount);
 
     return () => {
-      socketConnection.off("receiveFriendRequest", inc);
-      socketConnection.off("friendRequestCancelled", dec);
-      socketConnection.off("friendRequestAccepted", dec);
-      socketConnection.off("friendRequestRejected", dec);
+      socketConnection.off("pendingRequestsCount", handlePendingCount);
     };
   }, [socketConnection]);
 
   const handleOpenTab = (tab) => {
     setOpenTab(tab);
+    
     // Navigate to the corresponding route based on the tab
     if (tab === "bookphone") {
-      navigate("/bookphone/listfriends"); // Thay đổi từ /bookphone thành /bookphone/listfriends
+      // Don't emit joinRoom for non-conversation routes
+      navigate("/bookphone/listfriends");
     } else if (tab === "chat") {
+      // Only need to navigate, don't emit any socket events here
       navigate("/chat");
     }
   };

@@ -339,6 +339,55 @@ const friendHandler = (io, socket, userId) => {
       });
     }
   });
+
+  // Add this new socket handler for fast friend status checking
+  socket.on("checkFriendStatus", async (data, callback) => {
+    try {
+      const { userId: targetUserId } = data;
+      
+      if (!targetUserId) {
+        return callback({
+          success: false,
+          error: "Missing target user ID"
+        });
+      }
+      
+      console.log(`Checking friend status between ${userId} and ${targetUserId}`);
+      
+      const friendRequest = await FriendModel.findOne({
+        $or: [
+          { sender: userId, receiver: targetUserId },
+          { sender: targetUserId, receiver: userId }
+        ]
+      });
+
+      if (!friendRequest) {
+        return callback({
+          success: true,
+          data: {
+            status: "none",
+            requestId: null,
+            isSender: false
+          }
+        });
+      }
+
+      callback({
+        success: true,
+        data: {
+          status: friendRequest.status,
+          requestId: friendRequest._id,
+          isSender: friendRequest.sender.toString() === userId.toString()
+        }
+      });
+    } catch (error) {
+      console.error("Error checking friend status via socket:", error);
+      callback({
+        success: false,
+        error: "Internal server error"
+      });
+    }
+  });
 };
 
 module.exports = friendHandler;

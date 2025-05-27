@@ -1,46 +1,134 @@
 import { faAddressCard, faEdit } from "@fortawesome/free-regular-svg-icons";
 import { faBan, faTriangleExclamation, faUserGroup } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import axios from "axios";
 import PropTypes from "prop-types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import Images from "../constants/images";
-import { socketManager } from "../socket/socketConfig"; // Thay đổi từ socket sang socketManager
+import { socketManager } from "../socket/socketConfig";
 
 export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose }) {
   const [isSending, setIsSending] = useState(false);
   const [hasSentRequest, setHasSentRequest] = useState(false);
   const [friendStatus, setFriendStatus] = useState(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
+  const isMounted = useRef(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const checkTimeoutRef = useRef(null);
 
-  // Kiểm tra trạng thái kết bạn ban đầu
+  // Kiểm tra trạng thái kết bạn ban đầu với socket và API fallback
   useEffect(() => {
-    const checkFriendStatus = async () => {
+    const checkFriendStatusWithFallback = async () => {
+      if (!dataUser?._id) {
+        setIsStatusLoading(false);
+        return;
+      }
+      
+      setIsStatusLoading(true);
+      let statusChecked = false;
+      
+      // First try using socket
+      if (socketManager.isConnected()) {
+        console.log("Attempting to check friend status via socket for:", dataUser._id);
+        
+        try {
+          // Return a promise that resolves when the socket response is received
+          await new Promise((resolve, reject) => {
+            socketManager.emit("checkFriendStatus", { userId: dataUser._id }, (response) => {
+              if (!isMounted.current) {
+                resolve();
+                return;
+              }
+              
+              if (response && response.success) {
+                console.log("Friend status from socket:", response.data);
+                setFriendStatus(response.data);
+                setHasSentRequest(response.data?.status === 'pending' && response.data?.isSender);
+                statusChecked = true;
+              } else {
+                console.warn("Socket friend status check failed:", response?.error || "Unknown error");
+              }
+              
+              setIsStatusLoading(false);
+              resolve();
+            });
+            
+            // Set timeout for socket response
+            checkTimeoutRef.current = setTimeout(() => {
+              if (!statusChecked) {
+                console.warn("Socket friend status check timed out");
+                reject(new Error("Socket timeout"));
+              }
+            }, 3000);
+          });
+          
+          // Clear timeout if the promise resolved
+          if (checkTimeoutRef.current) {
+            clearTimeout(checkTimeoutRef.current);
+            checkTimeoutRef.current = null;
+          }
+          
+          // If we got the status, we're done
+          if (statusChecked) return;
+        } catch (error) {
+          console.error("Socket friend status check error:", error);
+          // Continue to API fallback
+        }
+      }
+      
+      // Fallback to REST API if socket failed or timed out
       try {
-        if (!dataUser?._id) return;
-
-        const response = await axios.get(
+        console.log("Using API fallback for friend status check");
+        const response = await fetch(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/check-friend-status/${dataUser._id}`,
-          { withCredentials: true }
+          { 
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+          }
         );
-
-        if (response.data.success) {
-          console.log("Friend status:", response.data.data);
-          setFriendStatus(response.data.data);
-          setHasSentRequest(
-            response.data.data.status === 'pending' && response.data.data.isSender
-          );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log("Friend status from API:", data.data);
+          setFriendStatus(data.data);
+          setHasSentRequest(data.data?.status === 'pending' && data.data?.isSender);
+          statusChecked = true;
+        } else {
+          console.error("API friend status check failed:", data);
         }
       } catch (error) {
-        console.error("Error checking friend status:", error);
+        console.error("API friend status check error:", error);
+      } finally {
+        setIsStatusLoading(false);
+      }
+      
+      // If all checks failed, retry up to 2 times
+      if (!statusChecked && retryCount < 2) {
+        console.log(`Retrying friend status check (attempt ${retryCount + 1})`);
+        setRetryCount(prevCount => prevCount + 1);
+        // Will trigger a re-run of the effect due to retryCount change
       }
     };
 
+    isMounted.current = true;
+    
     if (!isUser && dataUser?._id) {
-      checkFriendStatus();
+      checkFriendStatusWithFallback();
+    } else {
+      setIsStatusLoading(false);
     }
-  }, [dataUser?._id, isUser]);
+    
+    return () => {
+      isMounted.current = false;
+      if (checkTimeoutRef.current) {
+        clearTimeout(checkTimeoutRef.current);
+        checkTimeoutRef.current = null;
+      }
+    };
+  }, [dataUser?._id, isUser, retryCount]);
 
   // Thiết lập socket listeners
   useEffect(() => {
@@ -78,7 +166,34 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
       setIsSending(false);
     }
 
-    // Thêm listener mới: Lắng nghe khi lời mời kết bạn bị từ chối
+    // Thêm listener mới: Lắng nghe khi lời mời kết bạn được chấp nhận
+    function handleFriendRequestAccepted(data) {
+      console.log("Friend request accepted:", data);
+      // Kiểm tra nếu đây là lời mời mà component hiện tại quan tâm
+      if (data.requestId === friendStatus?.requestId || 
+          (data.receiver && data.receiver._id === dataUser._id)) {
+        // Cập nhật trạng thái thành đã kết bạn
+        setFriendStatus({
+          status: 'accepted',
+          requestId: data.requestId
+        });
+        setHasSentRequest(false);
+        setIsSending(false);
+        toast.success(`Đã trở thành bạn bè với ${dataUser.name}`);
+      }
+    }
+
+    // Thêm listener mới: Lắng nghe khi bạn bè bị xóa
+    function handleFriendRemoved(data) {
+      console.log("Friend removed:", data);
+      // Nếu người dùng hiện tại bị xóa khỏi danh sách bạn bè
+      if (data.friendId === dataUser._id) {
+        setFriendStatus(null);
+        setHasSentRequest(false);
+      }
+    }
+
+    // Lắng nghe khi lời mời kết bạn bị từ chối
     function handleFriendRequestRejected(data) {
       console.log("Friend request rejected:", data);
       // Kiểm tra xem đây có phải lời mời của người dùng hiện tại hay không
@@ -95,12 +210,16 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
     socket.on("friendRequestCancelled", handleFriendRequestCancelled);
     socket.on("friendRequestError", handleFriendRequestError);
     socket.on("friendRequestRejected", handleFriendRequestRejected);
+    socket.on("friendRequestAccepted", handleFriendRequestAccepted);
+    socket.on("friendRemoved", handleFriendRemoved);
 
     return () => {
       socket.off("friendRequestSent", handleFriendRequestSent);
       socket.off("friendRequestCancelled", handleFriendRequestCancelled);
       socket.off("friendRequestError", handleFriendRequestError);
       socket.off("friendRequestRejected", handleFriendRequestRejected);
+      socket.off("friendRequestAccepted", handleFriendRequestAccepted);
+      socket.off("friendRemoved", handleFriendRemoved);
     };
   }, [isUser, dataUser?._id, dataUser?.name, friendStatus?.requestId]);
 
@@ -112,89 +231,50 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
 
     try {
       setIsSending(true);
-      const toastId = toast.loading(
-        friendStatus?.status === 'pending' ? "Đang hủy lời mời..." : "Đang gửi lời mời..."
-      );
+      
+      // Update the message based on the action
+      const actionMessage = friendStatus?.status === 'pending' 
+        ? (friendStatus.isSender ? "Đang hủy lời mời..." : "Đang từ chối lời mời...")
+        : "Đang gửi lời mời...";
+      
+      const toastId = toast.message(actionMessage);
 
-      if (friendStatus?.status === 'pending' && friendStatus?.isSender) {
-        console.log("Cancelling friend request:", friendStatus.requestId);
-        // Hủy lời mời kết bạn qua socket
-        socketManager.emit("cancelFriendRequest", {
-          requestId: friendStatus.requestId,
-          receiverId: dataUser._id
-        });
-
-        // Fallback nếu socket không phản hồi sau 3 giây
-        setTimeout(() => {
-          if (isSending) {
-            console.log("Socket timeout, using API fallback");
-            handleCancelViaAPI(friendStatus.requestId, dataUser._id, toastId);
-          }
-        }, 3000);
+      // Use socket exclusively for all interactions
+      if (friendStatus?.status === 'pending') {
+        if (friendStatus.isSender) {
+          // Cancel friend request via socket
+          console.log("Cancelling friend request via socket:", friendStatus.requestId);
+          socketManager.emit("cancelFriendRequest", {
+            requestId: friendStatus.requestId,
+            receiverId: dataUser._id
+          });
+        } else {
+          // Reject friend request via socket
+          console.log("Rejecting friend request via socket:", friendStatus.requestId);
+          socketManager.emit("rejectFriendRequest", {
+            requestId: friendStatus.requestId,
+            senderId: dataUser._id
+          });
+        }
       } else {
-        console.log("Sending friend request to:", dataUser._id);
-        // Gửi lời mời kết bạn qua socket
+        // Send new friend request via socket
+        console.log("Sending friend request via socket to:", dataUser._id);
         socketManager.emit("sendFriendRequest", {
           receiverId: dataUser._id
         });
-
-        // Fallback nếu socket không phản hồi sau 3 giây
-        setTimeout(() => {
-          if (isSending) {
-            console.log("Socket timeout, using API fallback");
-            handleSendViaAPI(dataUser._id, toastId);
-          }
-        }, 3000);
       }
+
+      // Set a timeout to display an error if no response is received
+      setTimeout(() => {
+        if (isSending && isMounted.current) {
+          console.error("No response received from socket server");
+          toast.error("Không nhận được phản hồi từ máy chủ", { id: toastId });
+          setIsSending(false);
+        }
+      }, 5000);
+      
     } catch (error) {
       toast.error("Có lỗi xảy ra khi xử lý yêu cầu");
-      setIsSending(false);
-    }
-  };
-
-  // Fallback API handlers
-  const handleSendViaAPI = async (receiverId, toastId) => {
-    try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-friend-request`,
-        { receiverId },
-        { withCredentials: true }
-      );
-      if (response.data.success) {
-        toast.success("Đã gửi lời mời kết bạn", { id: toastId });
-        setFriendStatus({
-          status: 'pending',
-          isSender: true,
-          requestId: response.data.data._id
-        });
-        setHasSentRequest(true);
-      } else {
-        toast.error(response.data.message, { id: toastId });
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Có lỗi xảy ra", { id: toastId });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleCancelViaAPI = async (requestId, receiverId, toastId) => {
-    try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/api/cancel-friend-request`,
-        { requestId, receiverId },
-        { withCredentials: true }
-      );
-      if (response.data.success) {
-        toast.success("Đã hủy lời mời kết bạn", { id: toastId });
-        setFriendStatus(null);
-        setHasSentRequest(false);
-      } else {
-        toast.error(response.data.message, { id: toastId });
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Có lỗi xảy ra", { id: toastId });
-    } finally {
       setIsSending(false);
     }
   };
@@ -215,7 +295,16 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
 
       {!isUser && (
         <div className="flex justify-center gap-x-2 px-4 pb-4">
-          {friendStatus?.status === "accepted" ? (
+          {isStatusLoading ? (
+            // Enhanced loading state with better indication
+            <button
+              className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold opacity-70"
+              disabled
+            >
+              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500"></span>
+              Đang kiểm tra trạng thái...
+            </button>
+          ) : friendStatus?.status === "accepted" ? (
             <button
               className="flex h-8 flex-1 items-center justify-center rounded-[3px] bg-[#e5e7eb] text-sm font-semibold"
               disabled
@@ -225,17 +314,21 @@ export default function UserCard({ isUser, dataUser, setInfoUserVisible, onClose
           ) : (
             <button
               className={`flex h-8 flex-1 items-center justify-center rounded-[3px] text-sm font-semibold disabled:opacity-50 ${
-                hasSentRequest ? "bg-[#ffebeb] text-[#ad0000] hover:bg-[#ffdbdb]" : "bg-[#e5e7eb] hover:bg-[#c6cad2]"
+                friendStatus?.status === "pending"
+                  ? friendStatus.isSender
+                    ? "bg-[#ffebeb] text-[#ad0000] hover:bg-[#ffdbdb]" 
+                    : "bg-[#ea4335] text-white hover:bg-[#d73c30]"
+                  : "bg-[#e5e7eb] hover:bg-[#c6cad2]"
               }`}
               onClick={handleFriendRequest}
-              disabled={isSending || (friendStatus?.status === "pending" && !friendStatus?.isSender)}
+              disabled={isSending}
             >
               {isSending
                 ? "Đang xử lý..."
                 : friendStatus?.status === "pending"
                   ? friendStatus.isSender
                     ? "Hủy lời mời"
-                    : "Đã nhận lời mời"
+                    : "Từ chối" 
                   : "Kết bạn"}
             </button>
           )}
