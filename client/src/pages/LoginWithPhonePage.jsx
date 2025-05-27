@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setToken } from "../redux/userSlice";
+import { useGlobalContext } from "../context/GlobalProvider";
 
 export default function CheckPhonePage() {
   const contries = [
@@ -29,6 +30,7 @@ export default function CheckPhonePage() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { setIsForgotPassword } = useGlobalContext();
 
   const handleShowPassword = () => {
     setShowPassword(!showPassword);
@@ -62,6 +64,10 @@ export default function CheckPhonePage() {
     } catch (error) {
       toast.error(error.response?.data?.message);
     }
+  };
+
+  const handleForgotPassword = () => {
+    setIsForgotPassword(true);
   };
 
   return (
@@ -107,9 +113,9 @@ export default function CheckPhonePage() {
 
         <button className="h-[44px] w-full bg-[#0190f3] px-5 font-medium text-white">Đăng nhập với mật khẩu</button>
       </form>
-      <a href="#!" className="mt-3 text-sm">
-        Quên mật khẩu
-      </a>
+      <button onClick={handleForgotPassword} className="mt-3 text-sm text-[#006af5] hover:underline">
+        Quên mật khẩu?
+      </button>
     </div>
   );
 }

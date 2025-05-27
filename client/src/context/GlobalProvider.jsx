@@ -14,6 +14,7 @@ const GlobalProvider = ({ children }) => {
   const [socketConnection, setSocketConnection] = useState(null);
   const [seenMessage, setSeenMessage] = useState(false);
   const [notifications, setNotifications] = useState(0);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
 
   // Add notification update function
   const updateNotifications = (count) => {
@@ -83,7 +84,7 @@ const GlobalProvider = ({ children }) => {
   useEffect(() => {
     if (socketConnection) {
       // Add handler for friend request updates
-      socketConnection.on("receiveFriendRequest", (data) => {
+      socketConnection.on("receiveFriendRequest", () => {
         // Force socket to check for updates
         socketConnection.emit("checkPendingRequests");
       });
@@ -95,9 +96,9 @@ const GlobalProvider = ({ children }) => {
   }, [socketConnection]);
 
   return (
-    <GlobalContext.Provider 
-      value={{ 
-        isLoginWithEmail, 
+    <GlobalContext.Provider
+      value={{
+        isLoginWithEmail,
         setIsLoginWithEmail,
         isLoginWithPhone,
         setIsLoginWithPhone,
@@ -106,7 +107,9 @@ const GlobalProvider = ({ children }) => {
         seenMessage,
         setSeenMessage,
         notifications,
-        updateNotifications  // Add new notification values
+        updateNotifications, // Add new notification values
+        isForgotPassword,
+        setIsForgotPassword,
       }}
     >
       {children}

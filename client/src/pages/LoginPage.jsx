@@ -2,82 +2,64 @@ import { faEnvelope, faEye, faEyeSlash, faLock } from "@fortawesome/free-solid-s
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import axios from "axios";
 import { useState } from "react";
-import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { setToken } from "../redux/userSlice";
+import { useGlobalContext } from "../context/GlobalProvider";
 
-export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+export default function LoginPage({ onForgotPassword }) {
   const [data, setData] = useState({
     email: "",
     password: "",
   });
-
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { setIsForgotPassword } = useGlobalContext();
 
   const handleShowPassword = () => {
     setShowPassword(!showPassword);
   };
 
   const handleOnChange = (e) => {
-    setData((prev) => ({
-      ...prev,
+    setData((prevData) => ({
+      ...prevData,
       [e.target.name]: e.target.value,
     }));
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    if (!data.email || !data.password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
+    e.stopPropagation();
     setLoading(true);
-
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_APP_BACKEND_URL}/api/login`,
-        {
-          email: data.email,
-          password: data.password
-        }, { withCredentials: true }
-      );
+      const URL = `${import.meta.env.VITE_APP_BACKEND_URL}/api/login`;
+      const response = await axios.post(URL, data, { withCredentials: true });
 
-      if (response.data.success) {
-        // Store in Redux
-        dispatch(setToken(response.data.token));
-
-        // Store in localStorage
-        localStorage.setItem("token", response.data.token);
-
-        // Reset form
+      toast.success(response?.data?.message);
+      console.log(response?.data);
+      if (response?.data?.success) {
+        dispatch(setToken(response?.data?.token));
+        localStorage.setItem("token", response?.data?.token);
         setData({
           email: "",
           password: "",
         });
-
-        // Show success message
-        toast.success(response.data.message || "Login successful");
-
-        // Navigate to home page
         navigate("/chat", { replace: true });
-      } else {
-        toast.error(response.data.message || "Login failed");
       }
     } catch (error) {
-      console.error("Login error:", error.response?.data);
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error("Login failed. Please try again.");
-      }
+      toast.error(error.response?.data?.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    setIsForgotPassword(true);
+    if (onForgotPassword) {
+      onForgotPassword();
     }
   };
 
@@ -89,6 +71,7 @@ export default function LoginPage() {
           <input
             type="email"
             name="email"
+            id="email"
             placeholder="Email"
             className="ml-3 flex-1 text-sm"
             value={data.email}
@@ -102,6 +85,7 @@ export default function LoginPage() {
           <input
             type={showPassword ? "text" : "password"}
             name="password"
+            id="password"
             placeholder="Mật khẩu"
             className="ml-3 flex-1 text-sm"
             value={data.password}
@@ -121,6 +105,9 @@ export default function LoginPage() {
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
+      <button onClick={handleForgotPassword} className="mt-3 text-sm text-[#006af5] hover:underline">
+        Quên mật khẩu?
+      </button>
     </div>
   );
 }

@@ -1,29 +1,39 @@
 import { useGlobalContext } from "../context/GlobalProvider";
 import LoginPage from "../pages/LoginPage";
-import LoginWithQR from "../pages/LoginWithQR"; // Updated import
+import LoginWithQR from "../pages/LoginWithQR";
 import RegisterPage from "../pages/RegisterPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import logo from "/chat.png";
 
 export default function AuthLayout() {
-  const { isLoginWithEmail, setIsLoginWithEmail } = useGlobalContext();
+  const { isLoginWithEmail, setIsLoginWithEmail, isForgotPassword, setIsForgotPassword } = useGlobalContext();
 
   const handleLoginWithQR = () => {
     setIsLoginWithEmail(null);
+    setIsForgotPassword(false);
   };
 
   const handleLoginWithEmail = () => {
     setIsLoginWithEmail(true);
+    setIsForgotPassword(false);
   };
 
   const handleRegister = () => {
     setIsLoginWithEmail(false);
+    setIsForgotPassword(false);
+  };
+
+  const handleForgotPassword = () => {
+    setIsForgotPassword(true);
   };
 
   const renderAuthPage = () => {
-    if (isLoginWithEmail === null) {
-      return <LoginWithQR />;  // Updated component name
+    if (isForgotPassword) {
+      return <ForgotPasswordPage />;
+    } else if (isLoginWithEmail === null) {
+      return <LoginWithQR />;
     } else if (isLoginWithEmail) {
-      return <LoginPage />;
+      return <LoginPage onForgotPassword={handleForgotPassword} />;
     } else {
       return <RegisterPage />;
     }
@@ -45,7 +55,9 @@ export default function AuthLayout() {
         {/* Auth Container */}
         <div className="relative mt-[18px] w-[560px] rounded-lg bg-white pb-3 shadow-xl">
           <div className="flex min-h-14 items-center justify-center border-b border-[#f0f0f0]">
-            {isLoginWithEmail === null ? (
+            {isForgotPassword ? (
+              <p className="text-center font-bold">Khôi phục mật khẩu</p>
+            ) : isLoginWithEmail === null ? (
               <p className="text-center font-bold">Đăng nhập bằng mã QR</p>
             ) : isLoginWithEmail ? (
               <p className="text-center font-bold">Đăng nhập bằng Email</p>
@@ -57,34 +69,45 @@ export default function AuthLayout() {
           <div className="mt-[42px]">{renderAuthPage()}</div>
 
           <div className="mt-[20px] text-center">
-            {isLoginWithEmail !== null && (
-              <p className="text-[13px] text-[#333] mb-2">
+            {!isForgotPassword && isLoginWithEmail !== null && (
+              <p className="mb-2 text-[13px] text-[#333]">
                 <span className="cursor-pointer text-[#006af5]" onClick={handleLoginWithQR}>
                   Đăng nhập bằng mã QR
                 </span>
               </p>
             )}
-            {isLoginWithEmail === null ? (
+            {!isForgotPassword && (
+              <>
+                {isLoginWithEmail === null ? (
+                  <p className="text-[13px] text-[#333]">
+                    <span className="mr-3 cursor-pointer text-[#006af5]" onClick={handleLoginWithEmail}>
+                      Đăng nhập bằng Email
+                    </span>
+                    <span className="cursor-pointer text-[#006af5]" onClick={handleRegister}>
+                      Tạo tài khoản
+                    </span>
+                  </p>
+                ) : isLoginWithEmail ? (
+                  <p className="text-[13px] text-[#333]">
+                    Chưa có tài khoản?{" "}
+                    <span className="cursor-pointer text-[#006af5]" onClick={handleRegister}>
+                      Đăng ký
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-[#333]">
+                    Đã có tài khoản?{" "}
+                    <span className="cursor-pointer text-[#006af5]" onClick={handleLoginWithEmail}>
+                      Đăng nhập
+                    </span>
+                  </p>
+                )}
+              </>
+            )}
+            {isForgotPassword && (
               <p className="text-[13px] text-[#333]">
-                <span className="cursor-pointer text-[#006af5] mr-3" onClick={handleLoginWithEmail}>
-                  Đăng nhập bằng Email
-                </span>
-                <span className="cursor-pointer text-[#006af5]" onClick={handleRegister}>
-                  Tạo tài khoản
-                </span>
-              </p>
-            ) : isLoginWithEmail ? (
-              <p className="text-[13px] text-[#333]">
-                Chưa có tài khoản?{" "}
-                <span className="cursor-pointer text-[#006af5]" onClick={handleRegister}>
-                  Đăng ký
-                </span>
-              </p>
-            ) : (
-              <p className="text-[13px] text-[#333]">
-                Đã có tài khoản?{" "}
                 <span className="cursor-pointer text-[#006af5]" onClick={handleLoginWithEmail}>
-                  Đăng nhập
+                  Quay lại đăng nhập
                 </span>
               </p>
             )}
