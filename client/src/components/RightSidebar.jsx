@@ -551,6 +551,66 @@ export default function RightSidebar({
     });
   };
 
+  const handleLeaveGroup = () => {
+    // Check if the user is the admin
+    const isAdmin = user._id === dataUser.groupAdmin?._id;
+
+    if (isAdmin) {
+      // If admin, show the select admin modal
+      setShowSelectAdminModal(true);
+    } else {
+      // If not admin, show normal confirmation
+      setConfirmModal({
+        isOpen: true,
+        title: "Rời nhóm",
+        message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+        action: () => {
+          socketConnection.emit("leaveGroup", {
+            groupId: params.userId,
+            userId: user._id,
+          });
+
+          // Listen for response
+          socketConnection.once("leftGroup", (response) => {
+            if (response.success) {
+              toast.success(response.message || "Đã rời nhóm thành công");
+              navigate("/");
+            } else {
+              toast.error(response.message || "Không thể rời nhóm");
+            }
+          });
+        },
+      });
+    }
+  };
+
+  const handleSelectNewAdmin = (newAdminId, callback) => {
+    if (!socketConnection || !newAdminId) {
+      toast.error("Không thể chuyển quyền quản trị. Vui lòng thử lại.");
+      callback && callback();
+      return;
+    }
+
+    // Transfer admin and leave group
+    socketConnection.emit("transferAdminAndLeave", {
+      groupId: params.userId,
+      currentAdminId: user._id,
+      newAdminId: newAdminId,
+    });
+
+    // Listen for response
+    socketConnection.once("adminTransferred", (response) => {
+      if (response.success) {
+        toast.success(response.message || "Đã chuyển quyền quản trị và rời nhóm thành công");
+        setShowSelectAdminModal(false);
+        navigate("/");
+      } else {
+        toast.error(response.message || "Không thể chuyển quyền quản trị");
+      }
+      callback && callback();
+    });
+  };
+
   return (
     <div className="custom-scrollbar !max-h-[100vh] w-[344px] overflow-auto border-l border-[#c8c9cc] bg-[#ebecf0]">
       {/* Header */}

@@ -224,9 +224,12 @@ const conversationHandler = (io, socket, userId, onlineUser) => {
       const isAdmin = groupConversation.groupAdmin.toString() === userIdToUse.toString();
 
       if (isAdmin) {
+        // Change the message to inform the admin they need to transfer ownership
         socket.emit("leftGroup", {
           success: false,
-          message: "Quản trị viên không thể rời nhóm. Bạn phải chuyển quyền quản trị hoặc xóa nhóm.",
+          message: "Vui lòng chọn người quản trị mới trước khi rời nhóm.",
+          requiresAdminTransfer: true,
+          groupId: groupId
         });
         return;
       }
@@ -290,6 +293,130 @@ const conversationHandler = (io, socket, userId, onlineUser) => {
       socket.emit("leftGroup", {
         success: false,
         message: "Có lỗi xảy ra khi rời nhóm",
+      });
+    }
+  });
+
+  // Add a new event handler for transferring admin role before leaving
+  socket.on("transferAdminAndLeave", async (data) => {
+    try {
+      const { groupId, currentAdminId, newAdminId } = data;
+      
+      // Validate input
+      if (!groupId || !currentAdminId || !newAdminId) {
+        socket.emit("adminTransferred", {
+          success: false,
+          message: "Thiếu thông tin cần thiết để chuyển quyền quản trị.",
+        });
+        return;
+      }
+
+      // Get the group details
+      const group = await ConversationModel.findById(groupId);
+      if (!group || !group.isGroup) {
+        socket.emit("adminTransferred", {
+          success: false,
+          message: "Không tìm thấy nhóm.",
+        });
+        return;
+      }
+
+      // Verify the current user is the admin
+      if (group.groupAdmin.toString() !== currentAdminId.toString()) {
+        socket.emit("adminTransferred", {
+          success: false,
+          message: "Bạn không phải là quản trị viên của nhóm này.",
+        });
+        return;
+      }
+
+      // Verify the new admin is a member of the group
+      const isMember = group.members.some(
+        (member) => member.toString() === newAdminId.toString()
+      );
+      if (!isMember) {
+        socket.emit("adminTransferred", {
+          success: false,
+          message: "Người được chọn không phải là thành viên của nhóm.",
+        });
+        return;
+      }
+
+      // Get details for both admins for notification
+      const currentAdmin = await UserModel.findById(currentAdminId);
+      const newAdmin = await UserModel.findById(newAdminId);
+
+      if (!currentAdmin || !newAdmin) {
+        socket.emit("adminTransferred", {
+          success: false,
+          message: "Không thể tìm thấy thông tin người dùng.",
+        });
+        return;
+      }
+
+      // Update the group admin
+      await ConversationModel.findByIdAndUpdate(
+        groupId,
+        { groupAdmin: newAdminId }
+      );
+
+      // Create notification message about admin change
+      const adminChangeMessage = await MessageModel.create({
+        text: `${currentAdmin.name} đã chuyển quyền quản trị cho ${newAdmin.name}`,
+        msgByUserId: currentAdminId,
+      });
+
+      // Add the notification to the conversation
+      await ConversationModel.findByIdAndUpdate(
+        groupId,
+        { $push: { messages: adminChangeMessage._id } }
+      );
+
+      // Now remove the previous admin from the group
+      await ConversationModel.findByIdAndUpdate(
+        groupId,
+        { $pull: { members: currentAdminId } }
+      );
+
+      // Create notification message about leaving
+      const leaveMessage = await MessageModel.create({
+        text: `${currentAdmin.name} đã rời khỏi nhóm`,
+        msgByUserId: currentAdminId,
+      });
+
+      // Add the notification to the conversation
+      await ConversationModel.findByIdAndUpdate(
+        groupId,
+        { $push: { messages: leaveMessage._id } }
+      );
+
+      // Get updated group information
+      const updatedGroup = await ConversationModel.findById(groupId)
+        .populate("members", "name email profilePic")
+        .populate("groupAdmin", "name email profilePic");
+
+      // Notify all users in the room about the change
+      io.to(groupId).emit("groupUpdated", updatedGroup);
+
+      // Respond to the user who initiated the transfer
+      socket.emit("adminTransferred", {
+        success: true,
+        message: "Bạn đã chuyển quyền quản trị và rời khỏi nhóm thành công.",
+      });
+
+      // Emit leftGroup event for client-side handling
+      socket.emit("leftGroup", {
+        success: true,
+        message: "Bạn đã rời khỏi nhóm sau khi chuyển quyền quản trị.",
+      });
+
+      // Remove the user from the socket room
+      socket.leave(groupId);
+    } catch (error) {
+      console.error("Error transferring admin:", error);
+      socket.emit("adminTransferred", {
+        success: false,
+        message: "Có lỗi xảy ra khi chuyển quyền quản trị. Vui lòng thử lại.",
       });
     }
   });
