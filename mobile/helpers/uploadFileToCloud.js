@@ -1,16 +1,16 @@
 import axios from "axios";
-import { REACT_APP_CLOUNDINARY_NAME, REACT_APP_CLOUNDINARY_UPLOAD_PRESET } from "@env";
+import { REACT_APP_CLOUDINARY_NAME, REACT_APP_CLOUDINARY_UPLOAD_PRESET } from "@env";
 import { Platform } from "react-native";
 
 // Debug environment variables to ensure they're loaded properly
 console.log("Cloudinary config loaded:", {
-    name: REACT_APP_CLOUNDINARY_NAME || 'undefined',
-    preset: REACT_APP_CLOUNDINARY_UPLOAD_PRESET || 'undefined'
+    name: REACT_APP_CLOUDINARY_NAME || 'undefined',
+    preset: REACT_APP_CLOUDINARY_UPLOAD_PRESET || 'undefined'
 });
 
 // Use cloudName directly from env var to construct the upload URL
-const cloudName = REACT_APP_CLOUNDINARY_NAME;
-const uploadPreset = REACT_APP_CLOUNDINARY_UPLOAD_PRESET;
+const cloudName = REACT_APP_CLOUDINARY_NAME;
+const uploadPreset = REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 
 const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
@@ -19,58 +19,70 @@ const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
  */
 const uploadFileToCloud = async (file) => {
     try {
-        // Add platform detection constants
-        const IS_WEB = Platform.OS === 'web';
-        const IS_MOBILE = Platform.OS === 'ios' || Platform.OS === 'android';
+        // Check if environment variables are available
+        const cloudName = REACT_APP_CLOUDINARY_NAME;
+        const uploadPreset = REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 
-        // Add console logging for debugging
-        console.log(`Starting file upload on ${IS_WEB ? 'web' : 'mobile'} platform:`, {
-            fileName: file.name || file.originalName || 'unknown',
-            fileType: file.type || file.mimeType || 'unknown',
-            fileSize: file.size || 'unknown',
-            hasUri: !!file.uri
-        });
-
-        const cloudName = 'YOUR_CLOUDINARY_CLOUD_NAME'; // Replace with your Cloudinary cloud name
-        const uploadPreset = 'YOUR_UNSIGNED_UPLOAD_PRESET'; // Replace with your upload preset
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', uploadPreset);
-
-        // Add original filename for better tracking
-        if (file.originalName) {
-            formData.append('public_id', `chat_app/${Date.now()}_${file.originalName.replace(/\.[^/.]+$/, "")}`);
+        if (!cloudName || !uploadPreset) {
+            console.error('Cloudinary configuration missing. Check your environment variables.');
+            throw new Error('Cloudinary configuration missing');
         }
 
-        // Log the request before sending
-        console.log(`Sending upload request to Cloudinary (${cloudName})...`);
+        console.log(`Uploading to Cloudinary with cloud name: ${cloudName}`);
+
+        const formData = new FormData();
+
+        // Handle file data differently based on platform
+        if (Platform.OS === 'web') {
+            // For web, we can add the file directly
+            formData.append('file', file);
+        } else {
+            // For mobile, create the correct file structure
+            formData.append('file', {
+                uri: file.uri,
+                type: file.type || 'application/octet-stream',
+                name: file.name || file.originalName || `file_${Date.now()}`
+            });
+        }
+
+        formData.append('upload_preset', uploadPreset);
+
+        // Add original filename as public_id if available
+        if (file.originalName || file.name) {
+            const fileName = file.originalName || file.name;
+            // Remove file extension for public_id
+            const publicId = fileName.split('.').slice(0, -1).join('.') || fileName;
+            formData.append('public_id', publicId);
+        }
+
+        // Log upload attempt for debugging
+        console.log(`Attempting to upload file: ${file.name || file.originalName || 'unnamed file'}`);
 
         const response = await axios.post(
             `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
             formData,
             {
                 headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+                    'Content-Type': 'multipart/form-data'
+                }
             }
         );
 
-        console.log(`Upload successful! Response status: ${response.status}`);
+        console.log('Upload successful:', response.data.secure_url);
         return response.data;
     } catch (error) {
         console.error('Error uploading file:', error);
 
-        // More detailed error logging
         if (error.response) {
             console.error('Error response:', error.response.status, error.response.data);
-        } else if (error.request) {
-            console.error('No response received:', error.request);
-        } else {
-            console.error('Error setting up request:', error.message);
         }
 
-        throw error;
+        // Return a standard object with error information
+        return {
+            error: true,
+            message: error.message || 'Upload failed',
+            secure_url: null
+        };
     }
 };
 
