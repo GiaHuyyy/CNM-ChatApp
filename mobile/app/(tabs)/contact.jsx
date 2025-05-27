@@ -11,7 +11,8 @@ import {
   StatusBar,
   FlatList,
   PermissionsAndroid,
-  Platform
+  Platform,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -427,7 +428,7 @@ const ContactScreen = () => {
   const renderPhoneContacts = () => (
     <View className="flex-1 bg-white">
       <View className="flex-row justify-between px-4 py-2 bg-gray-50">
-        <Text className="text-gray-500">Tất cả {filteredPhoneContacts.length}</Text>
+        <Text className="text-gray-500">Tất cả {phoneContacts.length}</Text>
         <TouchableOpacity onPress={getPhoneContacts}>
           <Text className="text-blue-500">Làm mới</Text>
         </TouchableOpacity>
@@ -438,22 +439,29 @@ const ContactScreen = () => {
         </View>
       ) : (
         <ScrollView className="flex-1">
-          {filteredPhoneContacts.length === 0 ? (
+          {phoneContacts.length === 0 ? (
             <Text className="text-center text-gray-500 mt-8">Không có liên hệ nào.</Text>
           ) : (
-            filteredPhoneContacts.map((contact, idx) => (
-              <View key={contact.id || idx} className="flex-row items-center px-4 py-3 border-b border-gray-100">
-                <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center">
-                  <FontAwesomeIcon icon={faAddressBook} size={20} color="#0068FF" />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="text-base">{contact.name || contact.displayName || `${contact.firstName || ''} ${contact.lastName || ''}`}</Text>
-                  {contact.phoneNumbers && contact.phoneNumbers.length > 0 && (
-                    <Text className="text-sm text-gray-500">{contact.phoneNumbers[0].number}</Text>
-                  )}
-                </View>
-              </View>
-            ))
+            phoneContacts.map((contact, idx) => {
+              const phone = contact.phoneNumbers && contact.phoneNumbers.length > 0 ? contact.phoneNumbers[0].number : '';
+              return (
+                <TouchableOpacity
+                  key={contact.id || idx}
+                  className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                  onPress={() => openPhoneDialer(phone)}
+                >
+                  <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center">
+                    <FontAwesomeIcon icon={faAddressBook} size={20} color="#0068FF" />
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-base">{contact.name || contact.displayName || `${contact.firstName || ''} ${contact.lastName || ''}`}</Text>
+                    {phone && (
+                      <Text className="text-sm text-gray-500">{phone}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -466,6 +474,15 @@ const ContactScreen = () => {
       getPhoneContacts();
     }
   }, [activeTab]);
+
+  // Hàm mở app gọi điện
+  const openPhoneDialer = (phoneNumber) => {
+    if (!phoneNumber) return;
+    const url = `tel:${phoneNumber}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Lỗi', 'Không thể mở ứng dụng gọi điện.');
+    });
+  };
 
   // Thay đổi phần render: nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng
   return (
