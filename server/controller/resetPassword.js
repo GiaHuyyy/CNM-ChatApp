@@ -31,12 +31,11 @@ const resetPassword = async (req, res) => {
     
     console.log(`Checking OTP: ${otpString} for email: ${email}`);
     
-    // Find the OTP record - with relaxed time constraints
-    // Extend the validation window to 15 minutes instead of 5
+    // Find the OTP record - with consistent time constraints (5 minutes)
     const otpRecord = await OTPModel.findOne({
       email,
       otp: otpString,
-      createdAt: { $gt: new Date(Date.now() - 15 * 60 * 1000) }
+      createdAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) } // Changed from 15 minutes to 5 minutes
     });
 
     if (!otpRecord) {
