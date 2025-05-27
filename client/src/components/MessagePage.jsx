@@ -6,8 +6,8 @@ import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 import { useCallContext } from "../context/CallProvider";
 import { useGlobalContext } from "../context/GlobalProvider";
-import uploadFileToCloud from "../helpers/uploadFileToClound";
-// eslint-disable-next-line no-unused-vars
+// import uploadFileToCloud from "../helpers/uploadFileToClound";
+import uploadFileToS3 from "../helpers/uploadFileToS3";
 
 import { toast } from "sonner";
 import AddGroupMemberModal from "./AddGroupMemberModal";
@@ -129,7 +129,7 @@ export default function MessagePage() {
           setLoadError("Vui lòng thử lại.");
           setIsLoading(false);
         }
-      }, 3000);
+      }, 5000); // Increase timeout to 5 seconds
 
       socketConnection.on("messageUser", (payload) => {
         console.log("Received messageUser event:", payload);
@@ -137,6 +137,7 @@ export default function MessagePage() {
         setSeenMessage(true);
         setIsLoading(false);
         conversationInitialized.current = true;
+        clearTimeout(timeoutId);
       });
 
       socketConnection.on("message", (message) => {
@@ -150,6 +151,7 @@ export default function MessagePage() {
         setConversation(message);
         setIsLoading(false);
         conversationInitialized.current = true;
+        clearTimeout(timeoutId);
       });
 
       socketConnection.on("groupMessage", (groupData) => {
@@ -190,12 +192,38 @@ export default function MessagePage() {
         setSeenMessage(true);
         setIsLoading(false);
         conversationInitialized.current = true;
+        clearTimeout(timeoutId);
       });
 
       socketConnection.on("error", (error) => {
         console.error("Socket error:", error);
-        setLoadError(error.message || "Error loading conversation");
+
+        // Add more details to help debug
+        if (error.details) {
+          console.error("Error details:", error.details);
+        }
+
+        // Handle specific error messages with user-friendly text
+        let userMessage = "Error loading conversation";
+        if (
+          error.message === "Invalid conversation ID format" ||
+          error.message === "Invalid room ID" ||
+          error.message === "Conversation not found"
+        ) {
+          userMessage = "Không thể tìm thấy cuộc hội thoại. Vui lòng thử lại.";
+        } else if (error.message.includes("Error loading")) {
+          userMessage = "Không thể tải dữ liệu. Vui lòng thử lại sau.";
+        }
+
+        setLoadError(userMessage);
         setIsLoading(false);
+        clearTimeout(timeoutId);
+
+        // For new direct message conversations, provide a better user experience
+        if (error.message === "Conversation not found") {
+          // This could be a new conversation - handle gracefully
+          setLoadError("Bắt đầu cuộc trò chuyện mới. Hãy gửi tin nhắn để bắt đầu.");
+        }
       });
 
       return () => {
@@ -402,7 +430,8 @@ export default function MessagePage() {
       try {
         // Upload files in parallel
         const uploadPromises = selectedFiles.map(async (file) => {
-          const uploadResult = await uploadFileToCloud(file);
+          // const uploadResult = await uploadFileToCloud(file);
+          const uploadResult = await uploadFileToS3(file);
           return {
             url: uploadResult.secure_url,
             name: file.name,
@@ -666,7 +695,7 @@ export default function MessagePage() {
       /đã mở/i,
       /đã tắt/i,
       /đã được/i,
-      /đã bị/i
+      /đã bị/i,
     ];
 
     return patterns.some((pattern) => pattern.test(messageText));
@@ -819,10 +848,10 @@ export default function MessagePage() {
 
   const handleScrollToMessage = (messageId) => {
     console.log("Scrolling to message:", messageId);
-    
+
     // Tìm tin nhắn trong danh sách
-    const messageIndex = allMessages.findIndex(msg => msg._id === messageId);
-    
+    const messageIndex = allMessages.findIndex((msg) => msg._id === messageId);
+
     if (messageIndex === -1) {
       console.error("Message not found in the message list:", messageId);
       return;
@@ -830,20 +859,20 @@ export default function MessagePage() {
 
     // Tính toán số tin nhắn cần hiển thị để đảm bảo tin nhắn được tìm thấy nằm trong DOM
     const messagesNeeded = allMessages.length - messageIndex;
-    
+
     // Cập nhật số lượng tin nhắn hiển thị nếu cần
     if (visibleMessages < messagesNeeded) {
       setVisibleMessages(messagesNeeded);
-      
+
       // Đợi cho DOM cập nhật sau khi thay đổi số lượng tin nhắn hiển thị
       setTimeout(() => {
         const messageElement = document.getElementById(`message-${messageId}`);
         if (messageElement) {
           messageElement.scrollIntoView({
             behavior: "smooth",
-            block: "center"
+            block: "center",
           });
-          
+
           // Thêm hiệu ứng highlight
           messageElement.classList.add("bg-blue-100");
           setTimeout(() => {
@@ -856,13 +885,13 @@ export default function MessagePage() {
     } else {
       // Nếu tin nhắn đã nằm trong DOM, cuộn đến nó ngay lập tức
       const messageElement = document.getElementById(`message-${messageId}`);
-      
+
       if (messageElement) {
         messageElement.scrollIntoView({
           behavior: "smooth",
-          block: "center"
+          block: "center",
         });
-        
+
         // Thêm hiệu ứng highlight
         messageElement.classList.add("bg-blue-100");
         setTimeout(() => {
@@ -888,7 +917,7 @@ export default function MessagePage() {
 
     const messageId = message._id;
     const conversationId = conversation._id;
-    
+
     if (!messageId || !conversationId) {
       console.error("Thiếu ID tin nhắn hoặc cuộc trò chuyện", { messageId, conversationId });
       toast.error("Không thể thực hiện thao tác ghim tin nhắn");
@@ -898,7 +927,7 @@ export default function MessagePage() {
     console.log("Đang ghim tin nhắn với thông số:", {
       conversationId,
       messageId,
-      action
+      action,
     });
 
     socketConnection.emit("pinMessage", {
@@ -907,21 +936,21 @@ export default function MessagePage() {
       action,
       isGroup: dataUser.isGroup,
     });
-    
+
     setOpenActionMessage(false);
   };
 
   // Thêm useEffect để lắng nghe phản hồi từ server khi ghim/bỏ ghim tin nhắn
   useEffect(() => {
     if (!socketConnection) return;
-    
+
     const handlePinError = (data) => {
       toast.error(data.message || "Lỗi khi ghim tin nhắn.");
     };
-    
+
     const handleMessagePinnedUnpinned = (data) => {
       if (data.success) {
-        toast.success(data.action === 'pin' ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
+        toast.success(data.action === "pin" ? "Đã ghim tin nhắn" : "Đã bỏ ghim tin nhắn");
       }
     };
 
@@ -938,22 +967,50 @@ export default function MessagePage() {
   useEffect(() => {
     if (conversation?.pinnedMessages?.length > 0) {
       console.log("Current pinned messages:", conversation.pinnedMessages);
-      
+
       // Only check once per conversation load if pinned messages need refreshing
-      const needsRefresh = conversation.pinnedMessages.some(msg => 
-        typeof msg !== 'object' || (typeof msg === 'object' && !msg.msgByUserId)
+      const needsRefresh = conversation.pinnedMessages.some(
+        (msg) => typeof msg !== "object" || (typeof msg === "object" && !msg.msgByUserId),
       );
-      
+
       // Use a ref to prevent multiple refreshes for the same conversation
       if (needsRefresh && socketConnection && !conversationInitialized.current) {
         console.log("Pinned messages need refresh, requesting data once...");
         socketConnection.emit("joinRoom", params.userId);
-        
+
         // Mark as initialized to prevent further refresh requests
         conversationInitialized.current = true;
       }
     }
-  }, [conversation?._id, socketConnection, params.userId]); // Changed dependency from conversation.pinnedMessages to conversation._id
+  }, [conversation?._id, socketConnection, params.userId, conversation?.pinnedMessages]);
+
+  // Improve the message comparison function to safely handle different ID formats
+  const isCurrentUserMessage = (message) => {
+    if (!message || !user || !user._id) return false;
+
+    // Get string version of user ID
+    const currentUserIdStr =
+      typeof user._id === "object"
+        ? user._id?.toString
+          ? user._id.toString()
+          : user._id
+        : user._id?.toString
+          ? user._id.toString()
+          : user._id;
+
+    // Get string version of message sender ID
+    const senderIdStr =
+      typeof message.msgByUserId === "object"
+        ? message.msgByUserId?._id
+          ? message.msgByUserId._id.toString()
+          : message.msgByUserId?.toString()
+        : message.msgByUserId?.toString
+          ? message.msgByUserId.toString()
+          : message.msgByUserId;
+
+    // Compare as strings
+    return senderIdStr === currentUserIdStr;
+  };
 
   return (
     <main className="flex h-full">
@@ -1056,7 +1113,7 @@ export default function MessagePage() {
                       </div>
                     );
                   } else if (isCallMessage(message)) {
-                    const isCurrentUser = message.msgByUserId === user._id;
+                    const isCurrentUser = isCurrentUserMessage(message); // Replace with function
                     let sender = null;
                     if (dataUser.isGroup && !isCurrentUser) {
                       sender = getSenderInfo(message.msgByUserId);
@@ -1079,7 +1136,7 @@ export default function MessagePage() {
                       />
                     );
                   } else {
-                    const isCurrentUser = message.msgByUserId === user._id;
+                    const isCurrentUser = isCurrentUserMessage(message); // Replace with function
                     let sender = null;
                     if (dataUser.isGroup && !isCurrentUser) {
                       sender = getSenderInfo(message.msgByUserId);

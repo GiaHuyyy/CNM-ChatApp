@@ -11,7 +11,7 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { format } from "date-fns";
 import EmojiPicker from "emoji-picker-react";
-import PropTypes from 'prop-types'; // Add this import
+import PropTypes from "prop-types"; // Add this import
 import ReactionDisplay from "../ReactionDisplay";
 
 const MessageIsNormal = ({
@@ -34,8 +34,8 @@ const MessageIsNormal = ({
   setOpenActionMessage,
   handleEditMessage,
   handleDeleteMessage,
-  conversation, // Thêm prop này
-  handlePinMessage, // Thêm prop này
+  conversation,
+  handlePinMessage,
 }) => {
   const scrollToMessage = (messageId) => {
     if (!messageId) return;
@@ -147,14 +147,12 @@ const MessageIsNormal = ({
   // Kiểm tra xem tin nhắn có đang được ghim không
   const isMessagePinned = () => {
     if (!conversation?.pinnedMessages) return false;
-    
+
     // Lưu ý: pinnedMessages có thể là mảng các ID hoặc mảng các object có chứa _id
     const messageId = message._id.toString();
-    
-    return conversation.pinnedMessages.some(pin => {
-      const pinnedId = typeof pin === 'object' && pin._id ? 
-        pin._id.toString() : 
-        pin?.toString();
+
+    return conversation.pinnedMessages.some((pin) => {
+      const pinnedId = typeof pin === "object" && pin._id ? pin._id.toString() : pin?.toString();
       return pinnedId === messageId;
     });
   };
@@ -167,6 +165,7 @@ const MessageIsNormal = ({
       onMouseEnter={() => setHoveredMessage(message._id)}
       onMouseLeave={() => setHoveredMessage(null)}
     >
+      {/* Only show avatar for messages that are NOT from current user */}
       {!isCurrentUser && (
         <button className="flex">
           <img
@@ -183,14 +182,14 @@ const MessageIsNormal = ({
       >
         {/* Pin indicator - Thêm chỉ báo tin nhắn đã ghim */}
         {isMessagePinned() && (
-          <div 
+          <div
             className={`absolute -top-2 ${isCurrentUser ? "right-3" : "left-3"} text-yellow-500`}
             title="Tin nhắn đã ghim"
           >
             <FontAwesomeIcon icon={faThumbTack} size="sm" />
           </div>
         )}
-      
+
         {dataUser.isGroup && !isCurrentUser && (
           <div className="mb-1 text-xs font-medium text-blue-600">{sender?.name}</div>
         )}
@@ -288,7 +287,7 @@ const MessageIsNormal = ({
 
             {openActionMessage && !isDeletedMessage(message) && (
               <div
-                className={`absolute bottom-7 ${isCurrentUser ? "right-0" : "left-0"} w-[120px] rounded-sm bg-white py-2 z-20`}
+                className={`absolute bottom-7 ${isCurrentUser ? "right-0" : "left-0"} z-20 w-[120px] rounded-sm bg-white py-2`}
                 onMouseEnter={() => setOpenActionMessage(true)}
                 onMouseLeave={() => setOpenActionMessage(false)}
               >
@@ -311,20 +310,18 @@ const MessageIsNormal = ({
                     </button>
                   </>
                 )}
-                
+
                 {/* Pin/Unpin button for any message */}
                 <button
                   className="group flex w-full items-center gap-1 bg-white px-[6px] py-1 hover:bg-[#c6cad2]"
                   onClick={() => handlePinMessage(message, isMessagePinned() ? "unpin" : "pin")}
                 >
-                  <FontAwesomeIcon 
-                    icon={faThumbTack} 
-                    width={10} 
+                  <FontAwesomeIcon
+                    icon={faThumbTack}
+                    width={10}
                     className={`text-[#5a5a5a] ${isMessagePinned() ? "text-yellow-500" : ""}`}
                   />
-                  <span className="text-sm">
-                    {isMessagePinned() ? "Bỏ ghim" : "Ghim tin nhắn"}
-                  </span>
+                  <span className="text-sm">{isMessagePinned() ? "Bỏ ghim" : "Ghim tin nhắn"}</span>
                 </button>
               </div>
             )}
@@ -364,7 +361,7 @@ const MessageIsNormal = ({
 MessageIsNormal.propTypes = {
   // ... existing propTypes ...
   handlePinMessage: PropTypes.func,
-  conversation: PropTypes.object
+  conversation: PropTypes.object,
 };
 
 export default MessageIsNormal;

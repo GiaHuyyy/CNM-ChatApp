@@ -393,40 +393,39 @@ const messageHandler = (io, socket, userId) => {
       const { conversationId, messageId, action, isGroup } = data;
 
       if (!conversationId || !messageId || !action) {
-        return socket.emit("pinMessageError", { 
-          message: "Thiếu thông tin cần thiết" 
+        return socket.emit("pinMessageError", {
+          message: "Thiếu thông tin cần thiết",
         });
       }
 
       // Kiểm tra xem tin nhắn có tồn tại không
       const message = await MessageModel.findById(messageId);
       if (!message) {
-        return socket.emit("pinMessageError", { 
-          message: "Tin nhắn không tồn tại" 
+        return socket.emit("pinMessageError", {
+          message: "Tin nhắn không tồn tại",
         });
       }
 
       // Lấy thông tin cuộc trò chuyện
-      const conversation = await ConversationModel.findById(conversationId)
-        .populate({
-          path: "pinnedMessages",
-          populate: {
-            path: "msgByUserId",
-            select: "name profilePic"
-          }
-        });
+      const conversation = await ConversationModel.findById(conversationId).populate({
+        path: "pinnedMessages",
+        populate: {
+          path: "msgByUserId",
+          select: "name profilePic",
+        },
+      });
 
       if (!conversation) {
-        return socket.emit("pinMessageError", { 
-          message: "Cuộc trò chuyện không tồn tại" 
+        return socket.emit("pinMessageError", {
+          message: "Cuộc trò chuyện không tồn tại",
         });
       }
 
       // Kiểm tra giới hạn tin nhắn ghim
       if (action === "pin" && conversation.pinnedMessages && conversation.pinnedMessages.length >= 5) {
-        return socket.emit("pinMessageError", { 
-          message: "Chỉ có thể ghim tối đa 5 tin nhắn", 
-          type: "PIN_LIMIT_EXCEEDED" 
+        return socket.emit("pinMessageError", {
+          message: "Chỉ có thể ghim tối đa 5 tin nhắn",
+          type: "PIN_LIMIT_EXCEEDED",
         });
       }
 
@@ -434,14 +433,14 @@ const messageHandler = (io, socket, userId) => {
       if (action === "pin") {
         // Ghim tin nhắn
         conversation.pinnedMessages = conversation.pinnedMessages || [];
-        if (!conversation.pinnedMessages.some(pin => pin._id.toString() === messageId.toString())) {
+        if (!conversation.pinnedMessages.some((pin) => pin._id.toString() === messageId.toString())) {
           conversation.pinnedMessages.push(messageId);
         }
       } else if (action === "unpin") {
         // Bỏ ghim tin nhắn
         if (conversation.pinnedMessages) {
           conversation.pinnedMessages = conversation.pinnedMessages.filter(
-            pin => pin._id.toString() !== messageId.toString()
+            (pin) => pin._id.toString() !== messageId.toString()
           );
         }
       }
@@ -460,16 +459,15 @@ const messageHandler = (io, socket, userId) => {
             path: "pinnedMessages",
             populate: {
               path: "msgByUserId",
-              select: "name profilePic"
-            }
+              select: "name profilePic",
+            },
           });
 
         // Thông báo cho tất cả thành viên trong nhóm
         for (const memberId of updatedConversation.members) {
-          const memberIdStr = typeof memberId === "object" 
-            ? (memberId._id ? memberId._id.toString() : memberId.toString()) 
-            : memberId;
-          
+          const memberIdStr =
+            typeof memberId === "object" ? (memberId._id ? memberId._id.toString() : memberId.toString()) : memberId;
+
           io.to(memberIdStr).emit("groupMessage", updatedConversation);
         }
       } else {
@@ -479,14 +477,12 @@ const messageHandler = (io, socket, userId) => {
             path: "pinnedMessages",
             populate: {
               path: "msgByUserId",
-              select: "name profilePic"
-            }
+              select: "name profilePic",
+            },
           });
 
         // Xác định receiver là ai
-        const receiverId = updatedConversation.members.find(
-          member => member.toString() !== userId.toString()
-        );
+        const receiverId = updatedConversation.members.find((member) => member.toString() !== userId.toString());
 
         // Thông báo cho cả người gửi và người nhận
         io.to(userId.toString()).emit("message", updatedConversation);
@@ -499,12 +495,12 @@ const messageHandler = (io, socket, userId) => {
       socket.emit("messagePinnedUnpinned", {
         success: true,
         action: action,
-        messageId: messageId
+        messageId: messageId,
       });
     } catch (error) {
       console.error("Error handling pinMessage event:", error);
-      socket.emit("pinMessageError", { 
-        message: "Có lỗi xảy ra khi ghim tin nhắn: " + error.message 
+      socket.emit("pinMessageError", {
+        message: "Có lỗi xảy ra khi ghim tin nhắn: " + error.message,
       });
     }
   });
@@ -512,20 +508,110 @@ const messageHandler = (io, socket, userId) => {
   // Update the joinRoom handler to validate pinnedMessages
   socket.on("joinRoom", async (roomId) => {
     try {
-      // Find conversation with better error handling
-      const conversation = await ConversationModel.findById(roomId);
-      if (!conversation) {
-        socket.emit("error", { message: "Conversation not found" });
+      console.log(`User ${userId} attempting to join room: ${roomId}`);
+
+      if (!roomId || roomId === "undefined") {
+        console.log("Invalid room ID received:", roomId);
+        socket.emit("error", { message: "Invalid room ID" });
         return;
       }
+
+      // Clean up the roomId if it contains path prefixes
+      let cleanRoomId = roomId;
+      if (typeof roomId === "string" && roomId.includes("chat/")) {
+        cleanRoomId = roomId.split("chat/")[1];
+        console.log("Extracted ID from path:", cleanRoomId);
+      }
+
+      // First try: Look for a group conversation where user is a member
+      let conversation;
+      try {
+        conversation = await ConversationModel.findOne({
+          _id: cleanRoomId,
+          isGroup: true,
+          members: userId,
+        });
+
+        if (conversation) {
+          console.log("Found group conversation:", cleanRoomId);
+        }
+      } catch (err) {
+        console.log("Error looking up group conversation:", err.message);
+        // Continue to next lookup strategy
+      }
+
+      // Second try: Look for direct message conversation between current user and target user
+      if (!conversation) {
+        try {
+          conversation = await ConversationModel.findOne({
+            $or: [
+              { sender: userId, receiver: cleanRoomId },
+              { sender: cleanRoomId, receiver: userId },
+            ],
+            isGroup: { $ne: true },
+          });
+
+          if (conversation) {
+            console.log("Found direct message conversation between users");
+          }
+        } catch (err) {
+          console.log("Error looking up direct conversation:", err.message);
+          // Continue to next lookup strategy
+        }
+      }
+
+      // Third try: Look for conversation by ID
+      if (!conversation) {
+        try {
+          conversation = await ConversationModel.findById(cleanRoomId);
+          if (conversation) {
+            console.log("Found conversation by ID");
+          }
+        } catch (err) {
+          console.log("Error looking up conversation by ID:", err.message);
+          // This is not necessarily an error - might be a new conversation
+        }
+      }
+
+      // Handle the case when no conversation exists - could be a new direct message
+      if (!conversation) {
+        // Check if the target ID is a valid user ID
+        const targetUser = await UserModel.findById(cleanRoomId);
+
+        if (targetUser) {
+          console.log("No conversation found, but valid user ID. Creating empty conversation view.");
+
+          // Send user details
+          socket.emit("messageUser", {
+            _id: targetUser._id,
+            name: targetUser.name,
+            phone: targetUser.phone,
+            profilePic: targetUser.profilePic,
+            online: false, // Will be updated by onlineUser event
+          });
+
+          // Send empty message list
+          socket.emit("message", { messages: [], _id: "new-conversation" });
+          return;
+        } else {
+          console.log("Neither conversation nor valid user found for ID:", cleanRoomId);
+          socket.emit("error", { message: "Conversation not found" });
+          return;
+        }
+      }
+
+      // Continue with existing conversation handling...
 
       // Check for invalid pinnedMessages references and clean them up
       if (conversation.pinnedMessages && Array.isArray(conversation.pinnedMessages)) {
         // Create a new array with valid message references only
         const validPinnedMessages = [];
-        
+
         for (const msgRef of conversation.pinnedMessages) {
           try {
+            // Skip if msgRef is null or undefined
+            if (!msgRef) continue;
+
             const msgExists = await MessageModel.exists({ _id: msgRef });
             if (msgExists) {
               validPinnedMessages.push(msgRef);
@@ -536,64 +622,106 @@ const messageHandler = (io, socket, userId) => {
             console.error(`Error validating pinned message: ${err.message}`);
           }
         }
-        
+
         // Update conversation if any invalid references were removed
         if (validPinnedMessages.length !== conversation.pinnedMessages.length) {
-          console.log(`Updated pinnedMessages from ${conversation.pinnedMessages.length} to ${validPinnedMessages.length} items`);
+          console.log(
+            `Updated pinnedMessages from ${conversation.pinnedMessages.length} to ${validPinnedMessages.length} items`
+          );
           conversation.pinnedMessages = validPinnedMessages;
           await conversation.save();
         }
       }
 
-      // If conversation has pinned messages, fully populate them first
-      if (conversation && conversation.pinnedMessages && conversation.pinnedMessages.length > 0) {
-        // Use deep population to ensure all pinned messages have complete data
-        await conversation.populate({
-          path: "pinnedMessages",
-          model: "Message",
-          select: "_id text files imageUrl fileUrl fileName reactions createdAt isEdited isDeleted",
-          populate: {
-            path: "msgByUserId",
-            model: "User",
-            select: "name email profilePic"
-          }
-        });
+      // Populate pinned messages
+      try {
+        // If conversation has pinned messages, fully populate them first
+        if (conversation && conversation.pinnedMessages && conversation.pinnedMessages.length > 0) {
+          // Use deep population to ensure all pinned messages have complete data
+          await conversation.populate({
+            path: "pinnedMessages",
+            model: "Message",
+            select: "_id text files imageUrl fileUrl fileName reactions createdAt isEdited isDeleted",
+            populate: {
+              path: "msgByUserId",
+              model: "User",
+              select: "name email profilePic",
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Error populating pinned messages:", err.message);
       }
-      
-      // Continue with the rest of the function
+
+      // Handle group vs direct conversation
       if (conversation.isGroup) {
-        await conversation.populate("groupAdmin");
-        await conversation.populate("members");
-        await conversation.populate({
-          path: "messages",
-          populate: {
-            path: "msgByUserId",
-            select: "name email profilePic",
-          },
-        });
+        try {
+          await conversation.populate("groupAdmin");
+          await conversation.populate("members");
+          await conversation.populate({
+            path: "messages",
+            populate: {
+              path: "msgByUserId",
+              select: "name email profilePic",
+            },
+          });
 
-        socket.join(roomId);
-        io.to(roomId).emit("newMember", conversation);
+          socket.join(cleanRoomId);
+          socket.emit("groupMessage", conversation);
+        } catch (err) {
+          console.error("Error populating group conversation:", err.message);
+          socket.emit("error", { message: "Error loading group conversation" });
+          return;
+        }
       } else {
-        // Không phải nhóm
-        await conversation.populate({
-          path: "messages",
-          populate: {
-            path: "msgByUserId",
-            select: "name email profilePic",
-          },
-        });
+        try {
+          // Populate messages for direct conversations
+          await conversation.populate({
+            path: "messages",
+            populate: {
+              path: "msgByUserId",
+              select: "name email profilePic",
+            },
+          });
 
-        // Đối với cuộc trò chuyện trực tiếp, chỉ cần thông báo cho hai thành viên
-        const [member1, member2] = conversation.members;
-        io.to(member1.toString()).emit("message", conversation);
-        io.to(member2.toString()).emit("message", conversation);
+          // For direct conversations, make sure we have members
+          if (!conversation.members || conversation.members.length === 0) {
+            // Initialize members array if it doesn't exist
+            conversation.members = [conversation.sender, conversation.receiver];
+            await conversation.save();
+          }
+
+          // Emit conversation data to client
+          socket.emit("message", conversation);
+
+          // Find other user to send user details
+          const otherUserId =
+            conversation.sender.toString() === userId.toString()
+              ? conversation.receiver.toString()
+              : conversation.sender.toString();
+
+          const otherUser = await UserModel.findById(otherUserId).select("-password");
+
+          if (otherUser) {
+            socket.emit("messageUser", {
+              _id: otherUser._id,
+              name: otherUser.name,
+              phone: otherUser.phone,
+              profilePic: otherUser.profilePic,
+              online: false, // Will be updated by onlineUser event
+            });
+          }
+        } catch (err) {
+          console.error("Error handling direct conversation:", err.message);
+          socket.emit("error", { message: "Error loading conversation details" });
+          return;
+        }
       }
 
-      socket.emit("joinedRoom", conversation);
+      console.log(`User ${userId} successfully joined room: ${cleanRoomId}`);
     } catch (error) {
       console.error("Error joining room:", error);
-      socket.emit("error", { message: "Error joining room" });
+      socket.emit("error", { message: "Error joining room", details: error.message });
     }
   });
 };
