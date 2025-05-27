@@ -1,121 +1,97 @@
-import React from 'react';
-import { TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { TouchableOpacity, Alert, Platform, ActivityIndicator } from 'react-native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faPhone, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { useCallContext } from '../../context/CallContext';
 import { Audio } from 'expo-av';
-
-// Safely import Camera with proper error handling
-let Camera = null;
-try {
-    const CameraModule = require('expo-camera');
-    Camera = CameraModule.Camera || CameraModule;
-    console.log("Camera module loaded successfully");
-} catch (error) {
-    console.warn("Failed to load Camera module:", error);
-}
+import { Camera } from 'expo-camera';
 
 const CallButton = ({ userId, userName, userImage, isVideoCall = false, isOnline = false, size = 20, color = "#555454", disabled = false }) => {
     const { callUser } = useCallContext();
+    const [isChecking, setIsChecking] = useState(false);
 
     const handleCall = async () => {
-        console.log("Call button pressed", { userId, userName, isVideoCall });
-
         if (disabled || !isOnline) {
             Alert.alert("Không thể gọi", "Người dùng hiện đang ngoại tuyến");
             return;
         }
 
+        if (!callUser) {
+            Alert.alert("Lỗi", "Chức năng gọi điện không khả dụng");
+            return;
+        }
+
         try {
-            // Check audio permission first (needed for all calls)
-            const { status: audioStatus } = await Audio.requestPermissionsAsync();
+            setIsChecking(true);
 
-            if (audioStatus !== 'granted') {
-                Alert.alert("Cần cấp quyền", "Vui lòng cấp quyền truy cập microphone để thực hiện cuộc gọi.");
-                return;
-            }
+            // Check permissions based on call type
+            if (isVideoCall) {
+                // For video calls, we need both audio and camera permissions
+                const audioResult = await Audio.requestPermissionsAsync();
+                const cameraResult = await Camera.requestPermissionsAsync();
 
-            // For video calls, check camera permission on native platforms
-            if (isVideoCall && Platform.OS !== 'web') {
-                if (!Camera) {
-                    console.warn("Camera module not available, continuing with audio-only capabilities");
-                    // Continue with call but warn user
+                if (audioResult.status !== 'granted' || cameraResult.status !== 'granted') {
                     Alert.alert(
-                        "Cảnh báo",
-                        "Không thể truy cập camera. Cuộc gọi video có thể chỉ hoạt động với âm thanh.",
-                        [{ text: "Tiếp tục", onPress: () => callUser(userId, userName, userImage, isVideoCall) }]
-                    );
-                    return;
-                }
-
-                try {
-                    // Use the appropriate method to request camera permissions
-                    let cameraPermission;
-                    if (typeof Camera.requestCameraPermissionsAsync === 'function') {
-                        cameraPermission = await Camera.requestCameraPermissionsAsync();
-                    } else if (typeof Camera.requestPermissionsAsync === 'function') {
-                        cameraPermission = await Camera.requestPermissionsAsync();
-                    } else {
-                        console.warn("Could not find camera permission request method");
-                        cameraPermission = { status: 'denied' };
-                    }
-
-                    if (cameraPermission.status !== 'granted') {
-                        Alert.alert(
-                            "Cần cấp quyền",
-                            "Vui lòng cấp quyền truy cập camera để thực hiện cuộc gọi video.",
-                            [
-                                { text: "Hủy", style: "cancel" },
-                                {
-                                    text: "Tiếp tục với cuộc gọi thoại",
-                                    onPress: () => callUser(userId, userName, userImage, false)
-                                }
-                            ]
-                        );
-                        return;
-                    }
-                } catch (err) {
-                    console.error("Error requesting camera permission:", err);
-                    // Offer to continue with audio-only call
-                    Alert.alert(
-                        "Lỗi camera",
-                        "Không thể truy cập camera. Bạn có muốn tiếp tục với cuộc gọi thoại không?",
+                        "Cần cấp quyền",
+                        "Vui lòng cấp quyền truy cập camera và microphone để thực hiện cuộc gọi video.",
                         [
                             { text: "Hủy", style: "cancel" },
                             {
-                                text: "Tiếp tục với cuộc gọi thoại",
-                                onPress: () => callUser(userId, userName, userImage, false)
+                                text: "Gọi thoại thay thế",
+                                onPress: () => {
+                                    if (audioResult.status === 'granted') {
+                                        callUser(userId, userName, userImage, false);
+                                    } else {
+                                        Alert.alert("Không thể gọi", "Bạn cần cấp quyền truy cập microphone");
+                                    }
+                                }
                             }
                         ]
                     );
+                    setIsChecking(false);
+                    return;
+                }
+            } else {
+                // For audio calls, we only need audio permission
+                const { status } = await Audio.requestPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert(
+                        "Cần cấp quyền",
+                        "Vui lòng cấp quyền truy cập microphone để thực hiện cuộc gọi."
+                    );
+                    setIsChecking(false);
                     return;
                 }
             }
 
-            // All permissions granted or not needed, make the call
-            console.log("Permissions granted, calling user:", userId);
+            // All permissions granted, make the call
             callUser(userId, userName, userImage, isVideoCall);
-
+            setIsChecking(false);
         } catch (error) {
-            console.error("Lỗi khi gọi:", error);
+            console.error("Lỗi khi kiểm tra quyền truy cập:", error);
             Alert.alert(
                 "Lỗi cuộc gọi",
                 `Không thể thực hiện cuộc gọi ${isVideoCall ? "video" : "thoại"} vào lúc này. Vui lòng thử lại sau.`
             );
+            setIsChecking(false);
         }
     };
 
     return (
         <TouchableOpacity
             onPress={handleCall}
-            disabled={disabled || !isOnline}
+            disabled={disabled || !isOnline || isChecking}
             className={`flex h-8 w-8 items-center justify-center rounded hover:bg-[#ebecf0] ${disabled || !isOnline ? 'opacity-50' : ''}`}
         >
-            <FontAwesomeIcon
-                icon={isVideoCall ? faVideo : faPhone}
-                size={size}
-                color={disabled || !isOnline ? "#aaa" : color}
-            />
+            {isChecking ? (
+                <ActivityIndicator size="small" color="#0084ff" />
+            ) : (
+                <FontAwesomeIcon
+                    icon={isVideoCall ? faVideo : faPhone}
+                    size={size}
+                    color={disabled || !isOnline ? "#aaa" : color}
+                />
+            )}
         </TouchableOpacity>
     );
 };

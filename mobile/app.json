@@ -22,9 +22,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff",
-        "permissions": ["CAMERA", "RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
-      }
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": ["CAMERA", "RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -36,8 +36,13 @@
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for video calls."
+        }
       ]
-    ],
-    "permissions": ["CAMERA", "MEDIA_LIBRARY"]
+    ]
   }
 }
