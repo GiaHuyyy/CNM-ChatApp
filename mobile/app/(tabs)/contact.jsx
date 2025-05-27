@@ -9,7 +9,10 @@ import {
   TextInput,
   Alert,
   StatusBar,
-  FlatList
+  FlatList,
+  PermissionsAndroid,
+  Platform,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -35,15 +38,18 @@ import {
   clearError,
 } from '../redux/contactSlice';
 import axios from 'axios';
+import * as Contacts from 'expo-contacts';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 const ContactScreen = () => {
   const dispatch = useDispatch();
-  const [activeTab, setActiveTab] = useState('friends');
+  const [activeTab, setActiveTab] = useState('phonebook');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sentRequests, setSentRequests] = useState([]); // Lưu lời mời đã gửi
+  const [phoneContacts, setPhoneContacts] = useState([]); // Danh bạ máy
+  const [contactsLoading, setContactsLoading] = useState(false);
   const currentUserId = useSelector((state) => state.user._id);
 
   const {
@@ -168,31 +174,32 @@ const ContactScreen = () => {
     </View>
   );
 
+  // Tabs UI: Đưa tab Danh bạ lên đầu, canh chỉnh đều, nổi bật tab đang chọn
   const renderTabs = () => (
-    <View className="flex-row bg-white px-4 py-2 border-b border-gray-200">
+    <View className="flex-row bg-white px-2 py-2 border-b border-gray-200 justify-between">
+      <TouchableOpacity
+        onPress={() => setActiveTab('phonebook')}
+        className={`flex-1 items-center pb-2 ${activeTab === 'phonebook' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-xs ${activeTab === 'phonebook' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Danh bạ máy</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('friends')}
-        className={`mr-6 pb-2 ${activeTab === 'friends' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'friends' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'friends' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Bạn bè
-        </Text>
+        <Text className={`text-xs ${activeTab === 'friends' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Bạn bè</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('received')}
-        className={`mr-6 pb-2 ${activeTab === 'received' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'received' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'received' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Lời mời kết bạn
-        </Text>
+        <Text className={`text-xs ${activeTab === 'received' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Lời mời kết bạn</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setActiveTab('sent')}
-        className={`pb-2 ${activeTab === 'sent' ? 'border-b-2 border-blue-500' : ''}`}
+        className={`flex-1 items-center pb-2 ${activeTab === 'sent' ? 'border-b-2 border-blue-500' : ''}`}
       >
-        <Text className={`text-base ${activeTab === 'sent' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
-          Đã gửi lời mời
-        </Text>
+        <Text className={`text-xs ${activeTab === 'sent' ? 'text-blue-500 font-bold' : 'text-gray-500'}`}>Đã gửi</Text>
       </TouchableOpacity>
     </View>
   );
@@ -361,7 +368,126 @@ const ContactScreen = () => {
     fetchSentRequests();
   }, []);
 
-  // Thay đổi phần render: nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng
+  // Hàm xin quyền và lấy danh bạ
+  const getPhoneContacts = async () => {
+    try {
+      setContactsLoading(true);
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Từ chối', 'Bạn đã từ chối quyền truy cập danh bạ.');
+        setContactsLoading(false);
+        return;
+      }
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
+      });
+      setPhoneContacts(data || []);
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể truy cập danh bạ.');
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  // Thêm state cho search riêng của danh bạ máy
+  const [phonebookSearch, setPhonebookSearch] = useState('');
+
+  // Hàm lọc danh bạ máy theo search riêng
+  const filteredPhoneContacts = phonebookSearch.length > 0
+    ? phoneContacts.filter(contact => {
+        const name = (
+          contact.name ||
+          contact.displayName ||
+          contact.firstName ||
+          contact.givenName ||
+          ''
+        ).replace(/\s+/g, ' ').trim().toLowerCase();
+        const lastName = (contact.lastName || contact.familyName || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const fullName = (name + ' ' + lastName).replace(/\s+/g, ' ').trim();
+        const query = phonebookSearch.replace(/\s+/g, ' ').trim().toLowerCase();
+        return fullName.includes(query) || name.includes(query) || lastName.includes(query);
+      })
+    : phoneContacts;
+
+  // Render danh bạ máy (sử dụng filteredPhoneContacts)
+  const renderPhoneContacts = () => (
+    <View className="flex-1 bg-white">
+      {/* Thanh tìm kiếm riêng cho danh bạ máy */}
+      <View className="px-4 pt-4 pb-2 bg-white">
+        <View className="flex-row items-center bg-gray-100 rounded-full px-3 py-2">
+          <FontAwesomeIcon icon={faSearch} size={16} color="#666" />
+          <TextInput
+            className="flex-1 ml-2 text-black"
+            placeholder="Tìm kiếm liên hệ trong danh bạ..."
+            placeholderTextColor="#888"
+            value={phonebookSearch}
+            onChangeText={setPhonebookSearch}
+          />
+          {phonebookSearch.length > 0 && (
+            <TouchableOpacity onPress={() => setPhonebookSearch('')}>
+              <FontAwesomeIcon icon={faTimes} size={16} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {filteredPhoneContacts.length}</Text>
+        <TouchableOpacity onPress={getPhoneContacts}>
+          <Text className="text-blue-500">Làm mới</Text>
+        </TouchableOpacity>
+      </View>
+      {contactsLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#0068FF" />
+        </View>
+      ) : (
+        <ScrollView className="flex-1">
+          {filteredPhoneContacts.length === 0 ? (
+            <Text className="text-center text-gray-500 mt-8">Không có liên hệ nào.</Text>
+          ) : (
+            filteredPhoneContacts.map((contact, idx) => {
+              const phone = contact.phoneNumbers && contact.phoneNumbers.length > 0 ? contact.phoneNumbers[0].number : '';
+              return (
+                <TouchableOpacity
+                  key={contact.id || idx}
+                  className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                  onPress={() => openPhoneDialer(phone)}
+                >
+                  <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center">
+                    <FontAwesomeIcon icon={faAddressBook} size={20} color="#0068FF" />
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-base">{contact.name || contact.displayName || `${contact.firstName || ''} ${contact.lastName || ''}`}</Text>
+                    {phone && (
+                      <Text className="text-sm text-gray-500">{phone}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  // Khi chuyển sang tab danh bạ thì tự động lấy danh bạ nếu chưa có
+  useEffect(() => {
+    if (activeTab === 'phonebook' && phoneContacts.length === 0) {
+      getPhoneContacts();
+    }
+  }, [activeTab]);
+
+  // Hàm mở app gọi điện
+  const openPhoneDialer = (phoneNumber) => {
+    if (!phoneNumber) return;
+    const url = `tel:${phoneNumber}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Lỗi', 'Không thể mở ứng dụng gọi điện.');
+    });
+  };
+
+  // Đưa renderPhoneContacts lên đầu phần render
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
@@ -394,14 +520,11 @@ const ContactScreen = () => {
 
         {renderTabs()}
 
-        {/* Nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng */}
-        {searchQuery.length > 0
-          ? renderUserList()
-          : activeTab === 'friends'
-          ? renderFriendList()
-          : activeTab === 'received'
-          ? renderFriendRequests()
-          : renderSentRequests()}
+        {/* Danh bạ luôn là tab đầu tiên và mặc định */}
+        {activeTab === 'phonebook' && renderPhoneContacts()}
+        {activeTab === 'friends' && renderFriendList()}
+        {activeTab === 'received' && renderFriendRequests()}
+        {activeTab === 'sent' && renderSentRequests()}
       </View>
     </SafeAreaView>
   );
