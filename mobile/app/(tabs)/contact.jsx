@@ -389,10 +389,12 @@ const ContactScreen = () => {
     }
   };
 
-  // Hàm lọc danh bạ máy theo searchQuery
-  const filteredPhoneContacts = searchQuery.length > 0
+  // Thêm state cho search riêng của danh bạ máy
+  const [phonebookSearch, setPhonebookSearch] = useState('');
+
+  // Hàm lọc danh bạ máy theo search riêng
+  const filteredPhoneContacts = phonebookSearch.length > 0
     ? phoneContacts.filter(contact => {
-        // Lấy tên đầy đủ, loại bỏ khoảng trắng thừa và chuyển về chữ thường
         const name = (
           contact.name ||
           contact.displayName ||
@@ -402,25 +404,34 @@ const ContactScreen = () => {
         ).replace(/\s+/g, ' ').trim().toLowerCase();
         const lastName = (contact.lastName || contact.familyName || '').replace(/\s+/g, ' ').trim().toLowerCase();
         const fullName = (name + ' ' + lastName).replace(/\s+/g, ' ').trim();
-        const query = searchQuery.replace(/\s+/g, ' ').trim().toLowerCase();
-        // Kiểm tra từng số điện thoại
-        const phoneMatch = (contact.phoneNumbers || []).some(p =>
-          p.number && p.number.replace(/\D/g, '').includes(query.replace(/\D/g, ''))
-        );
-        // Kiểm tra tên (fullName, name, lastName)
-        const nameMatch =
-          fullName.includes(query) ||
-          name.includes(query) ||
-          lastName.includes(query);
-        return nameMatch || phoneMatch;
+        const query = phonebookSearch.replace(/\s+/g, ' ').trim().toLowerCase();
+        return fullName.includes(query) || name.includes(query) || lastName.includes(query);
       })
     : phoneContacts;
 
   // Render danh bạ máy (sử dụng filteredPhoneContacts)
   const renderPhoneContacts = () => (
     <View className="flex-1 bg-white">
+      {/* Thanh tìm kiếm riêng cho danh bạ máy */}
+      <View className="px-4 pt-4 pb-2 bg-white">
+        <View className="flex-row items-center bg-gray-100 rounded-full px-3 py-2">
+          <FontAwesomeIcon icon={faSearch} size={16} color="#666" />
+          <TextInput
+            className="flex-1 ml-2 text-black"
+            placeholder="Tìm kiếm liên hệ trong danh bạ..."
+            placeholderTextColor="#888"
+            value={phonebookSearch}
+            onChangeText={setPhonebookSearch}
+          />
+          {phonebookSearch.length > 0 && (
+            <TouchableOpacity onPress={() => setPhonebookSearch('')}>
+              <FontAwesomeIcon icon={faTimes} size={16} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
       <View className="flex-row justify-between px-4 py-2 bg-gray-50">
-        <Text className="text-gray-500">Tất cả {phoneContacts.length}</Text>
+        <Text className="text-gray-500">Tất cả {filteredPhoneContacts.length}</Text>
         <TouchableOpacity onPress={getPhoneContacts}>
           <Text className="text-blue-500">Làm mới</Text>
         </TouchableOpacity>
@@ -431,10 +442,10 @@ const ContactScreen = () => {
         </View>
       ) : (
         <ScrollView className="flex-1">
-          {phoneContacts.length === 0 ? (
+          {filteredPhoneContacts.length === 0 ? (
             <Text className="text-center text-gray-500 mt-8">Không có liên hệ nào.</Text>
           ) : (
-            phoneContacts.map((contact, idx) => {
+            filteredPhoneContacts.map((contact, idx) => {
               const phone = contact.phoneNumbers && contact.phoneNumbers.length > 0 ? contact.phoneNumbers[0].number : '';
               return (
                 <TouchableOpacity
