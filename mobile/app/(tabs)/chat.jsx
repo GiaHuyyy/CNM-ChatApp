@@ -484,6 +484,19 @@ export default function Chat() {
     socketConnection.emit("joinRoom", chatItem.userDetails._id);
 
     if (isGroup) {
+      console.log("Setting up group chat data:", chatItem.userDetails);
+      // Pre-set some basic group data while waiting for the socket response
+      setChatUser({
+        _id: chatItem.userDetails._id,
+        name: chatItem.userDetails.name || "Group Chat",
+        profilePic: chatItem.userDetails.profilePic || 
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem.userDetails.name || "Group")}&background=random`,
+        isGroup: true,
+        // If we have members already, use them, otherwise initialize with empty array
+        members: chatItem.members || chatItem.userDetails.members || [],
+        groupAdmin: chatItem.groupAdmin || chatItem.userDetails.groupAdmin
+      });
+      
       socketConnection.emit("seenGroup", chatItem.userDetails._id);
     } else {
       socketConnection.emit("seen", chatItem.userDetails._id);
@@ -1536,14 +1549,155 @@ export default function Chat() {
     );
   };
 
-  // Modify the renderConversationItem function to add long press handler
+  // Modify displayedConversations to put pinned conversations at the top
+  const displayedConversations = useMemo(() => {
+    console.log(`Computing conversations with filter: ${chatTypeFilter}`);
+
+    if (!Array.isArray(allUsers) || allUsers.length === 0) {
+      console.log("No conversations available");
+      return [];
+    }
+
+    // First, let's log what we're working with
+    console.log(`Total conversations: ${allUsers.length}`);
+
+    // Debug log of conversation types - improved to show more details
+    allUsers.forEach((conv, idx) => {
+      if (idx < 5) { // Limit logging to first 5 items to avoid console spam
+        const isGroupFlag = conv.userDetails?.isGroup || conv.isGroup;
+        const memberCount = conv.members?.length || conv.userDetails?.members?.length || 0;
+        console.log(
+          `Conv ${idx}: ID=${conv._id}, ` +
+          `Name=${conv.userDetails?.name}, ` + 
+          `isGroup flag=${isGroupFlag}, ` +
+          `memberCount=${memberCount}, ` +
+          `type=${isGroupFlag ? 'GROUP' : 'DIRECT'}`
+        );
+      }
+    });
+
+    // Sort conversations by timestamp (newest first)
+    const sortedConversations = [...allUsers].sort((a, b) => {
+      // First, prioritize pinned conversations
+      const isPinnedA = pinnedConversations.includes(a._id);
+      const isPinnedB = pinnedConversations.includes(b._id);
+
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+
+      // If both are pinned or both are not pinned, sort by timestamp
+      const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
+      const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
+      return timeB - timeA;
+    });
+
+    // ENHANCED GROUP DETECTION LOGIC
+    // Apply chat type filter with more robust type checking
+    let typeFiltered = sortedConversations;
+
+    if (chatTypeFilter === 'group') {
+      // Filter to include ONLY group conversations - with enhanced detection
+      typeFiltered = sortedConversations.filter(conv => {
+        // Multiple reliable ways to check if it's a group chat
+        const isGroupByFlag = 
+          conv.userDetails?.isGroup === true || 
+          conv.isGroup === true || 
+          (typeof conv.userDetails?.isGroup === 'string' && 
+           conv.userDetails.isGroup.toLowerCase() === 'true');
+          
+        // Check by members array - groups typically have members array
+        const hasMembers = 
+          Array.isArray(conv.members) || 
+          Array.isArray(conv.userDetails?.members);
+          
+        // Check by name convention - groups often have specific naming patterns
+        const nameIndicatesGroup = 
+          conv.userDetails?.name?.includes('Group') || 
+          conv.name?.includes('Group') ||
+          conv.userDetails?.name?.includes('Nhóm') ||
+          conv.name?.includes('Nhóm');
+          
+        // If any of these checks pass, consider it a group
+        return isGroupByFlag || hasMembers || nameIndicatesGroup;
+      });
+      console.log(`After improved GROUP filter: ${typeFiltered.length} conversations`);
+    }
+    else if (chatTypeFilter === 'direct') {
+      // Filter to include ONLY direct conversations - with enhanced detection
+      typeFiltered = sortedConversations.filter(conv => {
+        // Check if it's explicitly NOT a group
+        const notGroupByFlag = 
+          conv.userDetails?.isGroup !== true && 
+          conv.isGroup !== true &&
+          conv.userDetails?.isGroup !== 'true';
+          
+        // Direct chats typically don't have a members array, or have exactly 2 members
+        const memberCount = conv.members?.length || conv.userDetails?.members?.length || 0;
+        const isTwoPersonChat = memberCount === 0 || memberCount === 2;
+        
+        // Lacking any group indicators is a good sign it's a direct chat
+        return notGroupByFlag && isTwoPersonChat;
+      });
+      console.log(`After improved DIRECT filter: ${typeFiltered.length} conversations`);
+    }
+
+    // Apply read/unread filter
+    let finalFiltered = typeFiltered;
+
+    if (activeFilter === 'unread') {
+      finalFiltered = typeFiltered.filter(conv => {
+        return typeof conv.unseenMessages === 'number' && conv.unseenMessages > 0;
+      });
+      console.log(`After UNREAD filter: ${finalFiltered.length} conversations`);
+    }
+
+    // Store the total filtered count for use in the UI
+    const totalFilteredCount = finalFiltered.length;
+
+    // Apply limit for showing all vs. limited conversations
+    const result = showAllConversations ? finalFiltered : finalFiltered.slice(0, 7);
+    console.log(`Final displayed conversations: ${result.length} of ${totalFilteredCount} total`);
+
+    // Attach the total count to the result array for use in the UI
+    result.totalCount = totalFilteredCount;
+
+    return result;
+  }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender, pinnedConversations]);
+
+  // Function to toggle the filter dropdown visibility
+  const toggleFilterDropdown = () => {
+    setIsFilterDropdownOpen(prev => !prev);
+  };
+
+  // Function to handle filter selection
+  const handleFilterSelection = (filterType) => {
+    setChatTypeFilter(filterType);
+    setIsFilterDropdownOpen(false);
+    // Force a re-render to update the conversation list
+    setForceRender(Date.now());
+  };
+
+  // Function to toggle between showing all conversations and limited view
+  const toggleShowAllConversations = () => {
+    setShowAllConversations(prev => !prev);
+  };
+
+  // Add the missing renderConversationItem function
   const renderConversationItem = ({ item }) => {
     if (!item || !item.userDetails) {
       console.log("Invalid conversation item:", item);
       return null;
     }
 
-    const isGroup = item.userDetails.isGroup;
+    // Improve isGroup detection with the same enhanced logic used in filters
+    const isGroup = 
+      item.userDetails?.isGroup === true || 
+      item.isGroup === true || 
+      (typeof item.userDetails?.isGroup === 'string' && 
+       item.userDetails.isGroup.toLowerCase() === 'true') ||
+      Array.isArray(item.members) ||
+      Array.isArray(item.userDetails?.members);
+    
     const lastMessage = item.latestMessage || {};
     const isPinned = pinnedConversations.includes(item._id);
 
@@ -1596,6 +1750,9 @@ export default function Chat() {
               <Text className={`font-semibold ${item.unseenMessages ? "text-black" : "text-gray-800"}`} numberOfLines={1}>
                 {item.userDetails.nickname || item.userDetails.name}
               </Text>
+              {isGroup && (
+                <Text className="ml-2 text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">Nhóm</Text>
+              )}
             </View>
             {lastMessage.createdAt && (
               <Text className="text-xs text-gray-500">{dateString}</Text>
@@ -1630,110 +1787,6 @@ export default function Chat() {
         </View>
       </TouchableOpacity>
     );
-  };
-
-  // Modify displayedConversations to put pinned conversations at the top
-  const displayedConversations = useMemo(() => {
-    console.log(`Computing conversations with filter: ${chatTypeFilter}`);
-
-    if (!Array.isArray(allUsers) || allUsers.length === 0) {
-      console.log("No conversations available");
-      return [];
-    }
-
-    // First, let's log what we're working with
-    console.log(`Total conversations: ${allUsers.length}`);
-
-    // Debug log of conversation types
-    allUsers.forEach((conv, idx) => {
-      if (idx < 10) { // Limit logging to first 10 items to avoid console spam
-        console.log(`Conv ${idx}: ID=${conv._id}, Name=${conv.userDetails?.name}, isGroup=${conv.userDetails?.isGroup === true ? 'YES' : 'NO'}`);
-      }
-    });
-
-    // Sort conversations by timestamp (newest first)
-    const sortedConversations = [...allUsers].sort((a, b) => {
-      // First, prioritize pinned conversations
-      const isPinnedA = pinnedConversations.includes(a._id);
-      const isPinnedB = pinnedConversations.includes(b._id);
-
-      if (isPinnedA && !isPinnedB) return -1;
-      if (!isPinnedA && isPinnedB) return 1;
-
-      // If both are pinned or both are not pinned, sort by timestamp
-      const timeA = a?.latestMessage?.createdAt ? new Date(a.latestMessage.createdAt) : new Date(0);
-      const timeB = b?.latestMessage?.createdAt ? new Date(b.latestMessage.createdAt) : new Date(0);
-      return timeB - timeA;
-    });
-
-    // Apply chat type filter with robust type checking
-    let typeFiltered = sortedConversations;
-
-    if (chatTypeFilter === 'group') {
-      // Filter to include ONLY group conversations
-      typeFiltered = sortedConversations.filter(conv => {
-        // Multiple ways to check if it's a group chat for robustness
-        const isGroup =
-          conv.userDetails?.isGroup === true || // Boolean check
-          conv.isGroup === true ||              // Alternative location
-          (conv.members && Array.isArray(conv.members) && conv.members.length > 2); // Group has >2 members
-
-        return isGroup;
-      });
-      console.log(`After GROUP filter: ${typeFiltered.length} conversations`);
-    }
-    else if (chatTypeFilter === 'direct') {
-      // Filter to include ONLY direct conversations
-      typeFiltered = sortedConversations.filter(conv => {
-        // Multiple ways to check if it's NOT a group chat
-        const isDirect =
-          conv.userDetails?.isGroup !== true && // Boolean check
-          conv.isGroup !== true;                // Alternative location
-
-        return isDirect;
-      });
-      console.log(`After DIRECT filter: ${typeFiltered.length} conversations`);
-    }
-
-    // Apply read/unread filter
-    let finalFiltered = typeFiltered;
-
-    if (activeFilter === 'unread') {
-      finalFiltered = typeFiltered.filter(conv => {
-        return typeof conv.unseenMessages === 'number' && conv.unseenMessages > 0;
-      });
-      console.log(`After UNREAD filter: ${finalFiltered.length} conversations`);
-    }
-
-    // Store the total filtered count for use in the UI
-    const totalFilteredCount = finalFiltered.length;
-
-    // Apply limit for showing all vs. limited conversations
-    const result = showAllConversations ? finalFiltered : finalFiltered.slice(0, 7);
-    console.log(`Final displayed conversations: ${result.length} of ${totalFilteredCount} total`);
-
-    // Attach the total count to the result array for use in the UI
-    result.totalCount = totalFilteredCount;
-
-    return result;
-  }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender, pinnedConversations]);
-
-  // Function to toggle the filter dropdown visibility
-  const toggleFilterDropdown = () => {
-    setIsFilterDropdownOpen(prev => !prev);
-  };
-
-  // Function to handle filter selection
-  const handleFilterSelection = (filterType) => {
-    setChatTypeFilter(filterType);
-    setIsFilterDropdownOpen(false);
-    // Force a re-render to update the conversation list
-    setForceRender(Date.now());
-  };
-
-  // Function to toggle between showing all conversations and limited view
-  const toggleShowAllConversations = () => {
-    setShowAllConversations(prev => !prev);
   };
 
   // Message search functionality
@@ -1802,137 +1855,76 @@ export default function Chat() {
     Alert.alert("Thành công", "Tin nhắn đã được chia sẻ thành công!");
   };
 
-  // Functions for direct chat details and group chat management
+  // Enhanced function for direct chat details and group chat management with improved group detection
   const handleShowChatDetails = () => {
-    if (selectedChat?.userDetails?.isGroup) {
+    // Enhanced group detection that checks multiple indicators
+    const isGroup = checkIfGroupChat();
+    
+    console.log("Opening chat details:", {
+      chatId: selectedChat?.userDetails?._id,
+      chatName: selectedChat?.userDetails?.name || chatUser?.name,
+      isGroupByFlag: selectedChat?.userDetails?.isGroup === true,
+      detectedAsGroup: isGroup,
+      chatUserData: chatUser
+    });
+    
+    if (isGroup) {
+      // Make sure chatUser has all necessary group properties
+      const enhancedGroupData = {
+        ...chatUser,
+        _id: chatUser?._id || selectedChat?.userDetails?._id,
+        name: chatUser?.name || selectedChat?.userDetails?.name || "Group Chat",
+        isGroup: true,
+        members: chatUser?.members || selectedChat?.members || [],
+        groupAdmin: chatUser?.groupAdmin
+      };
+      
+      // Pass the enhanced group data to the modal
+      setChatUser(enhancedGroupData);
       setShowGroupInfoModal(true);
     } else {
       setShowDirectChatDetails(true);
     }
   };
 
-  const handleDeleteDirectConversation = () => {
-    // Implement delete conversation logic
-    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
-    setShowDirectChatDetails(false);
-  };
-
-  const handleUpdateNickname = (nickname) => {
-    // Implement nickname update logic
-    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
-    setShowDirectChatDetails(false);
-  };
-
-  const handleLeaveGroup = () => {
-    // Implement leave group logic
-    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
-    setShowGroupInfoModal(false);
-  };
-
-  const handleAddMember = () => {
-    setShowGroupInfoModal(false);
-    setShowAddMemberModal(true);
-  };
-
-  const handleRemoveMember = () => {
-    // Implement remove member logic
-    Alert.alert("Chức năng đang phát triển", "Tính năng này sẽ sớm được cập nhật!");
-  };
-
-  const handleMembersAdded = () => {
-    setShowAddMemberModal(false);
-    // Refresh group data
-    if (socketConnection && selectedChat?.userDetails?._id) {
-      socketConnection.emit("joinRoom", selectedChat.userDetails._id);
-    }
-  };
-
-  const refreshConversations = () => {
-    if (socketConnection && user?._id) {
-      socketConnection.emit("sidebar", user._id);
-    }
-  };
-
-  // Function to format timestamps for chat messages
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return "";
-
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    const isYesterday = new Date(now - 86400000).toDateString() === date.toDateString();
-
-    if (isToday) {
-      return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (isYesterday) {
-      return `Yesterday at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else {
-      return date.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    }
-  };
-
-  // Helper function to add timestamp markers to message list
-  const addTimestampMarkers = (messages) => {
-    if (!messages || messages.length === 0) return [];
-
-    const result = [];
-    let lastMessageTime = null;
-
-    for (let i = 0; i < messages.length; i++) {
-      const currentMsg = messages[i];
-      const currentTime = new Date(currentMsg.createdAt);
-
-      // Skip timestamp messages
-      if (currentMsg.isTimestamp) {
-        result.push(currentMsg);
-        continue;
-      }
-
-      // If we have a previous message to compare to
-      if (lastMessageTime) {
-        // Calculate time difference in minutes
-        const timeDiff = (lastMessageTime - currentTime) / (60 * 1000);
-
-        // If gap is more than 10 minutes, add a timestamp marker
-        if (timeDiff > 10) {
-          result.push({
-            _id: `timestamp-${currentMsg._id}`,
-            isTimestamp: true,
-            timestamp: lastMessageTime,
-            createdAt: messages[i - 1].createdAt
-          });
-        }
-      }
-
-      result.push(currentMsg);
-      lastMessageTime = currentTime;
-    }
-
-    return result;
-  };
-
-  // Add the missing handleScreenTouch function
-  const handleScreenTouch = () => {
-    // Close the pin conversation context menu if open
-    if (showContextMenu) {
-      setShowContextMenu(false);
-      setLongPressedChat(null);
-    }
-
-    // Close filter dropdown if open
-    if (isFilterDropdownOpen) {
-      setIsFilterDropdownOpen(false);
-    }
-
-    // Close media options menu if open
-    if (showMediaOptions) {
-      setShowMediaOptions(false);
-    }
+  // Helper function to reliably detect if a chat is a group chat
+  const checkIfGroupChat = () => {
+    if (!selectedChat || !chatUser) return false;
+    
+    // Multiple reliable ways to check if it's a group chat
+    const isGroupByFlag = 
+      selectedChat.userDetails?.isGroup === true || 
+      selectedChat.isGroup === true || 
+      chatUser?.isGroup === true ||
+      (typeof selectedChat.userDetails?.isGroup === 'string' && 
+        selectedChat.userDetails.isGroup.toLowerCase() === 'true');
+    
+    // Check by members array - groups typically have members array with >2 members
+    const hasMultipleMembers = 
+      (Array.isArray(chatUser?.members) && chatUser.members.length > 2) || 
+      (Array.isArray(selectedChat?.members) && selectedChat.members.length > 2);
+    
+    // Check for admin - direct chats don't have admins
+    const hasGroupAdmin = !!chatUser?.groupAdmin;
+    
+    // Check group name patterns
+    const nameIndicatesGroup =
+      chatUser?.name?.includes('Group') || 
+      chatUser?.name?.includes('Nhóm') ||
+      selectedChat?.userDetails?.name?.includes('Group') ||
+      selectedChat?.userDetails?.name?.includes('Nhóm');
+    
+    // Log detailed information about group detection for debugging
+    console.log("Group chat detection in handleShowChatDetails:", {
+      isGroupByFlag,
+      hasMultipleMembers,
+      hasGroupAdmin,
+      nameIndicatesGroup,
+      membersCount: chatUser?.members?.length || 'no members array'
+    });
+    
+    // Consider it a group if any of these checks pass
+    return isGroupByFlag || hasMultipleMembers || hasGroupAdmin || nameIndicatesGroup;
   };
 
   // Load pinned conversations on startup
@@ -1991,6 +1983,278 @@ export default function Chat() {
     setLongPressedChat(null);
   };
 
+  // Add the missing handleDeleteDirectConversation function
+  const handleDeleteDirectConversation = () => {
+    console.log("Attempting to delete direct conversation:", selectedChat?.userDetails?._id);
+    
+    if (!socketConnection) {
+      console.error("Socket connection is not available");
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+    
+    if (!selectedChat || !selectedChat.userDetails?._id) {
+      console.error("Invalid chat selection");
+      Alert.alert("Lỗi", "Không thể xác định cuộc trò chuyện. Vui lòng thử lại sau.");
+      return;
+    }
+    
+    setIsChatLoading(true);
+    
+    // Remove any existing listeners to avoid duplicates
+    socketConnection.off("conversationDeleted");
+    
+    socketConnection.on("conversationDeleted", (response) => {
+      setIsChatLoading(false);
+      console.log("Conversation deletion response:", response);
+      
+      if (response.success) {
+        // Close the direct chat details modal
+        setShowDirectChatDetails(false);
+        
+        // Navigate back to chat list
+        handleBackToList();
+        
+        // Show success message
+        Alert.alert("Thành công", "Đã xóa cuộc trò chuyện thành công");
+        
+        // Refresh the conversation list
+        refreshConversations();
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể xóa cuộc trò chuyện. Vui lòng thử lại sau.");
+      }
+    });
+    
+    // Create payload for delete conversation
+    const payload = {
+      conversationId: selectedChat.userDetails._id,
+      userId: user._id
+    };
+    
+    console.log("Emitting deleteConversation with payload:", payload);
+    socketConnection.emit("deleteConversation", payload);
+    
+    // Set timeout for no response
+    setTimeout(() => {
+      if (isChatLoading) {
+        setIsChatLoading(false);
+        socketConnection.off("conversationDeleted");
+        Alert.alert("Lỗi", "Không nhận được phản hồi từ máy chủ. Vui lòng thử lại sau.");
+      }
+    }, 10000);
+  };
+  
+  // Add the missing handleUpdateNickname function
+  const handleUpdateNickname = (nickname) => {
+    console.log("Updating nickname for user:", selectedChat?.userDetails?._id, "to:", nickname);
+    
+    if (!socketConnection || !selectedChat?.userDetails?._id) {
+      Alert.alert("Lỗi", "Không thể cập nhật tên gọi. Vui lòng thử lại sau.");
+      return;
+    }
+    
+    // Remove existing listeners to avoid duplicates
+    socketConnection.off("nicknameUpdated");
+    
+    socketConnection.on("nicknameUpdated", (response) => {
+      console.log("Nickname update response:", response);
+      
+      if (response.success) {
+        // Update the local chat user data
+        setChatUser(prev => ({
+          ...prev,
+          nickname: nickname
+        }));
+        
+        // Show success message
+        Alert.alert("Thành công", "Đã cập nhật tên gọi thành công");
+        
+        // Refresh conversations to update the list
+        refreshConversations();
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể cập nhật tên gọi. Vui lòng thử lại sau.");
+      }
+    });
+    
+    // Create payload for updating nickname
+    const payload = {
+      userId: user._id,
+      targetId: selectedChat.userDetails._id,
+      nickname: nickname
+    };
+    
+    console.log("Emitting updateNickname with payload:", payload);
+    socketConnection.emit("updateNickname", payload);
+  };
+
+  // Add the missing refreshConversations function
+  const refreshConversations = () => {
+    if (!socketConnection || !user?._id) {
+      console.error("Cannot refresh conversations - socket or user ID missing");
+      return;
+    }
+    
+    console.log("Refreshing conversations for user:", user._id);
+    socketConnection.emit("sidebar", user._id);
+  };
+
+  // Add missing addTimestampMarkers function that's used but not defined
+  const addTimestampMarkers = (messages) => {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) return [];
+    
+    const result = [];
+    let lastMessage = null;
+    
+    for (const message of messages) {
+      if (lastMessage) {
+        const currentTime = new Date(message.createdAt);
+        const lastTime = new Date(lastMessage.createdAt);
+        
+        // If time difference is more than 10 minutes, add a timestamp marker
+        const timeDiffMinutes = Math.abs((currentTime - lastTime) / (1000 * 60));
+        
+        if (timeDiffMinutes > 10) {
+          result.push({
+            _id: `timestamp-${message._id}`,
+            isTimestamp: true,
+            timestamp: lastTime,
+            createdAt: lastMessage.createdAt
+          });
+        }
+      }
+      
+      result.push(message);
+      lastMessage = message;
+    }
+    
+    return result;
+  };
+  
+  // Add missing formatTimestamp function used in renderMessage
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "";
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    
+    // If it's today, show just the time
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // If it's yesterday, show "Yesterday at [time]"
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Hôm qua lúc ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    
+    // If it's within 7 days, show the day name and time
+    const withinWeek = new Date();
+    withinWeek.setDate(withinWeek.getDate() - 7);
+    if (date > withinWeek) {
+      const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      return `${days[date.getDay()]} lúc ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    
+    // Otherwise show the full date
+    return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // Add missing handleMembersAdded and handleLeaveGroup functions
+  const handleMembersAdded = (groupId) => {
+    console.log("Members added to group:", groupId);
+    setShowAddMemberModal(false);
+    
+    // Refresh the group information
+    if (groupId === selectedChat?.userDetails?._id && socketConnection) {
+      socketConnection.emit("joinRoom", groupId);
+    }
+    
+    // Refresh conversation list
+    refreshConversations();
+  };
+
+  const handleLeaveGroup = (groupId) => {
+    console.log("Leaving group:", groupId);
+    
+    if (!socketConnection) {
+      Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      return;
+    }
+    
+    // Prepare payload for leaving group
+    const payload = {
+      groupId: groupId,
+      userId: user._id
+    };
+    
+    // Remove existing listeners to avoid duplicates
+    socketConnection.off("leftGroup");
+    
+    socketConnection.on("leftGroup", (response) => {
+      console.log("Left group response:", response);
+      
+      if (response.success) {
+        handleBackToList();
+        Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+        refreshConversations();
+      } else {
+        Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm. Vui lòng thử lại sau.");
+      }
+    });
+    
+    console.log("Emitting leaveGroup with payload:", payload);
+    socketConnection.emit("leaveGroup", payload);
+  };
+
+  const handleAddMember = () => {
+    setShowGroupInfoModal(false);
+    
+    // Allow a short delay for the modal transition
+    setTimeout(() => {
+      setShowAddMemberModal(true);
+    }, 300);
+  };
+  
+  const handleRemoveMember = (groupId, memberId, memberName) => {
+    console.log(`Member ${memberName} (${memberId}) removed from group ${groupId}`);
+    
+    // Refresh the group information to update member list
+    if (socketConnection && selectedChat?.userDetails?._id === groupId) {
+      socketConnection.emit("joinRoom", groupId);
+    }
+  };
+
+  // Add missing functions for debugging
+  const debugPrintAllUsers = () => {
+    console.log("All users/conversations:", JSON.stringify(allUsers, null, 2));
+  };
+
+  const debugPrintMessages = () => {
+    console.log("Current messages:", JSON.stringify(messages, null, 2));
+  };
+
+  // Make sure to add this function before the return statement
+  const handleScreenTouch = () => {
+    // Close the pin conversation context menu if open
+    if (showContextMenu) {
+      setShowContextMenu(false);
+      setLongPressedChat(null);
+    }
+
+    // Close filter dropdown if open
+    if (isFilterDropdownOpen) {
+      setIsFilterDropdownOpen(false);
+    }
+
+    // Close media options menu if open
+    if (showMediaOptions) {
+      setShowMediaOptions(false);
+    }
+  };
+
+  // Make sure this is placed before the return statement
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
       <StatusBar barStyle="light-content" backgroundColor="#0068FF" />
