@@ -54,18 +54,51 @@ const ShareMessageModal = ({ visible, onClose, message, allUsers, socketConnecti
 
     const handleShareMessage = async (recipient) => {
         try {
-            // Enhanced message data preparation
+            setIsSharing(true);
+            setSelectedUser(recipient);
+
+            // Get recipient ID from the appropriate property
+            const recipientId = recipient.userDetails?._id || recipient._id;
+            if (!recipientId) {
+                throw new Error('Invalid recipient ID');
+            }
+
+            // Determine if this is a group or direct message
+            const isGroup = recipient.userDetails?.isGroup === true ||
+                recipient.isGroup === true ||
+                (typeof recipient.userDetails?.isGroup === 'string' &&
+                    recipient.userDetails?.isGroup.toLowerCase() === 'true');
+
+            console.log(`Sharing message to ${isGroup ? 'group' : 'direct'} chat:`, {
+                recipientId: recipientId,
+                isGroup: isGroup,
+                messageType: message.text ? 'text' : 'media',
+                hasFiles: message.files?.length > 0 || !!message.imageUrl || !!message.fileUrl
+            });
+
+            // FIXED: Create a properly structured message object for the server
             const messageData = {
-                conversationId: recipient.userDetails?._id,
+                // Common fields for both direct and group messages
                 text: message.text || "",
                 msgByUserId: currentUser._id,
+                isShared: true, // Important flag to mark as shared message
+
+                // For direct messages
+                sender: currentUser._id,
+                receiver: isGroup ? undefined : recipientId,
+
+                // For group messages
+                conversationId: isGroup ? recipientId : undefined,
+
+                // Shared content with complete information
                 sharedContent: {
-                    originalSender: message.msgByUserName || "Unknown",
-                    originalMessage: message.text || ""
+                    originalSender: message.msgByUserName || currentUser.name || "Unknown",
+                    originalText: message.text || "",
+                    originalMessageId: message._id
                 }
             };
 
-            // Prepare files with better mobile handling
+            // Handle files if present
             if (message.files && message.files.length > 0) {
                 console.log(`Sharing message with ${message.files.length} files`);
 
@@ -99,20 +132,15 @@ const ShareMessageModal = ({ visible, onClose, message, allUsers, socketConnecti
                 }];
             }
 
-            // Determine if this is a group or direct message
-            const isGroup = recipient.userDetails?.isGroup === true ||
-                recipient.isGroup === true ||
-                (typeof recipient.userDetails?.isGroup === 'string' &&
-                    recipient.userDetails?.isGroup.toLowerCase() === 'true');
-
-            console.log(`Sharing message to ${isGroup ? 'group' : 'direct'} chat:`, {
-                recipientId: recipient.userDetails?._id,
-                isGroup: isGroup
-            });
+            // FIXED: Log the complete message data for debugging
+            console.log('Sending message data:', JSON.stringify(messageData, null, 2));
 
             // Send message using appropriate event
             const eventName = isGroup ? 'newGroupMessage' : 'newMessage';
             socketConnection.emit(eventName, messageData);
+
+            // Wait briefly to ensure the message is processed
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             setIsSharing(false);
 
@@ -145,6 +173,31 @@ const ShareMessageModal = ({ visible, onClose, message, allUsers, socketConnecti
 
         return 'application/octet-stream';
     };
+
+    // Add this useEffect to listen for socket events
+    useEffect(() => {
+        if (!socketConnection || !visible) return;
+
+        // Listen for message sharing success
+        const handleMessageSent = (data) => {
+            console.log('Message successfully sent:', data);
+        };
+
+        // Listen for message sharing errors
+        const handleError = (error) => {
+            console.error('Socket error when sharing message:', error);
+            Alert.alert('Lỗi', error?.message || 'Có lỗi xảy ra khi chia sẻ tin nhắn.');
+            setIsSharing(false);
+        };
+
+        socketConnection.on('messageSent', handleMessageSent);
+        socketConnection.on('error', handleError);
+
+        return () => {
+            socketConnection.off('messageSent', handleMessageSent);
+            socketConnection.off('error', handleError);
+        };
+    }, [socketConnection, visible]);
 
     return (
         <Modal
