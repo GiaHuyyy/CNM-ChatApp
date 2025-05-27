@@ -11,6 +11,7 @@ const { sendOtp } = require("../controller/sendOtp");
 const verifyOtp = require("../controller/verifyOtp");
 const forgotPassword = require("../controller/forgotPassword");
 const resetPassword = require("../controller/resetPassword");
+const checkEmail = require("../controller/checkEmail");
 const { 
   sendFriendRequest, 
   respondToFriendRequest, 
@@ -39,6 +40,9 @@ router.post("/search-friend-user", searchFriendUser);
 // OTP routes
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);
+
+// Email check route
+router.post("/check-email", checkEmail); // Make sure this line is added and uncommented
 
 // Debug route
 router.get("/debug/otps", async (req, res) => {
