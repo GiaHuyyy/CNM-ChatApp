@@ -111,6 +111,7 @@ export default function Chat() {
     if (initializationAttempted.current) return;
     initializationAttempted.current = true;
 
+    // Chức năng: Khởi tạo ứng dụng, kiểm tra token và lấy thông tin người dùng
     const initializeApp = async () => {
       try {
         console.log("Initializing app...");
@@ -159,6 +160,7 @@ export default function Chat() {
     initializeApp();
   }, []);
 
+  // Chức năng: Tạo kết nối với máy chủ socket để nhận tin nhắn thời gian thực
   const connectSocket = async (token) => {
     try {
       if (!token) {
@@ -268,6 +270,7 @@ export default function Chat() {
     loadRecentSearches();
   }, []);
 
+  // Chức năng: Lưu lịch sử tìm kiếm vào bộ nhớ
   const saveToRecentSearches = async (query, result = null) => {
     try {
       if (!query.trim()) return;
@@ -295,6 +298,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xóa tất cả lịch sử tìm kiếm
   const clearAllRecentSearches = async () => {
     try {
       await AsyncStorage.removeItem('recentSearches');
@@ -304,6 +308,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xóa một mục cụ thể khỏi lịch sử tìm kiếm
   const removeSearchItem = async (id) => {
     try {
       const updatedSearches = recentSearches.filter(item => item.id !== id);
@@ -415,6 +420,7 @@ export default function Chat() {
     handleSelectChat(chatItem);
   };
 
+  // Chức năng: Hiển thị kết quả tìm kiếm
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity
       className="flex-row items-center p-3 border-b border-gray-100"
@@ -444,6 +450,7 @@ export default function Chat() {
     </TouchableOpacity>
   );
 
+  // Chức năng: Xử lý khi người dùng chọn một cuộc trò chuyện
   const handleSelectChat = (chatItem) => {
     if (!socketConnection) {
       connectSocket().then(socket => {
@@ -509,6 +516,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xử lý khi người dùng quay lại danh sách cuộc trò chuyện
   const handleBackToList = () => {
     console.log("Navigating back to chat list");
     setSelectedChat(null);
@@ -535,12 +543,14 @@ export default function Chat() {
     socketConnection.off("newMessageReceived");
     socketConnection.off("messageSent");
 
+    // Chức năng: Xử lý khi người dùng nhận được thông tin
     const handleMessageUser = (payload) => {
       console.log("Received user data:", payload);
       setChatUser(payload);
       setIsChatLoading(false);
     };
 
+    // Chức năng: Xử lý tin nhắn trực tiếp nhận được từ server
     const handleMessage = (conversation) => {
       console.log("Received direct messages:", conversation?.messages?.length || 0);
       if (conversation && Array.isArray(conversation.messages)) {
@@ -569,6 +579,7 @@ export default function Chat() {
       setIsChatLoading(false);
     };
 
+    // Chức năng: Xử lý tin nhắn nhóm nhận được từ server
     const handleGroupMessage = (groupData) => {
       console.log("Received group messages:", groupData?.messages?.length || 0);
 
@@ -738,6 +749,7 @@ export default function Chat() {
     // No need to automatically scroll to end with inverted list
   }, [messages]);
 
+  // Chức năng: Chụp ảnh hoặc quay video từ camera
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -781,7 +793,7 @@ export default function Chat() {
     }
   };
 
-  // Update pickImage to preserve original filenames
+  // Chức năng: Chọn hình ảnh hoặc video từ thư viện
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -857,7 +869,7 @@ export default function Chat() {
     }
   };
 
-  // Update pickDocument to ensure original filenames are preserved
+  // Chức năng: Chọn tài liệu từ thiết bị
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -900,14 +912,17 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xóa tất cả các file đã chọn
   const handleClearUploadFile = () => {
     setSelectedFiles([]);
   };
 
+  // Chức năng: Xóa một file cụ thể khỏi danh sách đã chọn
   const handleRemoveSingleFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Chức năng: Hiển thị xem trước các file đã chọn
   const renderFilePreview = () => {
     if (selectedFiles.length === 0) return null;
 
@@ -923,6 +938,7 @@ export default function Chat() {
     );
   };
 
+  // Chức năng: Hiển thị xem trước một file cụ thể
   const renderSingleFilePreview = (file, index) => {
     if (file.isVideo) {
       return (
@@ -985,6 +1001,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Gửi tin nhắn đến cuộc trò chuyện
   const handleSendMessage = async () => {
     if ((!messageText.trim() && selectedFiles.length === 0) || !socketConnection || !selectedChat) return;
 
@@ -1191,15 +1208,18 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Hiển thị/ẩn menu chọn loại media để gửi
   const toggleMediaOptions = () => {
     setShowMediaOptions(!showMediaOptions);
   };
 
+  // Chức năng: Ẩn menu media và mở chức năng chọn tương ứng
   const hideMediaOptionsAndPick = (pickFunction) => {
     setShowMediaOptions(false);
     pickFunction();
   };
 
+  // Chức năng: Xử lý chỉnh sửa tin nhắn
   const handleEditMessage = (message) => {
     console.log("Editing message:", message);
     setEditingMessage(message);
@@ -1209,6 +1229,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xử lý xóa tin nhắn
   const handleDeleteMessage = (messageId) => {
     console.log("Handling message deletion for ID:", messageId);
 
@@ -1252,7 +1273,7 @@ export default function Chat() {
     }
   };
 
-  // Update the handleDeleteGroup function to properly disband groups
+  // Chức năng: Xử lý giải tán nhóm chat
   const handleDeleteGroup = () => {
     console.log("Attempting to disband group:", selectedChat?.userDetails?._id);
 
@@ -1335,6 +1356,7 @@ export default function Chat() {
     }, 10000);
   };
 
+  // Chức năng: Thêm biểu cảm vào tin nhắn
   const handleAddReaction = (messageId, emoji) => {
     console.log("Adding reaction:", emoji, "to message:", messageId);
 
@@ -1370,6 +1392,7 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Xử lý khi nhấp vào hình ảnh để xem
   const handleImageClick = (imageUrl) => {
     console.log("Opening image:", imageUrl);
     if (!imageUrl) {
@@ -1380,6 +1403,7 @@ export default function Chat() {
     setShowImageModal(true);
   };
 
+  // Chức năng: Xử lý khi nhấp vào tài liệu để xem
   const handleDocumentClick = (documentUrl, documentName) => {
     console.log("Opening document:", documentUrl);
     if (!documentUrl) {
@@ -1393,6 +1417,7 @@ export default function Chat() {
     setShowDocumentModal(true);
   };
 
+  // Chức năng: Xử lý khi nhấp vào video để xem
   const handleVideoClick = (videoUrl) => {
     console.log("Opening video:", videoUrl);
     if (!videoUrl) {
@@ -1403,7 +1428,7 @@ export default function Chat() {
     setShowVideoModal(true);
   };
 
-  // Add scroll handler function
+  // Chức năng: Xử lý sự kiện cuộn tin nhắn
   const handleScroll = (event) => {
     // For inverted lists, contentOffset.y > 0 means we're scrolled away from the bottom (newest messages)
     const isScrolled = event.nativeEvent.contentOffset.y > 150;
@@ -1420,13 +1445,14 @@ export default function Chat() {
     }
   };
 
-  // Function to scroll to newest messages
+  // Chức năng: Cuộn đến tin nhắn mới nhất
   const scrollToNewestMessages = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollToOffset({ offset: 0, animated: true });
     }
   };
 
+  // Chức năng: Xử lý khi trả lời một tin nhắn
   const handleReply = (message) => {
     console.log("Replying to message:", message);
     setReplyingTo(message);
@@ -1437,11 +1463,12 @@ export default function Chat() {
     }
   };
 
+  // Chức năng: Hủy trả lời tin nhắn
   const cancelReply = () => {
     setReplyingTo(null);
   };
 
-  // Add a function to scroll to the original message when clicking on a reply
+  // Chức năng: Cuộn đến một tin nhắn cụ thể
   const scrollToMessage = (messageId) => {
     if (!messageId || !messages || !messagesEndRef.current) return;
 
@@ -1484,12 +1511,13 @@ export default function Chat() {
     }
   };
 
-  // Ensure handleShareMessage function is defined in the main component scope
+  // Chức năng: Mở hộp thoại chia sẻ tin nhắn
   const handleShareMessage = (message) => {
     console.log("Opening share message dialog for:", message?._id);
     setMessageToShare(message);
   };
 
+  // Chức năng: Hiển thị tin nhắn trong danh sách
   const renderMessage = ({ item }) => {
     // Handle timestamp marker
     if (item.isTimestamp) {
@@ -1664,12 +1692,12 @@ export default function Chat() {
     return result;
   }, [allUsers, showAllConversations, activeFilter, chatTypeFilter, forceRender, pinnedConversations]);
 
-  // Function to toggle the filter dropdown visibility
+  // Chức năng: Bật/tắt dropdown bộ lọc
   const toggleFilterDropdown = () => {
     setIsFilterDropdownOpen(prev => !prev);
   };
 
-  // Function to handle filter selection
+  // Chức năng: Xử lý khi chọn một bộ lọc
   const handleFilterSelection = (filterType) => {
     setChatTypeFilter(filterType);
     setIsFilterDropdownOpen(false);
@@ -1677,12 +1705,12 @@ export default function Chat() {
     setForceRender(Date.now());
   };
 
-  // Function to toggle between showing all conversations and limited view
+  // Chức năng: Bật/tắt hiển thị tất cả cuộc trò chuyện
   const toggleShowAllConversations = () => {
     setShowAllConversations(prev => !prev);
   };
 
-  // Add the missing renderConversationItem function
+  // Chức năng: Hiển thị một mục cuộc trò chuyện trong danh sách
   const renderConversationItem = ({ item }) => {
     if (!item || !item.userDetails) {
       console.log("Invalid conversation item:", item);
@@ -1796,14 +1824,14 @@ export default function Chat() {
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
   const [currentSearchResultIndex, setCurrentSearchResultIndex] = useState(0);
 
-  // Function to handle opening message search modal
+  // Chức năng: Mở hộp thoại tìm kiếm tin nhắn
   const handleOpenMessageSearch = () => {
     setShowMessageSearch(true);
     setMessageSearchQuery('');
     setMessageSearchResults([]);
   };
 
-  // Function to handle message search input changes
+  // Chức năng: Tìm kiếm tin nhắn trong cuộc trò chuyện hiện tại
   const handleSearchMessages = (text) => {
     setMessageSearchQuery(text);
 
@@ -1841,7 +1869,7 @@ export default function Chat() {
     setCurrentSearchResultIndex(newIndex);
   };
 
-  // Function to navigate to a specific search result
+  // Chức năng: Điều hướng đến một kết quả tìm kiếm cụ thể
   const navigateToSearchResult = (index) => {
     if (index < 0 || index >= messageSearchResults.length) return;
 
@@ -1849,13 +1877,13 @@ export default function Chat() {
     scrollToMessage(targetMessage._id);
   };
 
-  // Function to handle share success
+  // Chức năng: Xử lý khi chia sẻ tin nhắn thành công
   const handleShareSuccess = () => {
     setMessageToShare(null);
     Alert.alert("Thành công", "Tin nhắn đã được chia sẻ thành công!");
   };
 
-  // Enhanced function for direct chat details and group chat management with improved group detection
+  // Chức năng: Hiển thị chi tiết cuộc trò chuyện
   const handleShowChatDetails = () => {
     // Enhanced group detection that checks multiple indicators
     const isGroup = checkIfGroupChat();
@@ -1887,7 +1915,7 @@ export default function Chat() {
     }
   };
 
-  // Helper function to reliably detect if a chat is a group chat
+  // Chức năng: Kiểm tra xem một cuộc trò chuyện có phải là nhóm hay không
   const checkIfGroupChat = () => {
     if (!selectedChat || !chatUser) return false;
     
@@ -1943,7 +1971,7 @@ export default function Chat() {
     loadPinnedConversations();
   }, []);
 
-  // Handle long press on a conversation item
+  // Chức năng: Xử lý nhấn giữ lâu trên một cuộc trò chuyện
   const handleLongPressConversation = (item, event) => {
     // Get the position of the press to position the context menu
     const { pageX, pageY } = event.nativeEvent;
@@ -1953,7 +1981,7 @@ export default function Chat() {
     setShowContextMenu(true);
   };
 
-  // Function to handle pinning/unpinning a conversation
+  // Chức năng: Ghim/bỏ ghim một cuộc trò chuyện
   const togglePinConversation = (chatId) => {
     setPinnedConversations(prev => {
       // Check if conversation is already pinned
@@ -1983,7 +2011,7 @@ export default function Chat() {
     setLongPressedChat(null);
   };
 
-  // Add the missing handleDeleteDirectConversation function
+  // Chức năng: Xóa một cuộc trò chuyện trực tiếp
   const handleDeleteDirectConversation = () => {
     console.log("Attempting to delete direct conversation:", selectedChat?.userDetails?._id);
     
@@ -2044,7 +2072,7 @@ export default function Chat() {
     }, 10000);
   };
   
-  // Add the missing handleUpdateNickname function
+  // Chức năng: Cập nhật biệt danh cho người dùng trong cuộc trò chuyện
   const handleUpdateNickname = (nickname) => {
     console.log("Updating nickname for user:", selectedChat?.userDetails?._id, "to:", nickname);
     
@@ -2072,7 +2100,7 @@ export default function Chat() {
         // Refresh conversations to update the list
         refreshConversations();
       } else {
-        Alert.alert("Lỗi", response.message || "Không thể cập nhật tên gọi. Vui lòng thử lại sau.");
+        Alert.alert("Lỗi", response.message || "Không thể cập nhật tên gọi. Vui lòng thử lại.");
       }
     });
     
@@ -2087,7 +2115,7 @@ export default function Chat() {
     socketConnection.emit("updateNickname", payload);
   };
 
-  // Add the missing refreshConversations function
+  // Chức năng: Làm mới danh sách cuộc trò chuyện
   const refreshConversations = () => {
     if (!socketConnection || !user?._id) {
       console.error("Cannot refresh conversations - socket or user ID missing");
@@ -2098,7 +2126,7 @@ export default function Chat() {
     socketConnection.emit("sidebar", user._id);
   };
 
-  // Add missing addTimestampMarkers function that's used but not defined
+  // Chức năng: Thêm dấu thời gian vào danh sách tin nhắn
   const addTimestampMarkers = (messages) => {
     if (!messages || !Array.isArray(messages) || messages.length === 0) return [];
     
@@ -2130,7 +2158,7 @@ export default function Chat() {
     return result;
   };
   
-  // Add missing formatTimestamp function used in renderMessage
+  // Chức năng: Định dạng dấu thời gian để hiển thị
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "";
     
@@ -2161,7 +2189,7 @@ export default function Chat() {
     return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
-  // Add missing handleMembersAdded and handleLeaveGroup functions
+  // Chức năng: Xử lý khi thêm thành viên vào nhóm
   const handleMembersAdded = (groupId) => {
     console.log("Members added to group:", groupId);
     setShowAddMemberModal(false);
@@ -2175,6 +2203,7 @@ export default function Chat() {
     refreshConversations();
   };
 
+  // Chức năng: Xử lý khi rời khỏi nhóm chat
   const handleLeaveGroup = (groupId) => {
     console.log("Leaving group:", groupId);
     
@@ -2208,6 +2237,7 @@ export default function Chat() {
     socketConnection.emit("leaveGroup", payload);
   };
 
+  // Chức năng: Xử lý khi thêm thành viên mới vào nhóm
   const handleAddMember = () => {
     setShowGroupInfoModal(false);
     
@@ -2217,6 +2247,7 @@ export default function Chat() {
     }, 300);
   };
   
+  // Chức năng: Xử lý khi xóa thành viên khỏi nhóm
   const handleRemoveMember = (groupId, memberId, memberName) => {
     console.log(`Member ${memberName} (${memberId}) removed from group ${groupId}`);
     
@@ -2226,13 +2257,33 @@ export default function Chat() {
     }
   };
 
-  // Add missing functions for debugging
+  // Chức năng: In ra thông tin tất cả người dùng để gỡ lỗi
   const debugPrintAllUsers = () => {
     console.log("All users/conversations:", JSON.stringify(allUsers, null, 2));
   };
 
+  // Chức năng: In ra thông tin các tin nhắn hiện tại để gỡ lỗi
   const debugPrintMessages = () => {
     console.log("Current messages:", JSON.stringify(messages, null, 2));
+  };
+
+  // Chức năng: Xử lý khi chạm vào màn hình (đóng các menu)
+  const handleScreenTouch = () => {
+    // Close the pin conversation context menu if open
+    if (showContextMenu) {
+      setShowContextMenu(false);
+      setLongPressedChat(null);
+    }
+
+    // Close filter dropdown if open
+    if (isFilterDropdownOpen) {
+      setIsFilterDropdownOpen(false);
+    }
+
+    // Close media options menu if open
+    if (showMediaOptions) {
+      setShowMediaOptions(false);
+    }
   };
 
   // Make sure to add this function before the return statement
