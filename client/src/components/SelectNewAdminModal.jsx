@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass, faXmark } from "@fortawesome/free-solid-svg-icons";
@@ -6,20 +6,43 @@ import { faMagnifyingGlass, faXmark } from "@fortawesome/free-solid-svg-icons";
 export default function SelectNewAdminModal({ isOpen, onClose, members, currentAdmin, onSelectNewAdmin }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [search, setSearch] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Filter out current admin and filter by search term
-  const filteredMembers = members.filter(
-    (member) => member._id !== currentAdmin._id && member.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedMember(null);
+      setSearch("");
+      setIsProcessing(false);
+    }
+  }, [isOpen]);
+
+  // Filter members based on search and exclude current admin
+  const filteredMembers = useMemo(() => {
+    if (!members || !Array.isArray(members)) return [];
+
+    // Filter out the current admin
+    const otherMembers = members.filter((m) => m._id !== currentAdmin);
+
+    // Apply search filter if there's a search query
+    if (!search.trim()) return otherMembers;
+
+    return otherMembers.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
+  }, [members, currentAdmin, search]);
 
   const handleSelect = (member) => {
     setSelectedMember(member);
   };
 
   const handleConfirm = () => {
-    if (selectedMember) {
-      onSelectNewAdmin(selectedMember);
-    }
+    if (!selectedMember) return;
+
+    setIsProcessing(true);
+
+    // Call the parent handler to process the admin transfer
+    onSelectNewAdmin(selectedMember._id, () => {
+      setIsProcessing(false);
+    });
   };
 
   if (!isOpen) return null;
@@ -85,10 +108,17 @@ export default function SelectNewAdminModal({ isOpen, onClose, members, currentA
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!selectedMember}
+            disabled={!selectedMember || isProcessing}
             className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-blue-300"
           >
-            Chọn và tiếp tục
+            {isProcessing ? (
+              <>
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2"></span>
+                Đang xử lý...
+              </>
+            ) : (
+              "Chọn và tiếp tục"
+            )}
           </button>
         </div>
       </div>

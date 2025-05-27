@@ -489,14 +489,14 @@ export default function Chat() {
       setChatUser({
         _id: chatItem.userDetails._id,
         name: chatItem.userDetails.name || "Group Chat",
-        profilePic: chatItem.userDetails.profilePic || 
+        profilePic: chatItem.userDetails.profilePic ||
           `https://ui-avatars.com/api/?name=${encodeURIComponent(chatItem.userDetails.name || "Group")}&background=random`,
         isGroup: true,
         // If we have members already, use them, otherwise initialize with empty array
         members: chatItem.members || chatItem.userDetails.members || [],
         groupAdmin: chatItem.groupAdmin || chatItem.userDetails.groupAdmin
       });
-      
+
       socketConnection.emit("seenGroup", chatItem.userDetails._id);
     } else {
       socketConnection.emit("seen", chatItem.userDetails._id);
@@ -1568,7 +1568,7 @@ export default function Chat() {
         const memberCount = conv.members?.length || conv.userDetails?.members?.length || 0;
         console.log(
           `Conv ${idx}: ID=${conv._id}, ` +
-          `Name=${conv.userDetails?.name}, ` + 
+          `Name=${conv.userDetails?.name}, ` +
           `isGroup flag=${isGroupFlag}, ` +
           `memberCount=${memberCount}, ` +
           `type=${isGroupFlag ? 'GROUP' : 'DIRECT'}`
@@ -1599,24 +1599,24 @@ export default function Chat() {
       // Filter to include ONLY group conversations - with enhanced detection
       typeFiltered = sortedConversations.filter(conv => {
         // Multiple reliable ways to check if it's a group chat
-        const isGroupByFlag = 
-          conv.userDetails?.isGroup === true || 
-          conv.isGroup === true || 
-          (typeof conv.userDetails?.isGroup === 'string' && 
-           conv.userDetails.isGroup.toLowerCase() === 'true');
-          
+        const isGroupByFlag =
+          conv.userDetails?.isGroup === true ||
+          conv.isGroup === true ||
+          (typeof conv.userDetails?.isGroup === 'string' &&
+            conv.userDetails.isGroup.toLowerCase() === 'true');
+
         // Check by members array - groups typically have members array
-        const hasMembers = 
-          Array.isArray(conv.members) || 
+        const hasMembers =
+          Array.isArray(conv.members) ||
           Array.isArray(conv.userDetails?.members);
-          
+
         // Check by name convention - groups often have specific naming patterns
-        const nameIndicatesGroup = 
-          conv.userDetails?.name?.includes('Group') || 
+        const nameIndicatesGroup =
+          conv.userDetails?.name?.includes('Group') ||
           conv.name?.includes('Group') ||
           conv.userDetails?.name?.includes('Nhóm') ||
           conv.name?.includes('Nhóm');
-          
+
         // If any of these checks pass, consider it a group
         return isGroupByFlag || hasMembers || nameIndicatesGroup;
       });
@@ -1626,15 +1626,15 @@ export default function Chat() {
       // Filter to include ONLY direct conversations - with enhanced detection
       typeFiltered = sortedConversations.filter(conv => {
         // Check if it's explicitly NOT a group
-        const notGroupByFlag = 
-          conv.userDetails?.isGroup !== true && 
+        const notGroupByFlag =
+          conv.userDetails?.isGroup !== true &&
           conv.isGroup !== true &&
           conv.userDetails?.isGroup !== 'true';
-          
+
         // Direct chats typically don't have a members array, or have exactly 2 members
         const memberCount = conv.members?.length || conv.userDetails?.members?.length || 0;
         const isTwoPersonChat = memberCount === 0 || memberCount === 2;
-        
+
         // Lacking any group indicators is a good sign it's a direct chat
         return notGroupByFlag && isTwoPersonChat;
       });
@@ -1690,14 +1690,14 @@ export default function Chat() {
     }
 
     // Improve isGroup detection with the same enhanced logic used in filters
-    const isGroup = 
-      item.userDetails?.isGroup === true || 
-      item.isGroup === true || 
-      (typeof item.userDetails?.isGroup === 'string' && 
-       item.userDetails.isGroup.toLowerCase() === 'true') ||
+    const isGroup =
+      item.userDetails?.isGroup === true ||
+      item.isGroup === true ||
+      (typeof item.userDetails?.isGroup === 'string' &&
+        item.userDetails.isGroup.toLowerCase() === 'true') ||
       Array.isArray(item.members) ||
       Array.isArray(item.userDetails?.members);
-    
+
     const lastMessage = item.latestMessage || {};
     const isPinned = pinnedConversations.includes(item._id);
 
@@ -1859,7 +1859,7 @@ export default function Chat() {
   const handleShowChatDetails = () => {
     // Enhanced group detection that checks multiple indicators
     const isGroup = checkIfGroupChat();
-    
+
     console.log("Opening chat details:", {
       chatId: selectedChat?.userDetails?._id,
       chatName: selectedChat?.userDetails?.name || chatUser?.name,
@@ -1867,7 +1867,7 @@ export default function Chat() {
       detectedAsGroup: isGroup,
       chatUserData: chatUser
     });
-    
+
     if (isGroup) {
       // Make sure chatUser has all necessary group properties
       const enhancedGroupData = {
@@ -1878,7 +1878,7 @@ export default function Chat() {
         members: chatUser?.members || selectedChat?.members || [],
         groupAdmin: chatUser?.groupAdmin
       };
-      
+
       // Pass the enhanced group data to the modal
       setChatUser(enhancedGroupData);
       setShowGroupInfoModal(true);
@@ -1890,30 +1890,30 @@ export default function Chat() {
   // Helper function to reliably detect if a chat is a group chat
   const checkIfGroupChat = () => {
     if (!selectedChat || !chatUser) return false;
-    
+
     // Multiple reliable ways to check if it's a group chat
-    const isGroupByFlag = 
-      selectedChat.userDetails?.isGroup === true || 
-      selectedChat.isGroup === true || 
+    const isGroupByFlag =
+      selectedChat.userDetails?.isGroup === true ||
+      selectedChat.isGroup === true ||
       chatUser?.isGroup === true ||
-      (typeof selectedChat.userDetails?.isGroup === 'string' && 
+      (typeof selectedChat.userDetails?.isGroup === 'string' &&
         selectedChat.userDetails.isGroup.toLowerCase() === 'true');
-    
+
     // Check by members array - groups typically have members array with >2 members
-    const hasMultipleMembers = 
-      (Array.isArray(chatUser?.members) && chatUser.members.length > 2) || 
+    const hasMultipleMembers =
+      (Array.isArray(chatUser?.members) && chatUser.members.length > 2) ||
       (Array.isArray(selectedChat?.members) && selectedChat.members.length > 2);
-    
+
     // Check for admin - direct chats don't have admins
     const hasGroupAdmin = !!chatUser?.groupAdmin;
-    
+
     // Check group name patterns
     const nameIndicatesGroup =
-      chatUser?.name?.includes('Group') || 
+      chatUser?.name?.includes('Group') ||
       chatUser?.name?.includes('Nhóm') ||
       selectedChat?.userDetails?.name?.includes('Group') ||
       selectedChat?.userDetails?.name?.includes('Nhóm');
-    
+
     // Log detailed information about group detection for debugging
     console.log("Group chat detection in handleShowChatDetails:", {
       isGroupByFlag,
@@ -1922,7 +1922,7 @@ export default function Chat() {
       nameIndicatesGroup,
       membersCount: chatUser?.members?.length || 'no members array'
     });
-    
+
     // Consider it a group if any of these checks pass
     return isGroupByFlag || hasMultipleMembers || hasGroupAdmin || nameIndicatesGroup;
   };
@@ -1986,54 +1986,54 @@ export default function Chat() {
   // Add the missing handleDeleteDirectConversation function
   const handleDeleteDirectConversation = () => {
     console.log("Attempting to delete direct conversation:", selectedChat?.userDetails?._id);
-    
+
     if (!socketConnection) {
       console.error("Socket connection is not available");
       Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
       return;
     }
-    
+
     if (!selectedChat || !selectedChat.userDetails?._id) {
       console.error("Invalid chat selection");
       Alert.alert("Lỗi", "Không thể xác định cuộc trò chuyện. Vui lòng thử lại sau.");
       return;
     }
-    
+
     setIsChatLoading(true);
-    
+
     // Remove any existing listeners to avoid duplicates
     socketConnection.off("conversationDeleted");
-    
+
     socketConnection.on("conversationDeleted", (response) => {
       setIsChatLoading(false);
       console.log("Conversation deletion response:", response);
-      
+
       if (response.success) {
         // Close the direct chat details modal
         setShowDirectChatDetails(false);
-        
+
         // Navigate back to chat list
         handleBackToList();
-        
+
         // Show success message
         Alert.alert("Thành công", "Đã xóa cuộc trò chuyện thành công");
-        
+
         // Refresh the conversation list
         refreshConversations();
       } else {
         Alert.alert("Lỗi", response.message || "Không thể xóa cuộc trò chuyện. Vui lòng thử lại sau.");
       }
     });
-    
+
     // Create payload for delete conversation
     const payload = {
       conversationId: selectedChat.userDetails._id,
       userId: user._id
     };
-    
+
     console.log("Emitting deleteConversation with payload:", payload);
     socketConnection.emit("deleteConversation", payload);
-    
+
     // Set timeout for no response
     setTimeout(() => {
       if (isChatLoading) {
@@ -2043,46 +2043,46 @@ export default function Chat() {
       }
     }, 10000);
   };
-  
+
   // Add the missing handleUpdateNickname function
   const handleUpdateNickname = (nickname) => {
     console.log("Updating nickname for user:", selectedChat?.userDetails?._id, "to:", nickname);
-    
+
     if (!socketConnection || !selectedChat?.userDetails?._id) {
       Alert.alert("Lỗi", "Không thể cập nhật tên gọi. Vui lòng thử lại sau.");
       return;
     }
-    
+
     // Remove existing listeners to avoid duplicates
     socketConnection.off("nicknameUpdated");
-    
+
     socketConnection.on("nicknameUpdated", (response) => {
       console.log("Nickname update response:", response);
-      
+
       if (response.success) {
         // Update the local chat user data
         setChatUser(prev => ({
           ...prev,
           nickname: nickname
         }));
-        
+
         // Show success message
         Alert.alert("Thành công", "Đã cập nhật tên gọi thành công");
-        
+
         // Refresh conversations to update the list
         refreshConversations();
       } else {
-        Alert.alert("Lỗi", response.message || "Không thể cập nhật tên gọi. Vui lòng thử lại sau.");
+        Alert.alert("Lỗi", response.message || "Không thể cập nhật tên gọi. Vui lòng thử lại.");
       }
     });
-    
+
     // Create payload for updating nickname
     const payload = {
       userId: user._id,
       targetId: selectedChat.userDetails._id,
       nickname: nickname
     };
-    
+
     console.log("Emitting updateNickname with payload:", payload);
     socketConnection.emit("updateNickname", payload);
   };
@@ -2093,7 +2093,7 @@ export default function Chat() {
       console.error("Cannot refresh conversations - socket or user ID missing");
       return;
     }
-    
+
     console.log("Refreshing conversations for user:", user._id);
     socketConnection.emit("sidebar", user._id);
   };
@@ -2101,18 +2101,18 @@ export default function Chat() {
   // Add missing addTimestampMarkers function that's used but not defined
   const addTimestampMarkers = (messages) => {
     if (!messages || !Array.isArray(messages) || messages.length === 0) return [];
-    
+
     const result = [];
     let lastMessage = null;
-    
+
     for (const message of messages) {
       if (lastMessage) {
         const currentTime = new Date(message.createdAt);
         const lastTime = new Date(lastMessage.createdAt);
-        
+
         // If time difference is more than 10 minutes, add a timestamp marker
         const timeDiffMinutes = Math.abs((currentTime - lastTime) / (1000 * 60));
-        
+
         if (timeDiffMinutes > 10) {
           result.push({
             _id: `timestamp-${message._id}`,
@@ -2122,33 +2122,33 @@ export default function Chat() {
           });
         }
       }
-      
+
       result.push(message);
       lastMessage = message;
     }
-    
+
     return result;
   };
-  
+
   // Add missing formatTimestamp function used in renderMessage
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "";
-    
+
     const date = new Date(timestamp);
     const now = new Date();
-    
+
     // If it's today, show just the time
     if (date.toDateString() === now.toDateString()) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    
+
     // If it's yesterday, show "Yesterday at [time]"
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (date.toDateString() === yesterday.toDateString()) {
       return `Hôm qua lúc ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-    
+
     // If it's within 7 days, show the day name and time
     const withinWeek = new Date();
     withinWeek.setDate(withinWeek.getDate() - 7);
@@ -2156,7 +2156,7 @@ export default function Chat() {
       const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
       return `${days[date.getDay()]} lúc ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-    
+
     // Otherwise show the full date
     return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
@@ -2165,61 +2165,72 @@ export default function Chat() {
   const handleMembersAdded = (groupId) => {
     console.log("Members added to group:", groupId);
     setShowAddMemberModal(false);
-    
+
     // Refresh the group information
     if (groupId === selectedChat?.userDetails?._id && socketConnection) {
       socketConnection.emit("joinRoom", groupId);
     }
-    
+
     // Refresh conversation list
     refreshConversations();
   };
 
   const handleLeaveGroup = (groupId) => {
     console.log("Leaving group:", groupId);
-    
+
     if (!socketConnection) {
       Alert.alert("Lỗi", "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
       return;
     }
-    
+
     // Prepare payload for leaving group
     const payload = {
       groupId: groupId,
       userId: user._id
     };
-    
+
     // Remove existing listeners to avoid duplicates
     socketConnection.off("leftGroup");
-    
+
     socketConnection.on("leftGroup", (response) => {
       console.log("Left group response:", response);
-      
+
       if (response.success) {
+        // First navigate back to the chat list
         handleBackToList();
-        Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+
+        // Then show confirmation (after navigation)
+        setTimeout(() => {
+          Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+        }, 300);
+
+        // Refresh conversations list
         refreshConversations();
       } else {
-        Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm. Vui lòng thử lại sau.");
+        if (response.requiresAdminTransfer) {
+          Alert.alert("Thông báo", response.message || "Bạn cần chuyển quyền quản trị trước khi rời nhóm.");
+        } else {
+          Alert.alert("Lỗi", response.message || "Không thể rời khỏi nhóm. Vui lòng thử lại sau.");
+        }
       }
     });
-    
+
     console.log("Emitting leaveGroup with payload:", payload);
     socketConnection.emit("leaveGroup", payload);
   };
 
   const handleAddMember = () => {
     setShowGroupInfoModal(false);
-    
+
     // Allow a short delay for the modal transition
     setTimeout(() => {
       setShowAddMemberModal(true);
     }, 300);
   };
-  
+
   const handleRemoveMember = (groupId, memberId, memberName) => {
     console.log(`Member ${memberName} (${memberId}) removed from group ${groupId}`);
-    
+
     // Refresh the group information to update member list
     if (socketConnection && selectedChat?.userDetails?._id === groupId) {
       socketConnection.emit("joinRoom", groupId);

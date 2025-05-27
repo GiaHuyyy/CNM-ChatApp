@@ -51,7 +51,7 @@ const GroupChatInfoModal = ({
     const [selectedMedia, setSelectedMedia] = useState(null);
     const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
     const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
-    
+
     // Add animation values for swipe transition
     const translateX = useState(new Animated.Value(0))[0];
     const mediaOpacity = useState(new Animated.Value(1))[0];
@@ -69,6 +69,10 @@ const GroupChatInfoModal = ({
         type: "warning"
     });
 
+    // Add these missing state variables for admin selection
+    const [selectingNewAdmin, setSelectingNewAdmin] = useState(false);
+    const [eligibleAdminMembers, setEligibleAdminMembers] = useState([]);
+
     // Normalize IDs for comparison to handle both string and object IDs
     const normalizeId = (id) => {
         if (!id) return '';
@@ -78,38 +82,38 @@ const GroupChatInfoModal = ({
     // Add enhanced isGroupChat detection function with more comprehensive checks
     const isGroupChat = () => {
         if (!group) return false;
-        
+
         // More comprehensive checks for group chat detection
         // 1. Check isGroup flag in various locations
-        const hasGroupFlag = 
-            group.isGroup === true || 
+        const hasGroupFlag =
+            group.isGroup === true ||
             (typeof group.isGroup === 'string' && group.isGroup.toLowerCase() === 'true') ||
-            group.userDetails?.isGroup === true || 
+            group.userDetails?.isGroup === true ||
             (typeof group.userDetails?.isGroup === 'string' && group.userDetails.isGroup.toLowerCase() === 'true');
-        
+
         // 2. Check for admin - direct chats don't have admins
         const hasGroupAdmin = !!group.groupAdmin || !!group.userDetails?.groupAdmin;
-        
+
         // 3. Check members array in multiple possible locations
         const membersArray = group.members || group.userDetails?.members;
-        const hasMultipleMembers = 
+        const hasMultipleMembers =
             Array.isArray(membersArray) && membersArray.length > 2;
-        
+
         // 4. Check for explicit properties that indicate a group chat
-        const hasGroupProperties = 
-            group.hasOwnProperty('groupName') || 
+        const hasGroupProperties =
+            group.hasOwnProperty('groupName') ||
             group.hasOwnProperty('groupAdmin') ||
             group.hasOwnProperty('groupDescription') ||
             group.hasOwnProperty('groupIcon');
-        
+
         // 5. Check for naming patterns
         const nameToCheck = group.name || group.userDetails?.name || "";
         const nameIndicatesGroup =
-            nameToCheck.includes('Group') || 
+            nameToCheck.includes('Group') ||
             nameToCheck.includes('Nhóm') ||
             nameToCheck.includes('Team') ||
             nameToCheck.includes('Chat nhóm');
-        
+
         // For diagnostic purposes, log all check results
         console.log("DETAILED GROUP DETECTION:", {
             chatId: group._id || 'unknown',
@@ -126,22 +130,22 @@ const GroupChatInfoModal = ({
                 membersCount: membersArray?.length || 0
             }
         });
-        
+
         // Consider it a group if any strong indicators are present
         const isDefinitelyGroup = hasGroupFlag || hasGroupAdmin || hasMultipleMembers || hasGroupProperties;
-        
+
         // If we have a definitive answer, use it
         if (isDefinitelyGroup) {
             console.log("DETECTED AS GROUP: Strong indicators present");
             return true;
         }
-        
+
         // If name suggests it might be a group, log this as a weak indicator
         if (nameIndicatesGroup) {
             console.log("DETECTED AS GROUP: Based on name pattern only (weak indicator)");
             return true;
         }
-        
+
         // If no indicators suggest it's a group, it's likely a direct chat
         console.log("DETECTED AS DIRECT CHAT: No group indicators found");
         return false;
@@ -178,7 +182,7 @@ const GroupChatInfoModal = ({
                 adminId: normalizeId(group.groupAdmin),
                 currentUserId: normalizeId(currentUser._id)
             });
-            
+
             // If this isn't a group chat, show a warning
             if (!isGroup) {
                 console.warn("Non-group chat object passed to GroupChatInfoModal:", group);
@@ -189,11 +193,11 @@ const GroupChatInfoModal = ({
     // Adjust the component title based on chat type with a clearer approach
     const getModalTitle = () => {
         if (!group) return "Thông tin";
-        
+
         // Get the group status with detailed logging
         const groupStatus = isGroupChat();
         console.log(`Modal title determination: isGroup=${groupStatus}, name=${group.name || 'unnamed'}`);
-        
+
         return groupStatus ? "Thông tin nhóm" : "Thông tin hội thoại";
     };
 
@@ -471,12 +475,12 @@ const GroupChatInfoModal = ({
 
                 // Remove any existing listeners
                 socketConnection.off("groupDeleted");
-                
+
                 // Set a timeout to handle no response
                 const timeoutId = setTimeout(() => {
                     console.log("No response received for group deletion");
                     socketConnection.off("groupDeleted");
-                    
+
                     setConfirmModal({
                         visible: true,
                         title: "Lỗi kết nối",
@@ -489,9 +493,9 @@ const GroupChatInfoModal = ({
                 socketConnection.on("groupDeleted", (response) => {
                     // Clear timeout since we got a response
                     clearTimeout(timeoutId);
-                    
+
                     console.log("Group deletion response:", response);
-                    
+
                     if (response.success) {
                         // Close all modals
                         setConfirmModal({
@@ -500,16 +504,16 @@ const GroupChatInfoModal = ({
                             message: "",
                             type: ""
                         });
-                        
+
                         // First close the current modal
                         onClose();
-                        
+
                         // Show success message
                         Alert.alert(
                             "Thành công",
                             "Đã giải tán nhóm thành công",
-                            [{ 
-                                text: "OK", 
+                            [{
+                                text: "OK",
                                 onPress: () => {
                                     // Call parent handler for cleanup and navigation
                                     if (onDeleteGroup) {
@@ -535,7 +539,7 @@ const GroupChatInfoModal = ({
                     groupId: groupIdStr,
                     userId: userIdStr
                 };
-                
+
                 console.log("Emitting deleteGroup with payload:", payload);
                 socketConnection.emit("deleteGroup", payload);
             }
@@ -558,22 +562,130 @@ const GroupChatInfoModal = ({
         const userId = normalizeId(currentUser._id);
         const isCurrentUserAdmin = groupAdminId === userId;
 
-        let warningMessage = "Bạn có chắc chắn muốn rời khỏi nhóm này?";
         if (isCurrentUserAdmin) {
-            warningMessage = "Bạn là quản trị viên của nhóm này. Nếu bạn rời đi, quản trị viên sẽ được giao cho người khác hoặc nhóm có thể bị giải tán. Bạn có chắc chắn muốn rời khỏi nhóm?";
+            // Show admin transfer screen instead of direct confirmation
+            setConfirmModal({
+                visible: true,
+                title: "Chuyển quyền quản trị",
+                message: "Bạn là quản trị viên của nhóm này. Vui lòng chọn người quản trị mới trước khi rời nhóm.",
+                type: "warning",
+                action: () => {
+                    // Close current modal
+                    setConfirmModal({
+                        visible: false
+                    });
+
+                    // Show admin selection UI
+                    showSelectNewAdminUI();
+                }
+            });
+        } else {
+            // Regular member can leave directly
+            setConfirmModal({
+                visible: true,
+                title: "Rời nhóm",
+                message: "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+                type: "warning",
+                action: () => {
+                    onClose(); // Close modal first for better UX
+                    setTimeout(() => {
+                        onLeaveGroup(group._id); // Call the parent component's handler
+                    }, 300);
+                }
+            });
+        }
+    };
+
+    // New function to show UI for selecting new admin
+    const showSelectNewAdminUI = () => {
+        // We'll implement a simplified version since this is in mobile
+        // You can adapt this to match your mobile UI patterns
+
+        // Get all members except current admin
+        const adminId = normalizeId(currentUser._id);
+        const eligibleMembers = group.members.filter(member =>
+            normalizeId(member._id) !== adminId
+        );
+
+        if (eligibleMembers.length === 0) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không có thành viên nào để chuyển quyền quản trị.",
+                type: "error"
+            });
+            return;
         }
 
+        // Set state to show member selection UI in a different part of your component
+        setSelectingNewAdmin(true);
+        setEligibleAdminMembers(eligibleMembers);
+    };
+
+    // Function to handle the admin transfer
+    const handleTransferAdminAndLeave = (newAdminId) => {
+        if (!socketConnection || !newAdminId || !group?._id) {
+            setConfirmModal({
+                visible: true,
+                title: "Lỗi",
+                message: "Không thể chuyển quyền quản trị. Vui lòng thử lại.",
+                type: "error"
+            });
+            return;
+        }
+
+        // Make sure the admin selection UI is closed
+        setSelectingNewAdmin(false);
+
+        // Show loading state
         setConfirmModal({
             visible: true,
-            title: "Rời nhóm",
-            message: warningMessage,
-            type: "warning",
-            action: () => {
-                onClose(); // Close modal first for better UX
+            title: "Đang xử lý",
+            message: "Đang chuyển quyền quản trị và rời nhóm...",
+            type: "loading"
+        });
+
+        // Clean up previous listeners
+        socketConnection.off("adminTransferred");
+
+        // Listen for the response
+        socketConnection.on("adminTransferred", (response) => {
+            if (response.success) {
+                // Close all modals
+                setConfirmModal({
+                    visible: false
+                });
+
+                // Close this modal
+                onClose();
+
+                // IMMEDIATE NAVIGATION: Call the leave group handler first to handle navigation
+                if (onLeaveGroup) {
+                    onLeaveGroup(group._id);
+                }
+
+                // Then show success message (after navigation has started)
                 setTimeout(() => {
-                    onLeaveGroup(group._id); // Call the parent component's handler
+                    Alert.alert(
+                        "Thành công",
+                        "Bạn đã chuyển quyền quản trị và rời nhóm thành công"
+                    );
                 }, 300);
+            } else {
+                setConfirmModal({
+                    visible: true,
+                    title: "Lỗi",
+                    message: response.message || "Không thể chuyển quyền quản trị",
+                    type: "error"
+                });
             }
+        });
+
+        // Emit the event to transfer admin and leave
+        socketConnection.emit("transferAdminAndLeave", {
+            groupId: group._id,
+            currentAdminId: currentUser._id,
+            newAdminId: newAdminId
         });
     };
 
@@ -661,9 +773,9 @@ const GroupChatInfoModal = ({
     // Extract media items from messages
     const extractMediaItems = () => {
         if (!messages || !Array.isArray(messages)) return [];
-        
+
         const items = [];
-        
+
         messages.forEach(message => {
             // Check for files array first (modern format)
             if (message.files && Array.isArray(message.files) && message.files.length > 0) {
@@ -699,13 +811,13 @@ const GroupChatInfoModal = ({
                 }
             }
         });
-        
+
         // Sort by date, newest first
         return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     };
-    
+
     const mediaItems = extractMediaItems();
-    
+
     const handleMediaPress = (item, index) => {
         setSelectedMedia(item);
         setSelectedMediaIndex(index);
@@ -795,7 +907,7 @@ const GroupChatInfoModal = ({
             },
         })
     )[0];
-    
+
     const renderMembersTab = () => (
         <View className="flex-1">
             <View className="flex-row items-center bg-gray-100 rounded-full px-3 py-1 mb-3 mx-2">
@@ -894,7 +1006,7 @@ const GroupChatInfoModal = ({
                                         </View>
                                     </View>
                                 ) : (
-                                    <Image 
+                                    <Image
                                         source={{ uri: item.mediaUrl }}
                                         style={{ width: '100%', height: '100%', borderRadius: 4 }}
                                     />
@@ -913,7 +1025,7 @@ const GroupChatInfoModal = ({
 
     // Add a memoized MediaTab component to prevent unnecessary re-renders
     const MediaTabContent = React.memo(() => renderMediaTab());
-    
+
     // Keep the existing renderContent function
     const renderContent = () => {
         switch (activeTab) {
@@ -1029,14 +1141,14 @@ const GroupChatInfoModal = ({
                 >
                     <FontAwesomeIcon icon={faTimes} size={24} color="#fff" />
                 </TouchableOpacity>
-                
+
                 {/* Navigation Indicator */}
                 <View className="absolute top-10 self-center bg-black/50 py-1 px-3 rounded-full">
                     <Text className="text-white font-semibold">
                         {selectedMediaIndex + 1} / {mediaItems.length}
                     </Text>
                 </View>
-                
+
                 <Animated.View
                     className="w-full h-4/5 items-center justify-center"
                     style={{
@@ -1062,7 +1174,7 @@ const GroupChatInfoModal = ({
                         />
                     )}
                 </Animated.View>
-                
+
                 {/* Navigation Buttons */}
                 {selectedMediaIndex > 0 && (
                     <TouchableOpacity
@@ -1072,7 +1184,7 @@ const GroupChatInfoModal = ({
                         <FontAwesomeIcon icon={faArrowLeft} size={24} color="#fff" />
                     </TouchableOpacity>
                 )}
-                
+
                 {selectedMediaIndex < mediaItems.length - 1 && (
                     <TouchableOpacity
                         className="absolute right-5 top-1/2 -translate-y-1/2 bg-black/50 p-3 rounded-full"
@@ -1081,7 +1193,7 @@ const GroupChatInfoModal = ({
                         <FontAwesomeIcon icon={faArrowRight} size={24} color="#fff" />
                     </TouchableOpacity>
                 )}
-                
+
                 {/* Swipe Instructions */}
                 <Animated.View className="absolute bottom-12 bg-black/50 py-2 px-4 rounded-full" style={{ opacity: mediaOpacity }}>
                     <Text className="text-white font-medium">Lướt sang trái/phải để chuyển ảnh</Text>
@@ -1089,7 +1201,81 @@ const GroupChatInfoModal = ({
             </View>
         </Modal>
     );
-    
+
+    // Render function to display the admin selection UI
+    const renderAdminSelectionUI = () => {
+        if (!selectingNewAdmin) return null;
+
+        return (
+            <Modal
+                visible={selectingNewAdmin}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setSelectingNewAdmin(false)}
+            >
+                <View className="flex-1 bg-black/50">
+                    <View className="bg-white rounded-t-xl flex-1 mt-20">
+                        <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
+                            <Text className="text-xl font-bold">Chọn quản trị viên mới</Text>
+                            <TouchableOpacity onPress={() => setSelectingNewAdmin(false)}>
+                                <FontAwesomeIcon icon={faTimes} size={20} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View className="p-4">
+                            <Text className="text-gray-600 mb-4">
+                                Bạn cần chọn người quản trị mới trước khi rời nhóm.
+                            </Text>
+
+                            {eligibleAdminMembers.length > 0 ? (
+                                <FlatList
+                                    data={eligibleAdminMembers}
+                                    keyExtractor={item => item._id?.toString() || Math.random().toString()}
+                                    renderItem={({ item }) => (
+                                        <TouchableOpacity
+                                            className="flex-row items-center py-3 px-2 border-b border-gray-100"
+                                            onPress={() => {
+                                                // Close the admin selection UI first
+                                                setSelectingNewAdmin(false);
+
+                                                // Then show confirmation
+                                                setConfirmModal({
+                                                    visible: true,
+                                                    title: "Xác nhận",
+                                                    message: `Bạn có chắc chắn muốn chuyển quyền quản trị cho ${item.name} và rời nhóm?`,
+                                                    type: "warning",
+                                                    action: () => {
+                                                        handleTransferAdminAndLeave(item._id);
+                                                    }
+                                                });
+                                            }}
+                                        >
+                                            <Image
+                                                source={{
+                                                    uri: item.profilePic ||
+                                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}`
+                                                }}
+                                                className="w-10 h-10 rounded-full"
+                                            />
+                                            <View className="ml-3 flex-1">
+                                                <Text className="font-medium">{item.name}</Text>
+                                            </View>
+                                            <FontAwesomeIcon icon={faUserShield} size={16} color="#3b82f6" />
+                                        </TouchableOpacity>
+                                    )}
+                                />
+                            ) : (
+                                <View className="p-4 items-center justify-center">
+                                    <Text className="text-gray-500">Không có thành viên nào để chuyển quyền quản trị</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        );
+    };
+
     return (
         <>
             <Modal
@@ -1187,7 +1373,10 @@ const GroupChatInfoModal = ({
             </Modal>
 
             {/* Add the media viewer */
-            renderMediaViewer()}
+                renderMediaViewer()}
+
+            {/* Add the admin selection UI */
+                renderAdminSelectionUI()}
 
             {/* Only show this if we're handling add members directly within this component */}
             {!onAddMember && (
