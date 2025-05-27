@@ -9,7 +9,9 @@ import {
   TextInput,
   Alert,
   StatusBar,
-  FlatList
+  FlatList,
+  PermissionsAndroid,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -35,6 +37,7 @@ import {
   clearError,
 } from '../redux/contactSlice';
 import axios from 'axios';
+import * as Contacts from 'expo-contacts';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -44,6 +47,8 @@ const ContactScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sentRequests, setSentRequests] = useState([]); // Lưu lời mời đã gửi
+  const [phoneContacts, setPhoneContacts] = useState([]); // Danh bạ máy
+  const [contactsLoading, setContactsLoading] = useState(false);
   const currentUserId = useSelector((state) => state.user._id);
 
   const {
@@ -168,6 +173,7 @@ const ContactScreen = () => {
     </View>
   );
 
+  // Thêm tab mới cho danh bạ
   const renderTabs = () => (
     <View className="flex-row bg-white px-4 py-2 border-b border-gray-200">
       <TouchableOpacity
@@ -192,6 +198,14 @@ const ContactScreen = () => {
       >
         <Text className={`text-base ${activeTab === 'sent' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
           Đã gửi lời mời
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setActiveTab('phonebook')}
+        className={`pb-2 ${activeTab === 'phonebook' ? 'border-b-2 border-blue-500' : ''}`}
+      >
+        <Text className={`text-base ${activeTab === 'phonebook' ? 'text-blue-500 font-semibold' : 'text-gray-500'}`}>
+          Danh bạ máy
         </Text>
       </TouchableOpacity>
     </View>
@@ -361,6 +375,98 @@ const ContactScreen = () => {
     fetchSentRequests();
   }, []);
 
+  // Hàm xin quyền và lấy danh bạ
+  const getPhoneContacts = async () => {
+    try {
+      setContactsLoading(true);
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Từ chối', 'Bạn đã từ chối quyền truy cập danh bạ.');
+        setContactsLoading(false);
+        return;
+      }
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
+      });
+      setPhoneContacts(data || []);
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không thể truy cập danh bạ.');
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  // Hàm lọc danh bạ máy theo searchQuery
+  const filteredPhoneContacts = searchQuery.length > 0
+    ? phoneContacts.filter(contact => {
+        // Lấy tên đầy đủ, loại bỏ khoảng trắng thừa và chuyển về chữ thường
+        const name = (
+          contact.name ||
+          contact.displayName ||
+          contact.firstName ||
+          contact.givenName ||
+          ''
+        ).replace(/\s+/g, ' ').trim().toLowerCase();
+        const lastName = (contact.lastName || contact.familyName || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const fullName = (name + ' ' + lastName).replace(/\s+/g, ' ').trim();
+        const query = searchQuery.replace(/\s+/g, ' ').trim().toLowerCase();
+        // Kiểm tra từng số điện thoại
+        const phoneMatch = (contact.phoneNumbers || []).some(p =>
+          p.number && p.number.replace(/\D/g, '').includes(query.replace(/\D/g, ''))
+        );
+        // Kiểm tra tên (fullName, name, lastName)
+        const nameMatch =
+          fullName.includes(query) ||
+          name.includes(query) ||
+          lastName.includes(query);
+        return nameMatch || phoneMatch;
+      })
+    : phoneContacts;
+
+  // Render danh bạ máy (sử dụng filteredPhoneContacts)
+  const renderPhoneContacts = () => (
+    <View className="flex-1 bg-white">
+      <View className="flex-row justify-between px-4 py-2 bg-gray-50">
+        <Text className="text-gray-500">Tất cả {filteredPhoneContacts.length}</Text>
+        <TouchableOpacity onPress={getPhoneContacts}>
+          <Text className="text-blue-500">Làm mới</Text>
+        </TouchableOpacity>
+      </View>
+      {contactsLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#0068FF" />
+        </View>
+      ) : (
+        <ScrollView className="flex-1">
+          {filteredPhoneContacts.length === 0 ? (
+            <Text className="text-center text-gray-500 mt-8">Không có liên hệ nào.</Text>
+          ) : (
+            filteredPhoneContacts.map((contact, idx) => (
+              <View key={contact.id || idx} className="flex-row items-center px-4 py-3 border-b border-gray-100">
+                <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center">
+                  <FontAwesomeIcon icon={faAddressBook} size={20} color="#0068FF" />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-base">{contact.name || contact.displayName || `${contact.firstName || ''} ${contact.lastName || ''}`}</Text>
+                  {contact.phoneNumbers && contact.phoneNumbers.length > 0 && (
+                    <Text className="text-sm text-gray-500">{contact.phoneNumbers[0].number}</Text>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  // Khi chuyển sang tab danh bạ thì tự động lấy danh bạ nếu chưa có
+  useEffect(() => {
+    if (activeTab === 'phonebook' && phoneContacts.length === 0) {
+      getPhoneContacts();
+    }
+  }, [activeTab]);
+
   // Thay đổi phần render: nếu có searchQuery thì hiển thị user list, ngược lại hiển thị tab tương ứng
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0068FF' }}>
@@ -401,7 +507,9 @@ const ContactScreen = () => {
           ? renderFriendList()
           : activeTab === 'received'
           ? renderFriendRequests()
-          : renderSentRequests()}
+          : activeTab === 'sent'
+          ? renderSentRequests()
+          : renderPhoneContacts()}
       </View>
     </SafeAreaView>
   );
