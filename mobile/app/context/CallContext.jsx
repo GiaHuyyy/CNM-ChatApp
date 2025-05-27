@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { useGlobalContext } from './GlobalProvider';
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
-import * as Device from 'expo-device';
+import * as Permissions from 'expo-permissions'; // Add this import
 
 const CallContext = createContext();
 
@@ -46,7 +46,31 @@ export const CallProvider = ({ children }) => {
     const [isSpeakerOn, setIsSpeakerOn] = useState(true);
     const [volume, setVolume] = useState(1.0); // Full volume by default
 
+    // Add camera refs and state with safe default values
+    const cameraRef = useRef(null);
+    const [hasCamera, setHasCamera] = useState(false);
+    // Use safe default values for camera settings
+    const [cameraType, setCameraType] = useState('front'); // Safe fallback
+    const [cameraReady, setCameraReady] = useState(false);
+    const [flashMode, setFlashMode] = useState('off'); // Safe fallback
+
+    // Store camera constants separately to handle undefined
+    const [cameraConstants, setCameraConstants] = useState(null);
+
     const callTimerRef = useRef(null);
+
+    // Check Camera availability and set constants
+    useEffect(() => {
+        // Safely check if Camera and Camera.Constants are available
+        if (Camera && Camera.Constants) {
+            setCameraConstants(Camera.Constants);
+            // Now it's safe to update state with real constants
+            setCameraType(Camera.Constants.Type.front);
+            setFlashMode(Camera.Constants.FlashMode.off);
+        } else {
+            console.warn("Camera or Camera.Constants is not available");
+        }
+    }, []);
 
     // Khởi tạo audio mode khi component mount
     useEffect(() => {
@@ -210,6 +234,45 @@ export const CallProvider = ({ children }) => {
         };
     }, [socketConnection, callState]);
 
+    // Add this function after setupAudioMode
+    const processIncomingSignal = (signal) => {
+        try {
+            console.log("Processing incoming signal:",
+                signal ? (signal.type || "Unknown signal type") : "null signal");
+
+            // If we receive a real SDP from web client, we need to acknowledge it
+            // Since we don't have a real WebRTC implementation in this mobile version,
+            // we'll just respond with our simulated SDP
+            if (signal && signal.sdp && signal.sdp.startsWith('v=')) {
+                console.log("Received real SDP from web client");
+
+                // For incoming calls that we're answering
+                if (signal.type === "offer") {
+                    // We'll respond with our simulated answer in the answerCall function
+                    console.log("Storing real offer for later processing");
+                    return true;
+                }
+
+                // For outgoing calls that were accepted
+                if (signal.type === "answer") {
+                    console.log("Call was accepted with real SDP answer");
+                    return true;
+                }
+            }
+
+            // For simulated signals or when no signal is provided (fallback)
+            if (!signal) {
+                console.log("No signal provided, using default");
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            console.error("Error processing signal:", error);
+            return false;
+        }
+    };
+
     const startCallTimer = () => {
         console.log('Starting call timer');
 
@@ -278,15 +341,59 @@ export const CallProvider = ({ children }) => {
         try {
             console.log(`Checking permissions for ${isVideo ? 'video' : 'audio'} call`);
 
-            // Kiểm tra quyền truy cập âm thanh
+            // Check audio permission
             console.log("Requesting audio recording permission...");
-            const { status: audioStatus } = await Audio.requestPermissionsAsync();
+            let audioStatus;
+            try {
+                const { status } = await Audio.requestPermissionsAsync();
+                audioStatus = status;
+            } catch (error) {
+                console.error("Error requesting audio permission:", error);
+                audioStatus = 'denied';
+            }
             console.log(`Audio permission status: ${audioStatus}`);
 
             if (isVideo) {
                 console.log("Requesting camera permission...");
-                const { status: videoStatus } = await Camera.requestPermissionsAsync();
+                let videoStatus = 'denied';
+
+                try {
+                    // Method for Expo SDK 46+
+                    if (typeof Camera.useCameraPermissions === 'function') {
+                        console.log("Using Camera.useCameraPermissions approach");
+                        const [permission, requestPermission] = Camera.useCameraPermissions();
+
+                        if (!permission || !permission.granted) {
+                            const result = await requestPermission();
+                            videoStatus = result ? 'granted' : 'denied';
+                        } else {
+                            videoStatus = 'granted';
+                        }
+                    }
+                    // Direct manual request for older SDKs
+                    else {
+                        console.log("Using direct permission request approach");
+                        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to help UI
+
+                        Alert.alert(
+                            "Camera Permission Required",
+                            "This app needs camera access for video calls. Please grant permission in your device settings.",
+                            [{ text: "OK", onPress: () => console.log("OK Pressed") }]
+                        );
+
+                        // Since we can't reliably check on Expo Go, we'll assume permission was granted
+                        // but let the Camera component itself handle the actual permission
+                        videoStatus = 'granted';
+                    }
+                } catch (error) {
+                    console.error("Error handling camera permission:", error);
+                    videoStatus = 'denied';
+                }
+
                 console.log(`Camera permission status: ${videoStatus}`);
+
+                // Set hasCamera state based on permission
+                setHasCamera(videoStatus === 'granted');
 
                 const hasAllPermissions = audioStatus === 'granted' && videoStatus === 'granted';
                 console.log(`All permissions granted: ${hasAllPermissions}`);
@@ -302,6 +409,29 @@ export const CallProvider = ({ children }) => {
         }
     };
 
+    // Modify switchCamera to handle potential undefined constants
+    const switchCamera = () => {
+        if (!cameraConstants) return;
+
+        setCameraType(
+            cameraType === cameraConstants.Type.back
+                ? cameraConstants.Type.front
+                : cameraConstants.Type.back
+        );
+    };
+
+    // Modify toggleFlash to handle potential undefined constants
+    const toggleFlash = () => {
+        if (!cameraConstants) return;
+
+        setFlashMode(
+            flashMode === cameraConstants.FlashMode.off
+                ? cameraConstants.FlashMode.on
+                : cameraConstants.FlashMode.off
+        );
+    };
+
+    // Update callUser to handle video calls
     const callUser = async (receiverId, receiverName, receiverImage, isVideoCall) => {
         try {
             console.log("CallContext.callUser called with:", { receiverId, receiverName, isVideoCall });
@@ -329,7 +459,7 @@ export const CallProvider = ({ children }) => {
                 return;
             }
 
-            // Set up audio for the call - FIX: Change setupAudio to setupAudioMode
+            // Set up audio for the call
             await setupAudioMode();
 
             // Update call state
@@ -365,40 +495,7 @@ export const CallProvider = ({ children }) => {
         }
     };
 
-    // Add this function after setupAudioMode
-    const processIncomingSignal = (signal) => {
-        try {
-            console.log("Processing incoming signal:",
-                signal ? (signal.type || "ICE candidate") : "null signal");
-
-            // If we receive a real SDP from web client, we need to acknowledge it
-            // Since we don't have a real WebRTC implementation in this mobile version,
-            // we'll just respond with our simulated SDP
-            if (signal && signal.sdp && signal.sdp.startsWith('v=')) {
-                console.log("Received real SDP from web client");
-
-                // For incoming calls that we're answering
-                if (signal.type === "offer") {
-                    // We'll respond with our simulated answer in the answerCall function
-                    console.log("Storing real offer for later processing");
-                    return true;
-                }
-
-                // For outgoing calls that were accepted
-                if (signal.type === "answer") {
-                    console.log("Call was accepted with real SDP answer");
-                    return true;
-                }
-            }
-
-            return true;
-        } catch (error) {
-            console.error("Error processing signal:", error);
-            return false;
-        }
-    };
-
-    // Modify the answerCall function to handle real SDP properly
+    // Update answerCall to handle video calls
     const answerCall = async () => {
         try {
             console.log("Starting to answer call...");
@@ -464,6 +561,12 @@ export const CallProvider = ({ children }) => {
 
             startCallTimer();
 
+            // Update the camera state if this is a video call
+            if (callState.isVideoCall) {
+                setHasCamera(true);
+                setCameraType(Camera.Constants.Type.front);
+            }
+
             console.log("Call successfully answered");
         } catch (error) {
             console.error('Error in answerCall:', error);
@@ -518,11 +621,24 @@ export const CallProvider = ({ children }) => {
         }
     };
 
-    const endCall = () => {
-        console.log('Ending call with state:', callState);
+    // Cleanup function
+    const cleanupCall = () => {
+        // Stop camera if it's being used
+        setHasCamera(false);
 
         // Clean up audio
         cleanupAudio();
+
+        // Reset camera state
+        setCameraReady(false);
+    };
+
+    // Update endCall to also clean up video resources
+    const endCall = () => {
+        console.log('Ending call with state:', callState);
+
+        // Clean up resources
+        cleanupCall();
 
         // Notify other user that call has ended
         if (socketConnection) {
@@ -645,11 +761,24 @@ export const CallProvider = ({ children }) => {
         };
     }, []);
 
+    // Handle camera readiness
+    const handleCameraReady = () => {
+        console.log("Camera is ready");
+        setCameraReady(true);
+    };
+
+    // Update the contextValue to include camera constants
     const contextValue = {
         callState,
         isMuted,
         isSpeakerOn,
         volume,
+        cameraRef,
+        hasCamera,
+        cameraType,
+        cameraReady,
+        flashMode,
+        cameraConstants, // Add this to context
         callUser,
         answerCall,
         rejectCall,
@@ -658,6 +787,9 @@ export const CallProvider = ({ children }) => {
         toggleSpeaker,
         adjustVolume,
         formatDuration,
+        switchCamera,
+        toggleFlash,
+        handleCameraReady
     };
 
     return <CallContext.Provider value={contextValue}>{children}</CallContext.Provider>;
