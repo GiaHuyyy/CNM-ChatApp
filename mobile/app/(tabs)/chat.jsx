@@ -32,6 +32,10 @@ import { useCallContext } from '../context/CallContext';
 
 const DEBUG_MODE = false; // Set to true only when debugging specific issues
 
+// Add platform detection constants for easier use throughout the code
+const IS_WEB = Platform.OS === 'web';
+const IS_MOBILE = Platform.OS === 'ios' || Platform.OS === 'android';
+
 export default function Chat() {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.user);
@@ -738,56 +742,16 @@ export default function Chat() {
     // No need to automatically scroll to end with inverted list
   }, [messages]);
 
-  const takePhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access camera is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['image', 'video'],
-        allowsEditing: true,
-        quality: 0.7,
-      });
-
-      if (!result.canceled) {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const mimeType = asset.mimeType || (uri.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
-        const fileName = `camera_${Date.now()}.${mimeType.includes('video') ? 'mp4' : 'jpg'}`;
-
-        console.log("Camera capture:", {
-          uri: uri ? "URI present" : "No URI",
-          fileName,
-          mimeType
-        });
-
-        const newFile = {
-          uri,
-          fileName,
-          mimeType,
-          isVideo: mimeType.includes('video'),
-          name: fileName,
-          type: mimeType
-        };
-
-        setSelectedFiles(prev => [...prev, newFile]);
-      }
-    } catch (error) {
-      console.error("Error using camera:", error);
-      alert('Error accessing camera. Please try again.');
-    }
-  };
-
-  // Update pickImage to preserve original filenames
+  // Enhanced version of the pickImage function to handle both web and mobile properly
   const pickImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access media is required!');
-        return;
+      // Only request permissions on mobile
+      if (IS_MOBILE) {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          alert('Permission to access media is required!');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -795,19 +759,29 @@ export default function Chat() {
         allowsEditing: false,
         quality: 0.7,
         videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
-        allowsMultipleSelection: true,
-        exif: true // Get extra metadata when available
+        allowsMultipleSelection: !IS_MOBILE || Platform.OS === 'ios', // Multiple selection not supported on Android
+        exif: true
       });
 
-      if (!result.canceled && result.assets.length > 0) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log("Media picker result:", IS_WEB ? "Web format" : "Mobile format", {
+          assetsCount: result.assets.length,
+          firstAssetUri: result.assets[0].uri ? "Has URI" : "No URI",
+          firstAssetType: result.assets[0].type || result.assets[0].mimeType || "unknown"
+        });
+
         const newFiles = result.assets.map(asset => {
           const uri = asset.uri;
+          if (!uri) {
+            console.error("Asset missing URI:", asset);
+            return null;
+          }
 
           // Get the file extension
           const fileExtension = uri.split('.').pop().toLowerCase();
 
           // Determine the MIME type
-          const mimeType = asset.mimeType ||
+          const mimeType = asset.mimeType || asset.type ||
             (fileExtension === 'mp4' ? 'video/mp4' :
               fileExtension === 'mov' ? 'video/quicktime' :
                 fileExtension === 'jpg' || fileExtension === 'jpeg' ? 'image/jpeg' :
@@ -844,9 +818,9 @@ export default function Chat() {
             isVideo,
             name: originalName,
             type: mimeType,
-            ...(Platform.OS === "web" && { file: asset.file })
+            ...(IS_WEB && { file: asset.file })
           };
-        });
+        }).filter(Boolean); // Remove any null entries
 
         setSelectedFiles(prev => [...prev, ...newFiles]);
         console.log(`Added ${newFiles.length} media files with original names`);
@@ -857,39 +831,100 @@ export default function Chat() {
     }
   };
 
-  // Update pickDocument to ensure original filenames are preserved
+  // Improved takePhoto function with platform checks
+  const takePhoto = async () => {
+    // Skip on web as camera might not be available
+    if (IS_WEB) {
+      Alert.alert("Not Supported", "Camera access is not supported in web version. Please use the image picker instead.");
+      return;
+    }
+
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access camera is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const uri = asset.uri;
+        const mimeType = asset.mimeType || (uri.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
+        const fileName = `camera_${Date.now()}.${mimeType.includes('video') ? 'mp4' : 'jpg'}`;
+
+        console.log("Camera capture:", {
+          uri: uri ? "URI present" : "No URI",
+          fileName,
+          mimeType
+        });
+
+        const newFile = {
+          uri,
+          fileName,
+          mimeType,
+          isVideo: mimeType.includes('video'),
+          name: fileName,
+          type: mimeType
+        };
+
+        setSelectedFiles(prev => [...prev, newFile]);
+      }
+    } catch (error) {
+      console.error("Error using camera:", error);
+      alert('Error accessing camera. Please try again.');
+    }
+  };
+
+  // Enhanced document picker with platform checks
   const pickDocument = async () => {
     try {
+      // On web, we need to handle document picking differently
+      if (IS_WEB) {
+        Alert.alert("Document Picking", "Document picking is not fully supported in web version. Basic functionality is available.");
+      }
+
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         copyToCacheDirectory: true,
-        multiple: true
+        multiple: !IS_MOBILE || Platform.OS === 'ios' // Multiple selection not supported on Android
       });
 
-      if (result.canceled === false && result.assets.length > 0) {
+      console.log("Document picker result:", IS_WEB ? "Web format" : "Mobile format", {
+        canceled: result.canceled,
+        assetsCount: result.assets?.length || 0
+      });
+
+      if (result.canceled === false && result.assets && result.assets.length > 0) {
         const newDocuments = result.assets.map(asset => {
           const { uri, mimeType, name } = asset;
 
           if (!uri) {
-            throw new Error("Document has no URI");
+            console.error("Document has no URI:", asset);
+            return null;
           }
 
           // The document picker usually provides the original filename in the name property
           const originalName = name || uri.split('/').pop() || `document_${Date.now()}`;
 
-          console.log(`Selected document: ${originalName} (${mimeType})`);
+          console.log(`Selected document: ${originalName} (${mimeType || 'unknown type'})`);
 
           return {
             uri,
             fileName: originalName,
             originalName: originalName,
-            mimeType,
+            mimeType: mimeType || 'application/octet-stream',
             isDocument: true,
             name: originalName,
-            type: mimeType,
-            ...(Platform.OS === "web" && { file: asset.file })
+            type: mimeType || 'application/octet-stream',
+            ...(IS_WEB && { file: asset.file })
           };
-        });
+        }).filter(Boolean); // Remove any null entries
 
         setSelectedFiles(prev => [...prev, ...newDocuments]);
         console.log(`Added ${newDocuments.length} documents with original names`);
@@ -1008,15 +1043,18 @@ export default function Chat() {
       let uploadedFiles = [];
 
       if (selectedFiles.length > 0) {
-        const uploadPromises = selectedFiles.map(async (file) => {
+        console.log(`Uploading ${selectedFiles.length} files on ${IS_WEB ? 'web' : 'mobile'} platform`);
+
+        const uploadPromises = selectedFiles.map(async (file, index) => {
           try {
+            console.log(`Preparing file ${index + 1}/${selectedFiles.length} for upload`);
+
             // Get the original filename
             const originalName = file.originalName || file.name || file.fileName || "unnamed file";
-            console.log(`Preparing to upload file with original name: ${originalName}`);
 
             let fileToUpload;
 
-            if (Platform.OS === "web") {
+            if (IS_WEB) {
               if (file.file) {
                 // For web File objects, preserve the name
                 fileToUpload = new File(
@@ -1046,10 +1084,11 @@ export default function Chat() {
                 throw new Error("Invalid file format for upload");
               }
             } else {
+              // For mobile, we use a different approach
               fileToUpload = {
                 uri: file.uri,
-                name: originalName,  // Use the original name for the upload
-                originalName: originalName, // Preserve original name in an extra property
+                name: originalName,
+                originalName: originalName,
                 type: file.mimeType || file.type || 'application/octet-stream'
               };
             }
@@ -1057,16 +1096,20 @@ export default function Chat() {
             // Add original name to the file object for the upload
             fileToUpload.originalName = originalName;
 
+            console.log(`Starting upload for ${originalName}...`);
             const uploadResult = await uploadFileToCloud(fileToUpload);
 
             if (!uploadResult || !uploadResult.secure_url) {
+              console.error(`Upload failed for ${originalName} - no URL returned`);
               throw new Error("Upload failed - no URL returned");
             }
+
+            console.log(`Upload successful for ${originalName}: ${uploadResult.secure_url.substring(0, 50)}...`);
 
             // Return the file info with the original filename
             return {
               url: uploadResult.secure_url,
-              name: originalName, // Use original name consistently
+              name: originalName,
               type: file.type || file.mimeType || "",
               isImage: (file.type?.startsWith('image/') || file.mimeType?.startsWith('image/'))
             };
@@ -1076,13 +1119,20 @@ export default function Chat() {
           }
         });
 
-        const results = await Promise.all(uploadPromises);
-        uploadedFiles = results.filter(result => result !== null);
+        try {
+          const results = await Promise.all(uploadPromises);
+          uploadedFiles = results.filter(result => result !== null);
 
-        if (selectedFiles.length > 0 && uploadedFiles.length === 0) {
-          Alert.alert("Upload Failed", "Could not upload any files. Please try again.");
-          setIsUploading(false);
-          return;
+          console.log(`Successfully uploaded ${uploadedFiles.length}/${selectedFiles.length} files`);
+
+          if (selectedFiles.length > 0 && uploadedFiles.length === 0) {
+            Alert.alert("Upload Failed", "Could not upload any files. Please try again.");
+            setIsUploading(false);
+            return;
+          }
+        } catch (uploadError) {
+          console.error("Error during file uploads:", uploadError);
+          Alert.alert("Upload Error", "An error occurred during file uploads. Some files might not have been uploaded.");
         }
       }
 
@@ -2199,9 +2249,16 @@ export default function Chat() {
         // First navigate back to the chat list
         handleBackToList();
 
-        // Then show confirmation (after navigation)
+        // Then show confirmation message based on platform
         setTimeout(() => {
-          Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+          if (IS_WEB) {
+            // For web, use a simpler non-blocking notification or toast if available
+            // Here we just use an alert since we don't have a toast component
+            Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+          } else {
+            // For mobile, use Alert.alert
+            Alert.alert("Thành công", "Bạn đã rời khỏi nhóm thành công");
+          }
         }, 300);
 
         // Refresh conversations list
@@ -2547,7 +2604,7 @@ export default function Chat() {
           {selectedChat ? (
             <KeyboardAvoidingView
               className="flex-1"
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              behavior={IS_MOBILE ? (Platform.OS === "ios" ? "padding" : "height") : undefined}
               keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 30}
             >
               {isChatLoading ? (
@@ -2647,20 +2704,26 @@ export default function Chat() {
 
               <View className="flex-row items-center bg-gray-100 p-2">
                 <View className="relative">
-                  <TouchableOpacity className="mx-2" onPress={toggleMediaOptions}>
+                  <TouchableOpacity
+                    className="mx-2"
+                    onPress={toggleMediaOptions}
+                    disabled={IS_WEB && !navigator?.mediaDevices} // Disable on web if media devices not supported
+                  >
                     <FontAwesomeIcon icon={faPlus} size={20} color="#555" />
                   </TouchableOpacity>
                   {showMediaOptions && (
-                    <View className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg p-2 w-48 border border-gray-200">
-                      <TouchableOpacity
-                        className="flex-row items-center p-3"
-                        onPress={() => hideMediaOptionsAndPick(takePhoto)}
-                      >
-                        <View className="w-8 h-8 rounded-full bg-red-500 items-center justify-center mr-3">
-                          <FontAwesomeIcon icon={faCamera} size={16} color="#fff" />
-                        </View>
-                        <Text>Chụp ảnh/video</Text>
-                      </TouchableOpacity>
+                    <View className={`absolute ${IS_MOBILE ? 'bottom-12' : 'bottom-10'} left-0 bg-white rounded-lg shadow-lg p-2 w-48 border border-gray-200`}>
+                      {!IS_WEB && (
+                        <TouchableOpacity
+                          className="flex-row items-center p-3"
+                          onPress={() => hideMediaOptionsAndPick(takePhoto)}
+                        >
+                          <View className="w-8 h-8 rounded-full bg-red-500 items-center justify-center mr-3">
+                            <FontAwesomeIcon icon={faCamera} size={16} color="#fff" />
+                          </View>
+                          <Text>Chụp ảnh/video</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         className="flex-row items-center p-3"
                         onPress={() => hideMediaOptionsAndPick(pickImage)}
@@ -2697,8 +2760,8 @@ export default function Chat() {
                   multiline
                   onFocus={() => setShowMediaOptions(false)}
                   onKeyPress={(e) => {
-                    if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                      // Prevent default behavior (new line)
+                    if (IS_WEB && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                      // Prevent default behavior (new line) on web
                       e.preventDefault?.();
 
                       // Only send if there's a message or files selected
@@ -2717,7 +2780,6 @@ export default function Chat() {
                     <ActivityIndicator size="small" color="#0084ff" />
                   ) : (
                     <FontAwesomeIcon
-
                       icon={faPaperPlane}
                       size={20}
                       color={(messageText.trim() || selectedFiles.length > 0) ? "#0084ff" : "#aaa"}

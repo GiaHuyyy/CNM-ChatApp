@@ -19,53 +19,58 @@ const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
  */
 const uploadFileToCloud = async (file) => {
     try {
-        console.log("Upload started with file:", {
-            fileName: file.name || "unnamed",
-            fileType: file.type || "unknown",
-            originalName: file.originalName || file.name || "unnamed"
+        // Add platform detection constants
+        const IS_WEB = Platform.OS === 'web';
+        const IS_MOBILE = Platform.OS === 'ios' || Platform.OS === 'android';
+
+        // Add console logging for debugging
+        console.log(`Starting file upload on ${IS_WEB ? 'web' : 'mobile'} platform:`, {
+            fileName: file.name || file.originalName || 'unknown',
+            fileType: file.type || file.mimeType || 'unknown',
+            fileSize: file.size || 'unknown',
+            hasUri: !!file.uri
         });
 
-        // Extract the original filename without unsafe characters
-        const originalName = file.originalName || file.name || `file_${Date.now()}`;
-        const safeOriginalName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const cloudName = 'YOUR_CLOUDINARY_CLOUD_NAME'; // Replace with your Cloudinary cloud name
+        const uploadPreset = 'YOUR_UNSIGNED_UPLOAD_PRESET'; // Replace with your upload preset
 
         const formData = new FormData();
-        formData.append("file", file);
-        formData.append("upload_preset", REACT_APP_CLOUNDINARY_UPLOAD_PRESET);
-        formData.append("cloud_name", REACT_APP_CLOUNDINARY_NAME);
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
 
-        // Add metadata to preserve the original filename
-        formData.append("context", `original_filename=${safeOriginalName}`);
+        // Add original filename for better tracking
+        if (file.originalName) {
+            formData.append('public_id', `chat_app/${Date.now()}_${file.originalName.replace(/\.[^/.]+$/, "")}`);
+        }
 
-        // Don't use the timestamp in the public_id to make URLs cleaner
-        // but add a unique identifier to prevent collisions
-        const uniqueId = Date.now().toString() + Math.random().toString(36).substring(2, 7);
-        formData.append("public_id", `chat_app/${uniqueId}`);
-
-        // Important: Add these custom headers to preserve original filename
-        formData.append("filename_override", safeOriginalName);
+        // Log the request before sending
+        console.log(`Sending upload request to Cloudinary (${cloudName})...`);
 
         const response = await axios.post(
-            `https://api.cloudinary.com/v1_1/${REACT_APP_CLOUNDINARY_NAME}/auto/upload`,
+            `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
             formData,
             {
                 headers: {
-                    "Content-Type": "multipart/form-data",
-                    "X-Requested-With": "XMLHttpRequest",
+                    'Content-Type': 'multipart/form-data',
                 },
             }
         );
 
-        console.log("Upload successful with original name:", safeOriginalName);
-
-        // Add the original filename to the response for use in the app
-        return {
-            ...response.data,
-            original_filename: safeOriginalName
-        };
+        console.log(`Upload successful! Response status: ${response.status}`);
+        return response.data;
     } catch (error) {
-        console.error("Error uploading file:", error);
-        throw new Error(error.message || "Failed to upload file");
+        console.error('Error uploading file:', error);
+
+        // More detailed error logging
+        if (error.response) {
+            console.error('Error response:', error.response.status, error.response.data);
+        } else if (error.request) {
+            console.error('No response received:', error.request);
+        } else {
+            console.error('Error setting up request:', error.message);
+        }
+
+        throw error;
     }
 };
 
