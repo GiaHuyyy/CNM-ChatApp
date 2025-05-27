@@ -75,6 +75,78 @@ const GroupChatInfoModal = ({
         return typeof id === 'object' ? id.toString() : id;
     };
 
+    // Add enhanced isGroupChat detection function with more comprehensive checks
+    const isGroupChat = () => {
+        if (!group) return false;
+        
+        // More comprehensive checks for group chat detection
+        // 1. Check isGroup flag in various locations
+        const hasGroupFlag = 
+            group.isGroup === true || 
+            (typeof group.isGroup === 'string' && group.isGroup.toLowerCase() === 'true') ||
+            group.userDetails?.isGroup === true || 
+            (typeof group.userDetails?.isGroup === 'string' && group.userDetails.isGroup.toLowerCase() === 'true');
+        
+        // 2. Check for admin - direct chats don't have admins
+        const hasGroupAdmin = !!group.groupAdmin || !!group.userDetails?.groupAdmin;
+        
+        // 3. Check members array in multiple possible locations
+        const membersArray = group.members || group.userDetails?.members;
+        const hasMultipleMembers = 
+            Array.isArray(membersArray) && membersArray.length > 2;
+        
+        // 4. Check for explicit properties that indicate a group chat
+        const hasGroupProperties = 
+            group.hasOwnProperty('groupName') || 
+            group.hasOwnProperty('groupAdmin') ||
+            group.hasOwnProperty('groupDescription') ||
+            group.hasOwnProperty('groupIcon');
+        
+        // 5. Check for naming patterns
+        const nameToCheck = group.name || group.userDetails?.name || "";
+        const nameIndicatesGroup =
+            nameToCheck.includes('Group') || 
+            nameToCheck.includes('Nhóm') ||
+            nameToCheck.includes('Team') ||
+            nameToCheck.includes('Chat nhóm');
+        
+        // For diagnostic purposes, log all check results
+        console.log("DETAILED GROUP DETECTION:", {
+            chatId: group._id || 'unknown',
+            name: nameToCheck,
+            hasGroupFlag,
+            hasGroupAdmin,
+            hasMultipleMembers: hasMultipleMembers ? (membersArray?.length || 0) : 'No valid members array',
+            hasGroupProperties,
+            nameIndicatesGroup,
+            rawGroupData: {
+                isGroup: group.isGroup,
+                userDetailsIsGroup: group.userDetails?.isGroup,
+                groupAdmin: group.groupAdmin ? 'exists' : 'missing',
+                membersCount: membersArray?.length || 0
+            }
+        });
+        
+        // Consider it a group if any strong indicators are present
+        const isDefinitelyGroup = hasGroupFlag || hasGroupAdmin || hasMultipleMembers || hasGroupProperties;
+        
+        // If we have a definitive answer, use it
+        if (isDefinitelyGroup) {
+            console.log("DETECTED AS GROUP: Strong indicators present");
+            return true;
+        }
+        
+        // If name suggests it might be a group, log this as a weak indicator
+        if (nameIndicatesGroup) {
+            console.log("DETECTED AS GROUP: Based on name pattern only (weak indicator)");
+            return true;
+        }
+        
+        // If no indicators suggest it's a group, it's likely a direct chat
+        console.log("DETECTED AS DIRECT CHAT: No group indicators found");
+        return false;
+    };
+
     // Calculate if the current user is admin
     const calculateIsAdmin = () => {
         if (!group || !currentUser) return false;
@@ -82,10 +154,18 @@ const GroupChatInfoModal = ({
         const groupAdminId = normalizeId(group.groupAdmin?._id || group.groupAdmin);
         const userId = normalizeId(currentUser._id);
 
-        return groupAdminId === userId;
+        const result = groupAdminId === userId;
+        console.log("Admin check:", {
+            isAdmin: result,
+            userIdNormalized: userId,
+            groupAdminIdNormalized: groupAdminId,
+            groupAdminRaw: group.groupAdmin
+        });
+        return result;
     };
 
     const isAdmin = calculateIsAdmin();
+    const isGroup = isGroupChat();
 
     useEffect(() => {
         if (group) {
@@ -94,11 +174,28 @@ const GroupChatInfoModal = ({
                 name: group.name,
                 members: group.members?.length,
                 isAdmin: isAdmin,
+                isGroup: isGroup,
                 adminId: normalizeId(group.groupAdmin),
                 currentUserId: normalizeId(currentUser._id)
             });
+            
+            // If this isn't a group chat, show a warning
+            if (!isGroup) {
+                console.warn("Non-group chat object passed to GroupChatInfoModal:", group);
+            }
         }
     }, [group, currentUser]);
+
+    // Adjust the component title based on chat type with a clearer approach
+    const getModalTitle = () => {
+        if (!group) return "Thông tin";
+        
+        // Get the group status with detailed logging
+        const groupStatus = isGroupChat();
+        console.log(`Modal title determination: isGroup=${groupStatus}, name=${group.name || 'unnamed'}`);
+        
+        return groupStatus ? "Thông tin nhóm" : "Thông tin hội thoại";
+    };
 
     const filteredMembers = searchQuery.trim()
         ? group?.members?.filter(m =>
@@ -1003,28 +1100,40 @@ const GroupChatInfoModal = ({
             >
                 <View className="flex-1 bg-black/40">
                     <View className="bg-white rounded-t-xl flex-1 mt-20">
-                        {/* Header */}
+                        {/* Header with updated title */}
                         <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
-                            <Text className="text-xl font-bold">Thông tin nhóm</Text>
+                            <Text className="text-xl font-bold">{getModalTitle()}</Text>
                             <TouchableOpacity onPress={onClose}>
                                 <FontAwesomeIcon icon={faTimes} size={20} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Group Info Header */}
+                        {/* Group Info Header with clear indicators */}
                         <View className="items-center p-4">
                             <Image
                                 source={{
                                     uri: group?.profilePic ||
-                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || "Group")}&background=random&size=200`
+                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(group?.name || "Chat")}&background=random&size=200`
                                 }}
                                 className="w-24 h-24 rounded-full mb-2"
                             />
-                            <Text className="text-xl font-bold">{group?.name || "Group Chat"}</Text>
-                            <Text className="text-gray-500 mt-1">{group?.members?.length || 0} thành viên</Text>
+                            <Text className="text-xl font-bold">{group?.name || "Chat"}</Text>
+                            {isGroup ? (
+                                <View className="flex-row items-center mt-1">
+                                    <FontAwesomeIcon icon={faUsers} size={14} color="#3b82f6" className="mr-2" />
+                                    <Text className="text-gray-500">{group?.members?.length || 0} thành viên</Text>
+                                </View>
+                            ) : (
+                                <View className="flex-row items-center mt-1">
+                                    <View className={`w-2.5 h-2.5 rounded-full ${true ? 'bg-green-500' : 'bg-gray-400'} mr-2`} />
+                                    <Text className="text-gray-500">
+                                        {true ? 'Đang hoạt động' : 'Không hoạt động'}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
 
-                        {/* Tabs */}
+                        {/* Tabs - Only show all tabs for group chats */}
                         <View className="flex-row border-b border-gray-200">
                             <TouchableOpacity
                                 className={`flex-1 p-3 items-center ${activeTab === 'members' ? "border-b-2 border-blue-500" : ""}`}
@@ -1036,7 +1145,7 @@ const GroupChatInfoModal = ({
                                     color={activeTab === 'members' ? "#0068FF" : "#666"}
                                 />
                                 <Text className={activeTab === 'members' ? "text-blue-500 font-medium mt-1" : "text-gray-600 mt-1"}>
-                                    Thành viên
+                                    {isGroup ? "Thành viên" : "Thông tin"}
                                 </Text>
                             </TouchableOpacity>
 
