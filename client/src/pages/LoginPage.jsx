@@ -10,8 +10,8 @@ import { useGlobalContext } from "../context/GlobalProvider";
 
 export default function LoginPage({ onForgotPassword }) {
   const [data, setData] = useState({
-    email: "",
-    password: "",
+    email: "tovugiahuy@gmail.com",
+    password: "Huy12345",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,7 +51,7 @@ export default function LoginPage({ onForgotPassword }) {
       ...prevData,
       [name]: value,
     }));
-    
+
     // Clear error when user types
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: undefined }));
@@ -61,7 +61,7 @@ export default function LoginPage({ onForgotPassword }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     setLoading(true);
     try {
       const URL = `${import.meta.env.VITE_APP_BACKEND_URL}/api/login`;
