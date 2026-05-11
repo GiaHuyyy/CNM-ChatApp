@@ -6,8 +6,8 @@ import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 import { useCallContext } from "../context/CallProvider";
 import { useGlobalContext } from "../context/GlobalProvider";
-// import uploadFileToCloud from "../helpers/uploadFileToClound";
-import uploadFileToS3 from "../helpers/uploadFileToS3";
+import uploadFileToCloud from "../helpers/uploadFileToClound";
+// import uploadFileToS3 from "../helpers/uploadFileToS3";
 
 import { toast } from "sonner";
 import AddGroupMemberModal from "./AddGroupMemberModal";
@@ -430,8 +430,8 @@ export default function MessagePage() {
       try {
         // Upload files in parallel
         const uploadPromises = selectedFiles.map(async (file) => {
-          // const uploadResult = await uploadFileToCloud(file);
-          const uploadResult = await uploadFileToS3(file);
+          const uploadResult = await uploadFileToCloud(file);
+          // const uploadResult = await uploadFileToS3(file);
           return {
             url: uploadResult.secure_url,
             name: file.name,

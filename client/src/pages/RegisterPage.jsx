@@ -4,12 +4,13 @@ import axios from "axios";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useGlobalContext } from "../context/GlobalProvider";
-import uploadFileToS3 from "../helpers/uploadFileToS3";
+import uploadFileToCloud from "../helpers/uploadFileToClound";
+// import uploadFileToS3 from "../helpers/uploadFileToS3";
 
 export default function RegisterPage() {
   // Get the global context to access login state toggles
   const { setIsLoginWithEmail } = useGlobalContext();
-  
+
   const [step, setStep] = useState(1); // 1: Enter details, 2: Verify OTP
   const [data, setData] = useState({
     email: "",
@@ -20,7 +21,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({}); 
+  const [errors, setErrors] = useState({});
   const [uploadPhoto, setUploadPhoto] = useState(null);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -30,12 +31,12 @@ export default function RegisterPage() {
   const handleOnChange = (e) => {
     const { name, value } = e.target;
     setData((prev) => ({ ...prev, [name]: value }));
-    
+
     // Clear error when user types
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: undefined }));
     }
-    
+
     // Add real-time validation for email
     if (name === 'email' && value) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,7 +46,7 @@ export default function RegisterPage() {
         setErrors(prev => ({ ...prev, email: undefined }));
       }
     }
-    
+
     // Add real-time validation for password match
     if (name === 'confirmPassword' || name === 'password') {
       if (name === 'confirmPassword' && value !== data.password) {
@@ -62,14 +63,14 @@ export default function RegisterPage() {
     // Only check if email is valid
     if (data.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
       setIsCheckingEmail(true);
-      
+
       try {
         // Check if email exists
         const response = await axios.post(
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/check-email`,
           { email: data.email }
         );
-        
+
         if (response.data.exists) {
           setErrors(prev => ({ ...prev, email: "Email đã được sử dụng" }));
         }
@@ -92,17 +93,17 @@ export default function RegisterPage() {
   const handleUploadPhoto = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     if (!file.type.startsWith("image/")) {
       toast.error("Vui lòng chọn file hình ảnh");
       return;
     }
-    
+
     if (file.size > 5 * 1024 * 1024) {
       toast.error("Kích thước hình ảnh không được vượt quá 5MB");
       return;
     }
-    
+
     setUploadPhoto(file);
   };
 
@@ -117,7 +118,7 @@ export default function RegisterPage() {
   const validateStep1 = async () => {
     let isValid = true;
     const newErrors = {};
-    
+
     // Email validation
     if (!data.email) {
       newErrors.email = "Email là bắt buộc";
@@ -126,13 +127,13 @@ export default function RegisterPage() {
       newErrors.email = "Email không hợp lệ";
       isValid = false;
     }
-    
+
     // Name validation
     if (!data.name.trim()) {
       newErrors.name = "Tên người dùng là bắt buộc";
       isValid = false;
     }
-    
+
     // Password validation
     if (!data.password) {
       newErrors.password = "Mật khẩu là bắt buộc";
@@ -141,7 +142,7 @@ export default function RegisterPage() {
       newErrors.password = "Mật khẩu phải có ít nhất 6 ký tự";
       isValid = false;
     }
-    
+
     // Confirm password validation
     if (!data.confirmPassword) {
       newErrors.confirmPassword = "Xác nhận mật khẩu là bắt buộc";
@@ -150,7 +151,7 @@ export default function RegisterPage() {
       newErrors.confirmPassword = "Mật khẩu không khớp";
       isValid = false;
     }
-    
+
     // Check if email exists
     if (isValid && data.email) {
       setIsCheckingEmail(true);
@@ -159,7 +160,7 @@ export default function RegisterPage() {
           `${import.meta.env.VITE_APP_BACKEND_URL}/api/check-email`,
           { email: data.email }
         );
-        
+
         if (response.data.exists) {
           newErrors.email = "Email đã được sử dụng";
           isValid = false;
@@ -170,25 +171,25 @@ export default function RegisterPage() {
         setIsCheckingEmail(false);
       }
     }
-    
+
     setErrors(newErrors);
     return isValid;
   };
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
-    
+
     const isFormValid = await validateStep1();
     if (!isFormValid) return;
-    
+
     setLoading(true);
-    
+
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-otp`,
         { email: data.email }
       );
-      
+
       if (response.data.success) {
         toast.success(response.data.message || "Mã OTP đã được gửi");
         setStep(2);
@@ -228,13 +229,14 @@ export default function RegisterPage() {
         setLoading(false);
         return;
       }
-      
+
       // OTP verified, now register
       let profilePicUrl = "";
-      
+
       if (uploadPhoto) {
         try {
-          const uploadResult = await uploadFileToS3(uploadPhoto);
+          // const uploadResult = await uploadFileToS3(uploadPhoto);
+          const uploadResult = await uploadFileToCloud(uploadPhoto);
           if (uploadResult && uploadResult.secure_url) {
             profilePicUrl = uploadResult.secure_url;
           }
@@ -243,7 +245,7 @@ export default function RegisterPage() {
           toast.error("Không thể tải lên ảnh đại diện, tiếp tục với ảnh mặc định");
         }
       }
-      
+
       const registerResponse = await axios.post(
         `${import.meta.env.VITE_APP_BACKEND_URL}/api/register`,
         {
@@ -254,7 +256,7 @@ export default function RegisterPage() {
           otp: otp,
         }
       );
-      
+
       if (registerResponse.data.success) {
         toast.success("Đăng ký thành công! Vui lòng đăng nhập.");
         // Reset form
@@ -267,7 +269,7 @@ export default function RegisterPage() {
         setUploadPhoto(null);
         setOtp("");
         setStep(1);
-        
+
         // Switch to login page
         setIsLoginWithEmail(true);
       } else {
@@ -283,15 +285,15 @@ export default function RegisterPage() {
 
   const handleResendOTP = async () => {
     if (loading) return;
-    
+
     setLoading(true);
-    
+
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_APP_BACKEND_URL}/api/send-otp`,
         { email: data.email }
       );
-      
+
       if (response.data.success) {
         toast.success("Mã OTP mới đã được gửi");
         setOtpSent(true);
@@ -379,13 +381,13 @@ export default function RegisterPage() {
           {/* Replace the existing profile picture upload section with this enhanced version */}
           <div className="mb-6 flex flex-col items-center">
             <p className="mb-2 text-sm text-gray-500">Ảnh đại diện (tùy chọn)</p>
-            
+
             <div className="relative">
               <div className="h-24 w-24 overflow-hidden rounded-full border-2 border-dashed border-gray-300 bg-gray-50 transition-all hover:border-blue-400 hover:bg-gray-100">
                 {uploadPhoto ? (
-                  <img 
-                    src={URL.createObjectURL(uploadPhoto)} 
-                    alt="Profile preview" 
+                  <img
+                    src={URL.createObjectURL(uploadPhoto)}
+                    alt="Profile preview"
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -394,7 +396,7 @@ export default function RegisterPage() {
                     <span className="mt-1 text-xs text-gray-400">Thêm ảnh</span>
                   </div>
                 )}
-                
+
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -403,7 +405,7 @@ export default function RegisterPage() {
                   accept="image/*"
                 />
               </div>
-              
+
               {uploadPhoto && (
                 <button
                   onClick={handleClearUploadPhoto}
@@ -414,11 +416,11 @@ export default function RegisterPage() {
                 </button>
               )}
             </div>
-            
+
             {uploadPhoto ? (
               <p className="mt-2 text-xs text-gray-500">
-                {uploadPhoto.name.length > 25 
-                  ? `${uploadPhoto.name.substring(0, 22)}...` 
+                {uploadPhoto.name.length > 25
+                  ? `${uploadPhoto.name.substring(0, 22)}...`
                   : uploadPhoto.name}
                 {' '}{(uploadPhoto.size / (1024 * 1024)).toFixed(2)}MB
               </p>
@@ -451,7 +453,7 @@ export default function RegisterPage() {
               <span className="font-medium">{data.email}</span>
             </p>
           </div>
-          
+
           <div className="mb-[18px] flex items-center border-b border-[#f0f0f0] py-[5px]">
             <input
               type="text"
@@ -464,9 +466,9 @@ export default function RegisterPage() {
           </div>
 
           <div className="mb-4 text-center">
-            <button 
-              type="button" 
-              onClick={handleResendOTP} 
+            <button
+              type="button"
+              onClick={handleResendOTP}
               className="text-sm text-blue-500 hover:underline"
               disabled={loading}
             >
@@ -488,11 +490,11 @@ export default function RegisterPage() {
               "Đăng ký"
             )}
           </button>
-          
+
           <div className="mt-3 text-center">
-            <button 
-              type="button" 
-              onClick={() => setStep(1)} 
+            <button
+              type="button"
+              onClick={() => setStep(1)}
               className="text-sm text-gray-500 hover:underline"
             >
               Quay lại
